@@ -117,11 +117,11 @@ internal sealed class TranslationOrchestrator
                     ex);
             }
 
-            _committer.CommitTranslationSessionState(
+            await _committer.CommitTranslationSessionStateAsync(
                 result,
                 translationPath,
                 normalizedSourceLanguage,
-                normalizedTargetLanguage);
+                normalizedTargetLanguage).ConfigureAwait(false);
             stageSucceeded = true;
 
             PipelineStageReporter.ReportStage(

@@ -154,7 +154,7 @@ internal sealed class TranscriptionOrchestrator
                     ex);
             }
 
-            _committer.CommitTranscriptionSessionState(result, transcriptPath);
+            await _committer.CommitTranscriptionSessionStateAsync(result, transcriptPath).ConfigureAwait(false);
             stageSucceeded = true;
 
             PipelineStageReporter.ReportStage(

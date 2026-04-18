@@ -82,7 +82,15 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                     stageContext,
                     cancellationToken);
 
-                _c.CommitTtsSessionState(v!, ttsPath, renderResult, segmentsDir, segmentAudioPaths, segmentDurations, totalSegments, stageContext);
+                await _c.CommitTtsSessionStateAsync(
+                    v!,
+                    ttsPath,
+                    renderResult,
+                    segmentsDir,
+                    segmentAudioPaths,
+                    segmentDurations,
+                    totalSegments,
+                    stageContext).ConfigureAwait(false);
                 stageSucceeded = true;
             }
             finally

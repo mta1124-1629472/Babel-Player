@@ -34,10 +34,10 @@ public sealed class SessionSnapshotJsonCompatTests
     }
 
     [Fact]
-    public void Deserialize_LegacyInstrumentalField_DoesNotOverwriteExplicitAmbiance()
+    public void Deserialize_ModernInstrumentalField_PreservesExplicitAmbiance()
     {
         var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
-        var legacyPath = "/session/stems/legacy-ambiance.wav";
+        var instrumentalPath = "/session/stems/instrumental.wav";
         var ambiancePath = "/session/stems/ambiance.wav";
 
         var snapshot = SessionSnapshotJsonCompat.Deserialize(
@@ -47,15 +47,40 @@ public sealed class SessionSnapshotJsonCompatTests
                 "Stage": "MediaLoaded",
                 "CreatedAtUtc": "{{now:O}}",
                 "LastUpdatedAtUtc": "{{now:O}}",
-                "StatusMessage": "legacy",
+                "StatusMessage": "modern",
                 "AmbianceAudioPath": "{{ambiancePath}}",
-                "InstrumentalAudioPath": "{{legacyPath}}"
+                "InstrumentalAudioPath": "{{instrumentalPath}}"
               }
               """,
             SerializerOptions);
 
         Assert.NotNull(snapshot);
         Assert.Equal(ambiancePath, snapshot!.AmbianceAudioPath);
-        Assert.Null(snapshot.InstrumentalAudioPath);
+        Assert.Equal(instrumentalPath, snapshot.InstrumentalAudioPath);
+    }
+
+    [Fact]
+    public void Deserialize_ModernInstrumentalField_PreservesExplicitNullAmbiance()
+    {
+        var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
+        var instrumentalPath = "/session/stems/instrumental.wav";
+
+        var snapshot = SessionSnapshotJsonCompat.Deserialize(
+            $$"""
+              {
+                "SessionId": "{{Guid.NewGuid()}}",
+                "Stage": "MediaLoaded",
+                "CreatedAtUtc": "{{now:O}}",
+                "LastUpdatedAtUtc": "{{now:O}}",
+                "StatusMessage": "modern",
+                "AmbianceAudioPath": null,
+                "InstrumentalAudioPath": "{{instrumentalPath}}"
+              }
+              """,
+            SerializerOptions);
+
+        Assert.NotNull(snapshot);
+        Assert.Null(snapshot!.AmbianceAudioPath);
+        Assert.Equal(instrumentalPath, snapshot.InstrumentalAudioPath);
     }
 }
