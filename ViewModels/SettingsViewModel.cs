@@ -34,6 +34,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private bool _isHdrDisplayActive;
     private CancellationTokenSource? _restartCts;
     private readonly DispatcherTimer _healthTimer;
+
+    /// <summary>
+    /// UI culture captured when the settings window opened.  Used by <see cref="Cancel"/>
+    /// to revert live language changes (<see cref="OnSelectedAppLanguageChanged"/> calls
+    /// <c>SetCulture</c> the moment the user picks a language so the effect is visible,
+    /// but cancelling must undo that global state change since nothing was persisted).
+    /// </summary>
+    private readonly CultureInfo _originalCulture;
     private IDisposable? _readinessSignalSubscription;
 
     /// <summary>
@@ -67,6 +75,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
         SelectedTheme          = current.Theme;
+        // Snapshot the live culture before any partial-method setter can mutate it
+        // so Cancel() can revert language previews the user didn't persist.
+        _originalCulture       = LocalizationService.Instance.CurrentCulture;
         AppLanguageOptions     = BuildAppLanguageOptions();
         SelectedAppLanguage    = AppLanguageOptions.FirstOrDefault(o =>
             string.Equals(o.Code, current.AppLanguage, StringComparison.OrdinalIgnoreCase))
@@ -792,6 +803,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void Cancel()
     {
+        // Revert any live language preview (OnSelectedAppLanguageChanged applies
+        // SetCulture immediately so the user can see RTL / translated strings,
+        // but cancelling must not leave the process in a culture that was never
+        // persisted to settings).
+        LocalizationService.Instance.SetCulture(_originalCulture);
         _ownerWindow.Close();
     }
 
