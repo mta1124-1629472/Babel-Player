@@ -22,6 +22,13 @@ public sealed class LocalizationService : INotifyPropertyChanged
 {
     private static readonly Lazy<LocalizationService> _lazy = new(() => new LocalizationService());
 
+    /// <summary>
+    /// OS culture captured once at type-load time before any <see cref="SetCulture"/> call.
+    /// Used by <see cref="ResolveAppLanguage"/> so <c>"auto"</c> always reflects the OS locale
+    /// even after the user has switched app language in-session.
+    /// </summary>
+    private static readonly CultureInfo _osCulture = CultureInfo.CurrentUICulture;
+
     /// <summary>Process-wide singleton.</summary>
     public static LocalizationService Instance => _lazy.Value;
 
@@ -92,7 +99,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
             return NllbLanguageCatalog.IsoToFloresToken.ContainsKey(canonical) ? canonical : "en";
         }
 
-        var osIso = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName?.ToLowerInvariant();
+        var osIso = _osCulture.TwoLetterISOLanguageName?.ToLowerInvariant();
         if (!string.IsNullOrEmpty(osIso) && NllbLanguageCatalog.IsoToFloresToken.ContainsKey(osIso))
             return osIso;
 
