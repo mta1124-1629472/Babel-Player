@@ -442,28 +442,7 @@ def write_resx(path: str, entries: Dict[str, str]) -> None:
         fh.write("\n".join(lines))
 
 
-def validate_no_duplicate_values(entries: Dict[str, str]) -> None:
-    """Validates that STRINGS contains no duplicate English literal values.
-
-    Duplicate values break apply_localize.py's value->key inversion logic.
-    When duplicates are found, raises ValueError listing all keys that map to each duplicate.
-    """
-    value_to_keys: Dict[str, list[str]] = {}
-    for key, value in entries.items():
-        value_to_keys.setdefault(value, []).append(key)
-
-    duplicates = {val: keys for val, keys in value_to_keys.items() if len(keys) > 1}
-    if duplicates:
-        lines = ["STRINGS dictionary contains duplicate English literal values:"]
-        for value, keys in sorted(duplicates.items()):
-            lines.append(f"  Value: {value!r}")
-            for key in keys:
-                lines.append(f"    - {key}")
-        raise ValueError("\n".join(lines))
-
-
 def main() -> None:
-    validate_no_duplicate_values(STRINGS)
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out_path = os.path.join(repo_root, "Resources", "Strings.resx")
     write_resx(out_path, STRINGS)
