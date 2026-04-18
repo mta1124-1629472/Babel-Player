@@ -754,7 +754,7 @@ public sealed partial class SessionWorkflowCoordinator
         {
             if (overrideMode == SegmentTimingMode.Pause)
             {
-                _log.Info(
+                _log.Debug(
                     $"Ignoring preview-only Pause timing override for render on segment '{segmentId}'; using session default timing mode.");
                 return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
             }

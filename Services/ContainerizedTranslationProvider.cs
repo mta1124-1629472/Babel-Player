@@ -38,7 +38,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         if (!File.Exists(request.TranscriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {request.TranscriptJsonPath}");
 
-        _log.Info($"[ContainerizedTranslation] Translating {request.SourceLanguage} -> {request.TargetLanguage}");
+        _log.Debug($"[ContainerizedTranslation] Translating {request.SourceLanguage} -> {request.TargetLanguage}");
 
         var transcriptJson = await File.ReadAllTextAsync(request.TranscriptJsonPath, cancellationToken);
         var transcriptArtifact = ArtifactJson.DeserializeTranscript(transcriptJson, request.TranscriptJsonPath);
@@ -66,7 +66,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
 
         await WriteTranslationArtifactAsync(translationArtifact, request.OutputJsonPath, cancellationToken);
 
-        _log.Info($"[ContainerizedTranslation] Complete: {result.Segments.Count} segments");
+        _log.Debug($"[ContainerizedTranslation] Complete: {result.Segments.Count} segments");
 
         return result;
     }
@@ -75,7 +75,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
         SingleSegmentTranslationRequest request,
         CancellationToken cancellationToken = default)
     {
-        _log.Info($"[ContainerizedTranslation] Single-segment regen: {request.SegmentId}");
+        _log.Debug($"[ContainerizedTranslation] Single-segment regen: {request.SegmentId}");
 
         // Send a minimal transcript with just this one segment so the server endpoint is reused.
         // Start/end are not meaningful for translation; we only need the translated text.
@@ -140,7 +140,7 @@ public sealed class ContainerizedTranslationProvider : ITranslationProvider
 
         await WriteTranslationArtifactAsync(existing, request.OutputJsonPath, cancellationToken);
 
-        _log.Info($"[ContainerizedTranslation] Single-segment regen complete: {request.SegmentId}");
+        _log.Debug($"[ContainerizedTranslation] Single-segment regen complete: {request.SegmentId}");
 
         return updatedResult;
     }

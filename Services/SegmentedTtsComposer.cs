@@ -38,7 +38,7 @@ public sealed class SegmentedTtsComposer
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
-        log.Info($"[{providerLabel}] Starting combined TTS generation from {request.TranslationJsonPath}");
+        log.Debug($"[{providerLabel}] Starting combined TTS generation from {request.TranslationJsonPath}");
 
         var translationData = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
         var candidateSegments = translationData.Segments?
@@ -94,7 +94,7 @@ public sealed class SegmentedTtsComposer
                 throw new InvalidOperationException($"Combined audio file was not created at {request.OutputAudioPath}");
 
             var fileSize = new FileInfo(request.OutputAudioPath).Length;
-            log.Info($"[{providerLabel}] Combined TTS generation complete: {request.OutputAudioPath} ({fileSize} bytes)");
+            log.Debug($"[{providerLabel}] Combined TTS generation complete: {request.OutputAudioPath} ({fileSize} bytes)");
             return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileSize, null);
         }
         finally

@@ -103,7 +103,7 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider,
         if (string.IsNullOrWhiteSpace(request.VoiceName))
             throw new ArgumentException("Voice name cannot be null or empty.", nameof(request));
 
-        Log.Info($"Starting Edge TTS segment generation: {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
+        Log.Debug($"Starting Edge TTS segment generation: {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
 
         var response = await _workerPool.ExecuteAsync(
             new EdgeTtsWorkerRequest
@@ -118,7 +118,7 @@ public sealed class EdgeTtsProvider : PythonSubprocessServiceBase, ITtsProvider,
         if (!File.Exists(response.OutputPath))
             throw new InvalidOperationException($"Segment TTS output file not created: {response.OutputPath}");
 
-        Log.Info($"Edge TTS segment completed: {response.OutputPath} ({response.FileSizeBytes} bytes)");
+        Log.Debug($"Edge TTS segment completed: {response.OutputPath} ({response.FileSizeBytes} bytes)");
         return new TtsResult(true, response.OutputPath, response.Voice, response.FileSizeBytes, null, response.DurationSeconds);
     }
 

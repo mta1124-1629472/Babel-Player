@@ -116,7 +116,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
                 .ConfigureAwait(false);
             var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
-            _log.Info($"[OpenAITTS] Generated segment audio: {request.OutputAudioPath} ({fileLength} bytes)");
+            _log.Debug($"[OpenAITTS] Generated segment audio: {request.OutputAudioPath} ({fileLength} bytes)");
 
             return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
         }

@@ -37,7 +37,7 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider,
         var cpuThreads = request.CpuThreads > 0 ? request.CpuThreads.ToString() : "auto";
         var cpuWorkers = Math.Max(1, request.NumWorkers);
         var cpuCompute = string.IsNullOrWhiteSpace(request.CpuComputeType) ? "int8" : request.CpuComputeType;
-        _log.Info($"[ContainerizedTranscription] Transcribing: {request.SourceAudioPath} " +
+        _log.Debug($"[ContainerizedTranscription] Transcribing: {request.SourceAudioPath} " +
                   $"(model={request.ModelName}, cpu_compute={cpuCompute}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers})");
 
         var result = await _client.TranscribeAsync(
@@ -76,7 +76,7 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider,
 
         await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(transcript), cancellationToken);
 
-        _log.Info($"[ContainerizedTranscription] Complete: {result.Segments.Count} segments, lang={result.Language}");
+        _log.Debug($"[ContainerizedTranscription] Complete: {result.Segments.Count} segments, lang={result.Language}");
 
         return result;
     }
@@ -92,7 +92,7 @@ public sealed class ContainerizedTranscriptionProvider : ITranscriptionProvider,
         var cpuThreads = request.CpuThreads > 0 ? request.CpuThreads.ToString() : "auto";
         var cpuWorkers = Math.Max(1, request.NumWorkers);
         var cpuCompute = string.IsNullOrWhiteSpace(request.CpuComputeType) ? "int8" : request.CpuComputeType;
-        _log.Info($"[ContainerizedTranscription] Streaming transcription: {request.SourceAudioPath} " +
+        _log.Debug($"[ContainerizedTranscription] Streaming transcription: {request.SourceAudioPath} " +
                   $"(model={request.ModelName}, cpu_compute={cpuCompute}, cpu_threads={cpuThreads}, cpu_workers={cpuWorkers})");
 
         return await _client.TranscribeStreamingAsync(

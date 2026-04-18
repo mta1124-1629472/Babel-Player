@@ -66,7 +66,7 @@ public sealed partial class SessionWorkflowCoordinator
         var message = $"Saved current session snapshot to {StateFilePath}.";
         if (updateStatus)
             PersistenceStatus = message;
-        _log.Info($"{message} Mirrored per-session snapshot. elapsedMs={stopwatch.ElapsedMilliseconds}");
+        _log.Debug($"{message} Mirrored per-session snapshot. elapsedMs={stopwatch.ElapsedMilliseconds}");
     }
 
     private async Task PersistSnapshotAsync(WorkflowSessionSnapshot snapshot, bool updateStatus)
@@ -78,6 +78,6 @@ public sealed partial class SessionWorkflowCoordinator
         var message = $"Saved current session snapshot to {StateFilePath}.";
         if (updateStatus)
             PersistenceStatus = message;
-        _log.Info($"{message} Mirrored per-session snapshot (async). elapsedMs={stopwatch.ElapsedMilliseconds}");
+        _log.Debug($"{message} Mirrored per-session snapshot (async). elapsedMs={stopwatch.ElapsedMilliseconds}");
     }
 }

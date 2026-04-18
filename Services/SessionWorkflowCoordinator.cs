@@ -450,7 +450,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             Directory.CreateDirectory(mediaDir);
             var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
             File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
-            _log.Info($"Copied media to session artifact: {ingestedPath}");
+            _log.Debug($"Copied media to session artifact: {ingestedPath}");
 
             lock (_sessionLock)
             {
@@ -487,7 +487,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             Directory.CreateDirectory(mediaDir);
             var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
             File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
-            _log.Info($"Copied media to session artifact: {ingestedPath}");
+            _log.Debug($"Copied media to session artifact: {ingestedPath}");
 
             lock (_sessionLock)
             {
@@ -688,7 +688,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var stopwatch = Stopwatch.StartNew();
         if (!ApplyPipelineSelectionSettings(selection))
         {
-            _log.Info(
+            _log.Debug(
                 $"ApplyPipelineSettings: no-op at stage {CurrentSession.Stage}; selection matched current settings.");
             return new PipelineSettingsApplyResult(
                 PipelineInvalidation.None,
@@ -698,7 +698,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         }
 
         var invalidation = CheckSettingsInvalidation();
-        _log.Info(
+        _log.Debug(
             $"ApplyPipelineSettings: stage={CurrentSession.Stage}, invalidation={invalidation}, " +
                 $"selection=({selection.TranscriptionRuntime}/{selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
                 $"{selection.TranslationRuntime}/{selection.TranslationProvider}/{selection.TranslationModel}, " +
@@ -748,7 +748,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         RequestContainerizedAutostartForSettings();
         NotifySettingsModified();
         stopwatch.Stop();
-        _log.Info(
+        _log.Debug(
             $"ApplyPipelineSettings complete: invalidation={invalidation}, stage={CurrentSession.Stage}, elapsedMs={stopwatch.ElapsedMilliseconds}");
 
         return new PipelineSettingsApplyResult(
@@ -1075,7 +1075,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var effectiveStage = SessionSnapshotSemantics.ResolveArtifactStage(cs);
         var invalidation = SessionSnapshotSemantics.ComputeInvalidation(cs, s);
 
-        _log.Info(
+        _log.Debug(
             $"CheckSettingsInvalidation: stage={cs.Stage}, effectiveStage={effectiveStage}, invalidation={invalidation}, provenance=({SessionSnapshotSemantics.DescribeSessionProvenance(cs)})");
         return invalidation;
     }

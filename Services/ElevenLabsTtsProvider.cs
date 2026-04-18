@@ -99,7 +99,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
         if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
             throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
 
-        _log.Info($"[ElevenLabsTTS] Starting combined TTS generation from {request.TranslationJsonPath}");
+        _log.Debug($"[ElevenLabsTTS] Starting combined TTS generation from {request.TranslationJsonPath}");
 
         var translationData = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
         var candidateSegments = translationData.Segments?
@@ -129,7 +129,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
                 if (segResult.Success && File.Exists(segmentPath))
                 {
                     segmentPaths.Add(segmentPath);
-                    _log.Info($"[ElevenLabsTTS] Generated segment {i + 1}/{candidateSegments.Count}: {seg.Id}");
+                    _log.Debug($"[ElevenLabsTTS] Generated segment {i + 1}/{candidateSegments.Count}: {seg.Id}");
                 }
                 else
                 {
@@ -150,7 +150,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
                 throw new InvalidOperationException($"Combined audio file was not created at {request.OutputAudioPath}");
 
             var fileSize = new FileInfo(request.OutputAudioPath).Length;
-            _log.Info($"[ElevenLabsTTS] Combined TTS generation complete: {request.OutputAudioPath} ({fileSize} bytes)");
+            _log.Debug($"[ElevenLabsTTS] Combined TTS generation complete: {request.OutputAudioPath} ({fileSize} bytes)");
 
             return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileSize, null);
         }
@@ -194,7 +194,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
 
         var modelId = NormalizeModelId(request.VoiceName);
 
-        _log.Info($"[ElevenLabsTTS] Generating segment audio: {request.Text[..Math.Min(30, request.Text.Length)]}... model={modelId}");
+        _log.Debug($"[ElevenLabsTTS] Generating segment audio: {request.Text[..Math.Min(30, request.Text.Length)]}... model={modelId}");
 
         var client = _clientLazy.Value;
 
@@ -208,7 +208,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
                 .ConfigureAwait(false);
             var fileLength = new FileInfo(request.OutputAudioPath).Length;
 
-            _log.Info($"[ElevenLabsTTS] Segment audio written: {request.OutputAudioPath} ({fileLength} bytes)");
+            _log.Debug($"[ElevenLabsTTS] Segment audio written: {request.OutputAudioPath} ({fileLength} bytes)");
 
             return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileLength, null);
         }
@@ -219,7 +219,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
                 try
                 {
                     File.Delete(request.OutputAudioPath);
-                    _log.Info($"[ElevenLabsTTS] Deleted partial file after failure: {request.OutputAudioPath}");
+                    _log.Debug($"[ElevenLabsTTS] Deleted partial file after failure: {request.OutputAudioPath}");
                 }
                 catch (Exception cleanupEx)
                 {

@@ -22,13 +22,6 @@
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <Optimize>false</Optimize>
-    <DebugType>portable</DebugType>
-    <DebugSymbols>true</DebugSymbols>
-  </PropertyGroup>
-
   <!-- ═══════════════════════════════════════════════════════════════
        Dev configuration — build with: dotnet run -c Dev
        Defines BABEL_DEV, disables optimisations, keeps full debug info.
@@ -42,13 +35,6 @@
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <DefineConstants>TRACE</DefineConstants>
-    <Optimize>true</Optimize>
-    <DebugType>portable</DebugType>
-    <DebugSymbols>true</DebugSymbols>
-    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <Optimize>true</Optimize>
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
@@ -116,24 +102,6 @@
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       </None>
     </ItemGroup>
-  </Target>
-
-  <Target Name="StripReleaseSymbolsFromPublish"
-          AfterTargets="ComputeResolvedFilesToPublishList"
-          Condition="'$(Configuration)' == 'Release'">
-    <ItemGroup>
-      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
-                             Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
-    </ItemGroup>
-  </Target>
-
-  <Target Name="DeletePublishedReleaseSymbols"
-          AfterTargets="CopyFilesToPublishDirectory"
-          Condition="'$(Configuration)' == 'Release'">
-    <ItemGroup>
-      <_PublishedReleaseSymbols Include="$(PublishDir)**\*.pdb" />
-    </ItemGroup>
-    <Delete Files="@(_PublishedReleaseSymbols)" />
   </Target>
 
 <ItemGroup>

@@ -153,7 +153,7 @@ print(f'CTranslate2 single segment translated: {seg_id}')
         if (!File.Exists(request.TranscriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {request.TranscriptJsonPath}");
 
-        Log.Info($"Starting CTranslate2 translation: {request.TranscriptJsonPath} ({request.SourceLanguage} -> {request.TargetLanguage})");
+        Log.Debug($"Starting CTranslate2 translation: {request.TranscriptJsonPath} ({request.SourceLanguage} -> {request.TargetLanguage})");
 
         var result = await RunCTranslate2ScriptAsync(
             TranslateScript,
@@ -191,7 +191,7 @@ print(f'CTranslate2 single segment translated: {seg_id}')
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
-        Log.Info($"Starting CTranslate2 single segment translation: {request.SegmentId}");
+        Log.Debug($"Starting CTranslate2 single segment translation: {request.SegmentId}");
 
         var result = await RunCTranslate2ScriptAsync(
             TranslateSingleSegmentScript,
@@ -230,7 +230,7 @@ print(f'CTranslate2 single segment translated: {seg_id}')
     {
         if (!ModelDownloader.IsCTranslate2TranslationModelDownloaded(_model))
         {
-            Log.Info($"CTranslate2 model {_model} requires preparation. Starting conversion...");
+            Log.Debug($"CTranslate2 model {_model} requires preparation. Starting conversion...");
             return await new ModelDownloader(Log).DownloadCTranslate2TranslationModelAsync(_model, progress, ct);
         }
 

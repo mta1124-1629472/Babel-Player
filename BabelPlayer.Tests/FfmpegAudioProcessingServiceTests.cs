@@ -224,6 +224,7 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
             ? fakeToolsDir
             : $"{fakeToolsDir}{Path.PathSeparator}{originalPath}";
         Environment.SetEnvironmentVariable("PATH", testPath);
+        DependencyLocator.ClearProbeCache();
 
         try
         {
@@ -239,6 +240,7 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
         }
         finally
         {
+            DependencyLocator.ClearProbeCache();
             Environment.SetEnvironmentVariable("PATH", originalPath);
         }
     }
