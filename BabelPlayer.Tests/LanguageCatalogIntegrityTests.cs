@@ -96,27 +96,25 @@ public sealed class LanguageCatalogIntegrityTests
     }
 
     [Fact]
-    public void SupportedUiLanguageCatalog_IncludesBaseEnglishAndGermanSatellite()
+    public void SupportedUiLanguageCatalog_AlignsWithEmbeddedBatchLanguages()
     {
-        Assert.Contains("en", SupportedUiLanguageCatalog.IsoCodes);
-        Assert.Contains("de", SupportedUiLanguageCatalog.IsoCodes);
+        Assert.Equal(
+            NllbLanguageCatalog.IsoCodes.OrderBy(code => code).ToList(),
+            SupportedUiLanguageCatalog.IsoCodes.OrderBy(code => code).ToList());
+
         Assert.True(SupportedUiLanguageCatalog.IsSupported("EN"));
         Assert.True(SupportedUiLanguageCatalog.IsSupported("de"));
-        Assert.False(SupportedUiLanguageCatalog.IsSupported("fr"));
+        Assert.True(SupportedUiLanguageCatalog.IsSupported("fr"));
+        Assert.True(SupportedUiLanguageCatalog.IsSupported("zh"));
         Assert.False(SupportedUiLanguageCatalog.IsSupported(null));
         Assert.False(SupportedUiLanguageCatalog.IsSupported(""));
     }
 
     [Fact]
-    public void ResolveAppLanguage_FallsBackToEnglishForPipelineOnlyLanguages()
+    public void ResolveAppLanguage_FallsBackToEnglishForUnknownLanguages()
     {
-        // Languages in the NLLB pipeline catalog that have no shipping Strings.*.resx
-        // must not be treated as valid UI languages — picking them would silently fall
-        // back to English strings with no user feedback.
-        Assert.Equal("en", LocalizationService.ResolveAppLanguage("fr"));
-        Assert.Equal("en", LocalizationService.ResolveAppLanguage("ja"));
-        Assert.Equal("en", LocalizationService.ResolveAppLanguage("zh"));
         Assert.Equal("en", LocalizationService.ResolveAppLanguage("not-a-code"));
+        Assert.Equal("en", LocalizationService.ResolveAppLanguage("xx"));
     }
 
     [Fact]
@@ -125,5 +123,8 @@ public sealed class LanguageCatalogIntegrityTests
         Assert.Equal("en", LocalizationService.ResolveAppLanguage("en"));
         Assert.Equal("de", LocalizationService.ResolveAppLanguage("de"));
         Assert.Equal("de", LocalizationService.ResolveAppLanguage("DE"));
+        Assert.Equal("fr", LocalizationService.ResolveAppLanguage("fr"));
+        Assert.Equal("ja", LocalizationService.ResolveAppLanguage("ja"));
+        Assert.Equal("zh", LocalizationService.ResolveAppLanguage("zh-CN"));
     }
 }
