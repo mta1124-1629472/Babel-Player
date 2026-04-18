@@ -1089,8 +1089,6 @@
                             <StackPanel IsVisible="{Binding Inspection.IsVisible}"
                                         Spacing="6">
                                 <StackPanel.Styles>
-                                    <!-- Shared at this scope so the timing chips AND the
-                                         "Preview With Pause" button below render identically. -->
                                     <Style Selector="Button.segmentTimingButton">
                                         <Setter Property="Padding" Value="8,3"/>
                                         <Setter Property="FontSize" Value="11"/>
@@ -1127,17 +1125,6 @@
                                            FontSize="10" Foreground="{DynamicResource StatusTextBrush}"
                                            Opacity="0.7"/>
 
-                                <TextBlock Text="{local:Localize Label_PreviewPause}" Classes="text-label"
-                                           Foreground="{DynamicResource StatusTextBrush}"/>
-
-                                <TextBlock Text="{local:Localize Hint_PreviewPause}"
-                                           Classes="text-caption" Foreground="{DynamicResource StatusTextBrush}"/>
-
-                                <Button Classes="segmentTimingButton"
-                                        Content="{local:Localize Option_PreviewWithPause}"
-                                        Command="{Binding Inspection.PreviewPauseCommand}"
-                                        IsEnabled="{Binding Inspection.HasTtsAudio}"
-                                        ToolTip.Tip="{local:Localize Tooltip_PreviewWithPause}"/>
                             </StackPanel>
 
                         </StackPanel>

@@ -73,7 +73,7 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
 
     [Fact]
     [Trait("Category", "Smoke")]
-    public void Initialize_WithMissingTranscript_DowngradesToMediaLoaded()
+    public async Task Initialize_WithMissingTranscript_DowngradesToMediaLoaded()
     {
         var sessionDir = Path.Combine(_dir, "sessions", Guid.NewGuid().ToString("N"));
         var mediaDir = Path.Combine(sessionDir, "media");
@@ -82,6 +82,17 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         var sourcePath = CreateMediaFile("source-missing-transcript.mp4");
         var ingestedPath = Path.Combine(mediaDir, "source-missing-transcript.mp4");
         File.Copy(sourcePath, ingestedPath, overwrite: true);
+        await ArtifactIntegrity.WriteFileManifestAsync(
+                ingestedPath,
+                "media_copy",
+                artifactSchemaVersion: null,
+                probedDurationSeconds: null,
+                segmentCount: null,
+                segmentIds: null,
+                segmentTiming: null,
+                upstreamArtifactHashes: null,
+                provenanceDigest: ArtifactIntegrity.ComputeCompositeSha256(["stage=media_copy"]),
+                CancellationToken.None);
 
         var snapshot = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
@@ -462,60 +473,39 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
     [Trait("Category", "Smoke")]
     public async Task RegenerateSegmentTranslationAsync_UpdatesTranslatedSegmentText()
     {
+        _settings.TranslationProvider = ProviderNames.Deepl;
+        _settings.TranslationModel = "default";
+        _settings.TranslationProfile = ComputeProfile.Cloud;
         var coordinator = CreateCoordinator();
         coordinator.Initialize();
 
-        var sourcePath = CreateMediaFile("regen-translation-source.mp4");
-        var ingestedPath = Path.Combine(_dir, "regen-translation-ingested.mp4");
-        File.Copy(sourcePath, ingestedPath, overwrite: true);
-        await WriteMediaCopyManifestAsync(ingestedPath);
-
-        var transcriptPath = Path.Combine(_dir, "regen-translation-transcript.json");
-        var transcript = new TranscriptArtifact
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Language = "es",
-            Segments =
-            [
-                new TranscriptSegmentArtifact { Start = 0.0, End = 2.0, Text = "hola" },
-            ],
-        };
-        await WriteTranscriptBundleAsync(transcriptPath, ingestedPath, transcript);
-
-        var translationPath = Path.Combine(_dir, $"regen-translation-{Guid.NewGuid():N}.json");
-        var translation = new TranslationArtifact
-        {
-            SourceLanguage = "es",
-            TargetLanguage = "en",
-            Segments =
-            [
-                new TranslationSegmentArtifact
-                {
-                    Id = "segment_0.0",
-                    Start = 0.0,
-                    End = 2.0,
-                    Text = "hola",
-                    TranslatedText = "old",
-                },
-            ],
-        };
-        await WriteTranslationBundleAsync(translationPath, transcriptPath, translation);
-
-        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
-        {
-            Stage = SessionWorkflowStage.Translated,
-            SourceMediaPath = sourcePath,
-            IngestedMediaPath = ingestedPath,
-            TranscriptPath = transcriptPath,
-            SourceLanguage = "es",
-            TargetLanguage = "en",
-            TranslationPath = translationPath,
-            TranscriptionRuntime = _settings.TranscriptionRuntime,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranscriptionLanguageHint = _settings.TranscriptionLanguageHint,
-            TranslationRuntime = _settings.TranslationRuntime,
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
             TranslationProvider = _settings.TranslationProvider,
             TranslationModel = _settings.TranslationModel,
+            TranslationRuntime = _settings.TranslationRuntime,
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+        };
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var artifact = await ArtifactJson.LoadTranslationAsync(translationPath);
+        artifact.Segments![0].TranslatedText = "old";
+        await SessionSemanticsIntegrityFixture.RewriteTranslationFileWithManifestAsync(
+            translationPath,
+            artifact,
+            transcriptPath,
+            template);
+
+        coordinator.CurrentSession = template with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
         };
 
         await coordinator.RegenerateSegmentTranslationAsync("segment_0.0");
@@ -523,7 +513,10 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         var refreshed = await ArtifactJson.LoadTranslationAsync(translationPath);
         var segment = Assert.Single(refreshed.Segments!);
         Assert.Equal("hola (en)", segment.TranslatedText);
-        Assert.StartsWith("Regenerated translation for segment segment_0.0.", coordinator.CurrentSession.StatusMessage, StringComparison.Ordinal);
+        Assert.StartsWith(
+            "Regenerated translation for segment segment_0.0.",
+            coordinator.CurrentSession.StatusMessage,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -534,63 +527,29 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         var coordinator = CreateCoordinator(audioProcessing);
         coordinator.Initialize();
 
-        var sourcePath = CreateMediaFile("tts-ambiance-source.mp4");
-        var ingestedPath = Path.Combine(_dir, "tts-ambiance-ingested.mp4");
-        File.Copy(sourcePath, ingestedPath, overwrite: true);
-        await WriteMediaCopyManifestAsync(ingestedPath);
-
-        var vocalsPath = WriteAudioFile("vocals.wav");
-        var ambiancePath = WriteAudioFile("ambiance.wav");
-        await WriteStemPairManifestsAsync(ingestedPath, vocalsPath, ambiancePath);
-
-        var transcriptPath = Path.Combine(_dir, "tts-ambiance-transcript.json");
-        var transcript = new TranscriptArtifact
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Language = "es",
-            Segments =
-            [
-                new TranscriptSegmentArtifact { Start = 0.0, End = 2.0, Text = "hola" },
-            ],
-        };
-        await WriteTranscriptBundleAsync(transcriptPath, ingestedPath, transcript, vocalsPath);
-
-        var translationPath = Path.Combine(_dir, $"tts-ambiance-translation-{Guid.NewGuid():N}.json");
-        var translation = new TranslationArtifact
-        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
             SourceLanguage = "es",
             TargetLanguage = "en",
-            Segments =
-            [
-                new TranslationSegmentArtifact
-                {
-                    Id = "segment_0.0",
-                    Start = 0.0,
-                    End = 2.0,
-                    Text = "hola",
-                    TranslatedText = "hello",
-                },
-            ],
+            TtsProvider = "fake-tts",
+            TtsVoice = "default",
         };
-        await WriteTranslationBundleAsync(translationPath, transcriptPath, translation);
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var (vocalsPath, ambiancePath) = await SessionSemanticsIntegrityFixture.WriteStemPairAsync(_dir, mediaPath);
+        var withStems = template with { VocalsAudioPath = vocalsPath, AmbianceAudioPath = ambiancePath };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, withStems);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, withStems);
 
-        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        coordinator.CurrentSession = withStems with
         {
             Stage = SessionWorkflowStage.Translated,
-            SourceMediaPath = sourcePath,
-            IngestedMediaPath = ingestedPath,
+            IngestedMediaPath = mediaPath,
             TranscriptPath = transcriptPath,
             TranslationPath = translationPath,
-            SourceLanguage = "es",
-            TargetLanguage = "en",
-            VocalsAudioPath = vocalsPath,
-            AmbianceAudioPath = ambiancePath,
-            TranscriptionRuntime = _settings.TranscriptionRuntime,
-            TranscriptionProvider = _settings.TranscriptionProvider,
-            TranscriptionModel = _settings.TranscriptionModel,
-            TranscriptionLanguageHint = _settings.TranscriptionLanguageHint,
-            TranslationRuntime = _settings.TranslationRuntime,
-            TranslationProvider = _settings.TranslationProvider,
-            TranslationModel = _settings.TranslationModel,
         };
 
         await coordinator.GenerateTtsAsync();
@@ -613,13 +572,29 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         var coordinator = CreateCoordinator(audioProcessing);
         coordinator.Initialize();
 
-        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Stage = SessionWorkflowStage.Translated,
-            TranslationPath = WriteTranslationArtifact(),
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
             SourceLanguage = "es",
             TargetLanguage = "en",
-            AmbianceAudioPath = WriteAudioFile("ambiance-missing-output.wav"),
+            TtsProvider = "fake-tts",
+            TtsVoice = "default",
+        };
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var (vocalsPath, ambiancePath) = await SessionSemanticsIntegrityFixture.WriteStemPairAsync(_dir, mediaPath);
+        var withStems = template with { VocalsAudioPath = vocalsPath, AmbianceAudioPath = ambiancePath };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, withStems);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, withStems);
+
+        coordinator.CurrentSession = withStems with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
         };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.GenerateTtsAsync());
