@@ -292,7 +292,7 @@ public partial class MainWindow : Window
         if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) <= double.Epsilon)
             return;
 
-        UpdateCompactVideoChromeLayout();
+        UpdateVideoChromeCompactState();
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
@@ -466,8 +466,8 @@ public partial class MainWindow : Window
             return;
 
         vm.Playback.Preview.CommitPaneLayout();
-        e.Pointer.Capture(null);
         ClearActivePaneSplitter();
+        e.Pointer.Capture(null);
         e.Handled = true;
     }
 
