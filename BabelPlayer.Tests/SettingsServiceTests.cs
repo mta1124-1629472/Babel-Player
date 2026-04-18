@@ -148,4 +148,26 @@ public sealed class SettingsServiceTests : IDisposable
 
         Assert.True(loaded.VocalSeparationEnabled);
     }
+
+    [Fact]
+    public void SaveAndLoad_PaneLayout_RoundTrips()
+    {
+        var service = new SettingsService(_settingsPath, _log);
+        service.Save(new AppSettings
+        {
+            IsPipelinePaneVisible = false,
+            IsSegmentsPaneVisible = true,
+            PipelinePaneWidth = 312,
+            SegmentsPaneWidth = 418,
+            SwapPaneSides = true
+        });
+
+        var loaded = service.LoadOrDefault();
+
+        Assert.False(loaded.IsPipelinePaneVisible);
+        Assert.True(loaded.IsSegmentsPaneVisible);
+        Assert.Equal(312, loaded.PipelinePaneWidth, precision: 3);
+        Assert.Equal(418, loaded.SegmentsPaneWidth, precision: 3);
+        Assert.True(loaded.SwapPaneSides);
+    }
 }

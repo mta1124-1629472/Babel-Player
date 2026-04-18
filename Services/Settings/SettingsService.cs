@@ -102,6 +102,11 @@ public sealed class SettingsService
         public int? DiarizationMinSpeakers { get; set; }
         public int? DiarizationMaxSpeakers { get; set; }
         public bool? VocalSeparationEnabled { get; set; }
+        public bool? IsPipelinePaneVisible { get; set; }
+        public bool? IsSegmentsPaneVisible { get; set; }
+        public double? PipelinePaneWidth { get; set; }
+        public double? SegmentsPaneWidth { get; set; }
+        public bool? SwapPaneSides { get; set; }
         public bool? ShownManagedBackendWarmupNotice { get; set; }
         public string? TranslationProvider { get; set; }
         public ComputeProfile? TranslationProfile { get; set; }
@@ -172,6 +177,11 @@ public sealed class SettingsService
             settings.DiarizationMinSpeakers = null;
             settings.DiarizationMaxSpeakers = null;
             settings.VocalSeparationEnabled = VocalSeparationEnabled ?? settings.VocalSeparationEnabled;
+            settings.IsPipelinePaneVisible = IsPipelinePaneVisible ?? settings.IsPipelinePaneVisible;
+            settings.IsSegmentsPaneVisible = IsSegmentsPaneVisible ?? settings.IsSegmentsPaneVisible;
+            settings.PipelinePaneWidth = PipelinePaneWidth ?? settings.PipelinePaneWidth;
+            settings.SegmentsPaneWidth = SegmentsPaneWidth ?? settings.SegmentsPaneWidth;
+            settings.SwapPaneSides = SwapPaneSides ?? settings.SwapPaneSides;
             settings.ShownManagedBackendWarmupNotice =
                 ShownManagedBackendWarmupNotice ?? settings.ShownManagedBackendWarmupNotice;
 
@@ -257,6 +267,11 @@ public sealed class SettingsService
             DiarizationMinSpeakers = null,
             DiarizationMaxSpeakers = null,
             VocalSeparationEnabled = settings.VocalSeparationEnabled,
+            IsPipelinePaneVisible = settings.IsPipelinePaneVisible,
+            IsSegmentsPaneVisible = settings.IsSegmentsPaneVisible,
+            PipelinePaneWidth = settings.PipelinePaneWidth,
+            SegmentsPaneWidth = settings.SegmentsPaneWidth,
+            SwapPaneSides = settings.SwapPaneSides,
             ShownManagedBackendWarmupNotice = settings.ShownManagedBackendWarmupNotice,
             TranslationProvider = settings.TranslationProvider,
             TranslationProfile = settings.TranslationProfile,

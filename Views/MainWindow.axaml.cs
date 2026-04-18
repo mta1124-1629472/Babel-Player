@@ -34,12 +34,18 @@ public partial class MainWindow : Window
     private EventHandler? _windowScalingChangedHandler;
     private EventHandler? _screensChangedHandler;
     private EventHandler<SizeChangedEventArgs>? _playerChromeWidthHostSizeChangedHandler;
+    private EventHandler<SizeChangedEventArgs>? _wideVideoChromeLayoutSizeChangedHandler;
     private bool _playerChromeWidthHostSizeHooked;
+    private EventHandler<SizeChangedEventArgs>? _paneLayoutHostSizeChangedHandler;
     private Screens? _subscribedScreens;
     private long _lastControlsActivityTickMs;
     private bool _isApplyingWindowStateFromViewModel;
     private bool _isApplyingFullscreenFromWindowState;
     private SpeakerReferenceWizardWindow? _speakerWizardWindow;
+    private Control? _activePaneSplitter;
+    private bool _activePaneSplitterIsLeft;
+    private double _paneSplitterStartWidth;
+    private double _paneSplitterDragStartX;
 
     public MainWindow()
     {
@@ -112,6 +118,7 @@ public partial class MainWindow : Window
 
         SyncChromeWindowState();
         WireVideoChromeCompactState();
+        WirePaneLayoutHost();
     }
 
     private void SyncChromeWindowState()
@@ -191,6 +198,14 @@ public partial class MainWindow : Window
         if (playerChromeWidthHost is not null && _playerChromeWidthHostSizeChangedHandler is not null)
             playerChromeWidthHost.SizeChanged -= _playerChromeWidthHostSizeChangedHandler;
 
+        var wideVideoChromeLayout = this.FindControl<Control>("WideVideoChromeLayoutRoot");
+        if (wideVideoChromeLayout is not null && _wideVideoChromeLayoutSizeChangedHandler is not null)
+            wideVideoChromeLayout.SizeChanged -= _wideVideoChromeLayoutSizeChangedHandler;
+
+        var paneLayoutHost = this.FindControl<Control>("PaneLayoutHost");
+        if (paneLayoutHost is not null && _paneLayoutHostSizeChangedHandler is not null)
+            paneLayoutHost.SizeChanged -= _paneLayoutHostSizeChangedHandler;
+
         _playbackPropertyChangedHandler = null;
         _coordinatorPropertyChangedHandler = null;
         _videoOverlayPointerMovedHandler = null;
@@ -201,12 +216,15 @@ public partial class MainWindow : Window
         _screensChangedHandler = null;
         _subscribedScreens = null;
         _playerChromeWidthHostSizeChangedHandler = null;
+        _wideVideoChromeLayoutSizeChangedHandler = null;
+        _paneLayoutHostSizeChangedHandler = null;
     }
 
     private void WireVideoChromeCompactState()
     {
         var playerChromeWidthHost = this.FindControl<Control>("PlayerChromeWidthHost");
-        if (playerChromeWidthHost is null)
+        var wideVideoChromeLayout = this.FindControl<Control>("WideVideoChromeLayoutRoot");
+        if (playerChromeWidthHost is null || wideVideoChromeLayout is null)
             return;
 
         _playerChromeWidthHostSizeChangedHandler ??= OnPlayerChromeWidthHostSizeChanged;
@@ -216,26 +234,63 @@ public partial class MainWindow : Window
             _playerChromeWidthHostSizeHooked = true;
         }
 
-        UpdateVideoChromeCompactState(playerChromeWidthHost);
+        _wideVideoChromeLayoutSizeChangedHandler ??= OnWideVideoChromeLayoutSizeChanged;
+        wideVideoChromeLayout.SizeChanged -= _wideVideoChromeLayoutSizeChangedHandler;
+        wideVideoChromeLayout.SizeChanged += _wideVideoChromeLayoutSizeChangedHandler;
+
+        UpdateVideoChromeCompactState();
     }
 
     private void OnPlayerChromeWidthHostSizeChanged(object? sender, SizeChangedEventArgs e)
     {
-        if (sender is Control c)
-            UpdateVideoChromeCompactState(c);
+        UpdateVideoChromeCompactState();
     }
 
-    private void UpdateVideoChromeCompactState(Control host)
+    private void OnWideVideoChromeLayoutSizeChanged(object? sender, SizeChangedEventArgs e) =>
+        UpdateVideoChromeCompactState();
+
+    private void UpdateVideoChromeCompactState()
     {
         if (DataContext is not MainWindowViewModel vm)
             return;
 
-        const double thresholdPx = 540;
-        var w = host.Bounds.Width;
-        if (w <= 0)
+        var playerChromeWidthHost = this.FindControl<Control>("PlayerChromeWidthHost");
+        var wideVideoChromeLayout = this.FindControl<Control>("WideVideoChromeLayoutRoot");
+        if (playerChromeWidthHost is null || wideVideoChromeLayout is null)
             return;
 
-        vm.Playback.Preview.IsCompactVideoChrome = w < thresholdPx;
+        var availableWidth = playerChromeWidthHost.Bounds.Width;
+        if (availableWidth <= 0)
+            return;
+
+        wideVideoChromeLayout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var requiredWidth = Math.Max(wideVideoChromeLayout.DesiredSize.Width, wideVideoChromeLayout.Bounds.Width);
+        if (requiredWidth <= 0)
+            return;
+
+        const double hysteresisPx = 24;
+        var shouldCompact = vm.Playback.Preview.IsCompactVideoChrome
+            ? availableWidth < requiredWidth + hysteresisPx
+            : availableWidth < requiredWidth;
+
+        vm.Playback.Preview.IsCompactVideoChrome = shouldCompact;
+    }
+
+    private void WirePaneLayoutHost()
+    {
+        var paneLayoutHost = this.FindControl<Control>("PaneLayoutHost");
+        if (paneLayoutHost is null)
+            return;
+
+        _paneLayoutHostSizeChangedHandler ??= OnPaneLayoutHostSizeChanged;
+        paneLayoutHost.SizeChanged -= _paneLayoutHostSizeChangedHandler;
+        paneLayoutHost.SizeChanged += _paneLayoutHostSizeChangedHandler;
+    }
+
+    private void OnPaneLayoutHostSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        // Drag clamping uses the live host width. No-op here beyond keeping the
+        // reference available for future updates without relying on a magic width.
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
@@ -275,6 +330,12 @@ public partial class MainWindow : Window
                 if (item != null)
                     this.FindControl<ListBox>("SegmentList")?.ScrollIntoView(item);
                 break;
+            case nameof(EmbeddedPlaybackPreviewViewModel.IsDubModeOn):
+            case nameof(EmbeddedPlaybackPreviewViewModel.IsPipelinePaneVisible):
+            case nameof(EmbeddedPlaybackPreviewViewModel.IsSegmentsPaneVisible):
+            case nameof(EmbeddedPlaybackPreviewViewModel.SwapPaneSides):
+                UpdateVideoChromeCompactState();
+                break;
             case nameof(EmbeddedPlaybackPreviewViewModel.IsFullscreen):
                 if (DataContext is MainWindowViewModel vm && !_isApplyingFullscreenFromWindowState)
                 {
@@ -286,6 +347,8 @@ public partial class MainWindow : Window
                         _isApplyingWindowStateFromViewModel = false;
                     }
                 }
+
+                UpdateVideoChromeCompactState();
                 break;
         }
     }
@@ -312,7 +375,8 @@ public partial class MainWindow : Window
         {
             MainWindowShortcutAction.PlayPause => TryExecuteShortcut(preview.IsSourceMediaLoaded, preview.PlayPauseSourceCommand),
             MainWindowShortcutAction.ToggleSubtitles => TryExecuteShortcut(preview.HasSegments, preview.ToggleSubtitlesCommand),
-            MainWindowShortcutAction.ToggleSegmentPane => TryExecuteShortcut(true, preview.ToggleSegmentPaneCommand),
+            MainWindowShortcutAction.ToggleLeftPane => TryExecuteShortcut(true, preview.ToggleLeftPaneCommand),
+            MainWindowShortcutAction.ToggleRightPane => TryExecuteShortcut(true, preview.ToggleRightPaneCommand),
             MainWindowShortcutAction.ToggleDubMode => TryExecuteShortcut(preview.HasSegments, preview.ToggleDubModeCommand),
             MainWindowShortcutAction.ToggleFullscreen => TryExecuteShortcut(preview.IsSourceMediaLoaded, preview.ToggleFullscreenCommand),
             MainWindowShortcutAction.ExitFullscreen => TryExitFullscreen(preview),
@@ -339,6 +403,94 @@ public partial class MainWindow : Window
 
         preview.IsFullscreen = false;
         return true;
+    }
+
+    public void OnPaneSplitterPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control splitter
+            || DataContext is not MainWindowViewModel vm
+            || !e.GetCurrentPoint(splitter).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        if (e.ClickCount == 2)
+        {
+            if (splitter.Name == "LeftPaneSplitter")
+                vm.Playback.Preview.ResetLeftPaneWidthCommand.Execute(null);
+            else
+                vm.Playback.Preview.ResetRightPaneWidthCommand.Execute(null);
+
+            e.Handled = true;
+            return;
+        }
+
+        _activePaneSplitter = splitter;
+        _activePaneSplitterIsLeft = splitter.Name == "LeftPaneSplitter";
+        _paneSplitterDragStartX = e.GetPosition(this).X;
+        _paneSplitterStartWidth = _activePaneSplitterIsLeft
+            ? vm.Playback.Preview.LeftPaneWidth
+            : vm.Playback.Preview.RightPaneWidth;
+        e.Pointer.Capture(splitter);
+        e.Handled = true;
+    }
+
+    public void OnPaneSplitterPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_activePaneSplitter is null
+            || DataContext is not MainWindowViewModel vm
+            || GetPaneLayoutHostWidth() <= 0)
+        {
+            return;
+        }
+
+        var delta = e.GetPosition(this).X - _paneSplitterDragStartX;
+        var desiredWidth = _activePaneSplitterIsLeft
+            ? _paneSplitterStartWidth + delta
+            : _paneSplitterStartWidth - delta;
+        var hostWidth = GetPaneLayoutHostWidth();
+        if (_activePaneSplitterIsLeft)
+            vm.Playback.Preview.ResizeLeftPane(desiredWidth, hostWidth);
+        else
+            vm.Playback.Preview.ResizeRightPane(desiredWidth, hostWidth);
+
+        UpdateVideoChromeCompactState();
+        e.Handled = true;
+    }
+
+    public void OnPaneSplitterPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_activePaneSplitter is null || DataContext is not MainWindowViewModel vm)
+            return;
+
+        vm.Playback.Preview.CommitPaneLayout();
+        e.Pointer.Capture(null);
+        ClearActivePaneSplitter();
+        e.Handled = true;
+    }
+
+    public void OnPaneSplitterPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (_activePaneSplitter is null)
+            return;
+
+        if (DataContext is MainWindowViewModel vm)
+            vm.Playback.Preview.CommitPaneLayout();
+
+        ClearActivePaneSplitter();
+    }
+
+    private double GetPaneLayoutHostWidth()
+    {
+        var paneLayoutHost = this.FindControl<Control>("PaneLayoutHost");
+        return paneLayoutHost?.Bounds.Width ?? 0;
+    }
+
+    private void ClearActivePaneSplitter()
+    {
+        _activePaneSplitter = null;
+        _paneSplitterStartWidth = 0;
+        _paneSplitterDragStartX = 0;
     }
 
     // ── Drag & Drop file support ──────────────────────────────────────────────────

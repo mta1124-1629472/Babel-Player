@@ -10,7 +10,8 @@ internal enum MainWindowShortcutAction
     None = 0,
     PlayPause,
     ToggleSubtitles,
-    ToggleSegmentPane,
+    ToggleLeftPane,
+    ToggleRightPane,
     ToggleDubMode,
     ToggleFullscreen,
     ExitFullscreen,
@@ -50,7 +51,8 @@ internal static class MainWindowShortcutRouter
         {
             Key.Space => MainWindowShortcutAction.PlayPause,
             Key.C => MainWindowShortcutAction.ToggleSubtitles,
-            Key.S => MainWindowShortcutAction.ToggleSegmentPane,
+            Key.A => MainWindowShortcutAction.ToggleLeftPane,
+            Key.S => MainWindowShortcutAction.ToggleRightPane,
             Key.D => MainWindowShortcutAction.ToggleDubMode,
             _ => MainWindowShortcutAction.None,
         };

@@ -6,9 +6,11 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -26,12 +28,22 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private WorkflowSegmentState[] _sortedSegments = [];
     private double _preMuteVolume = 1.0;
     private bool _isDucked;
-    private bool _preFullscreenSegmentPaneVisible = true;
     private string? _activeSrtPath;
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
     private const double PositionUpdateThresholdMs = 0.5;
+    private const double PipelinePaneMinWidth = 220;
+    private const double PipelinePaneMaxWidth = 420;
+    private const double SegmentsPaneMinWidth = 280;
+    private const double SegmentsPaneMaxWidth = 520;
+    private const double PlayerPaneMinWidth = 460;
+    private const double SplitterWidth = 5;
+    private bool _isPipelinePaneVisible;
+    private bool _isSegmentsPaneVisible;
+    private double _pipelinePaneWidth;
+    private double _segmentsPaneWidth;
+    private bool _swapPaneSides;
 
     public EmbeddedPlaybackPreviewViewModel(
         EmbeddedPlaybackViewModel parent,
@@ -51,6 +63,12 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _controlsHideTimer.Tick += OnControlsHideTimerTick;
 
         _isBilingualSubtitlesOn = coordinator.CurrentSettings.BilingualSubtitlesEnabled;
+        _isPipelinePaneVisible = coordinator.CurrentSettings.IsPipelinePaneVisible;
+        _isSegmentsPaneVisible = coordinator.CurrentSettings.IsSegmentsPaneVisible;
+        _pipelinePaneWidth = NormalizePipelinePaneWidth(coordinator.CurrentSettings.PipelinePaneWidth);
+        _segmentsPaneWidth = NormalizeSegmentsPaneWidth(coordinator.CurrentSettings.SegmentsPaneWidth);
+        _swapPaneSides = coordinator.CurrentSettings.SwapPaneSides;
+        LocalizationService.Instance.CultureChanged += OnLocalizationCultureChanged;
     }
 
     [ObservableProperty]
@@ -87,17 +105,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
-    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
     private bool _isFullscreen;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SegmentPaneToggleLabel))]
-    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
-    private bool _isSegmentPaneVisible = true;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
-    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
     private bool _isControlsVisible = true;
 
     [ObservableProperty]
@@ -129,9 +140,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     [NotifyPropertyChangedFor(nameof(AudioDuckingLabel))]
     private double _audioDuckingDb = -15.0;
 
-    public string SegmentPaneToggleLabel => IsSegmentPaneVisible ? "◄" : "►";
     public bool IsPullTabVisible => !IsFullscreen || IsControlsVisible;
-    public bool IsPanePullTabVisible => !IsSegmentPaneVisible && IsPullTabVisible;
     public string PlayPauseSourceLabel => IsSourcePaused ? "▶" : "||";
     public string VolumeIconLabel => IsMuted || SourceVolume == 0
         ? "🔇"
@@ -140,6 +149,29 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             : SourceVolume < 0.51
                 ? "🔉"
                 : "🔊";
+    public bool IsPipelinePaneVisible => _isPipelinePaneVisible;
+    public bool IsSegmentsPaneVisible => _isSegmentsPaneVisible;
+    public double PipelinePaneWidth => _pipelinePaneWidth;
+    public double SegmentsPaneWidth => _segmentsPaneWidth;
+    public bool SwapPaneSides => _swapPaneSides;
+    public bool IsPipelinePaneOnLeft => !SwapPaneSides;
+    public bool IsSegmentsPaneOnLeft => SwapPaneSides;
+    public bool IsPipelinePaneShown => !IsFullscreen && IsPipelinePaneVisible;
+    public bool IsSegmentsPaneShown => !IsFullscreen && IsSegmentsPaneVisible;
+    public bool IsLeftPaneVisible => !IsFullscreen && (IsPipelinePaneOnLeft ? IsPipelinePaneVisible : IsSegmentsPaneVisible);
+    public bool IsRightPaneVisible => !IsFullscreen && (IsPipelinePaneOnLeft ? IsSegmentsPaneVisible : IsPipelinePaneVisible);
+    public double LeftPaneWidth => IsPipelinePaneOnLeft ? PipelinePaneWidth : SegmentsPaneWidth;
+    public double RightPaneWidth => IsPipelinePaneOnLeft ? SegmentsPaneWidth : PipelinePaneWidth;
+    public int PipelinePaneColumn => IsPipelinePaneOnLeft ? 0 : 4;
+    public int SegmentsPaneColumn => IsSegmentsPaneOnLeft ? 0 : 4;
+    public Thickness PipelinePaneMargin => IsPipelinePaneOnLeft ? new Thickness(8, 0, 0, 8) : new Thickness(0, 0, 8, 8);
+    public Thickness SegmentsPaneMargin => IsSegmentsPaneOnLeft ? new Thickness(8, 0, 0, 8) : new Thickness(0, 0, 8, 8);
+    public Thickness PipelinePaneBorderThickness => IsPipelinePaneOnLeft ? new Thickness(0, 0, 1, 0) : new Thickness(1, 0, 0, 0);
+    public Thickness SegmentsPaneBorderThickness => IsSegmentsPaneOnLeft ? new Thickness(0, 0, 1, 0) : new Thickness(1, 0, 0, 0);
+    public string LeftPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Pipeline") : GetLocalized("Section_Segments");
+    public string RightPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Segments") : GetLocalized("Section_Pipeline");
+    public string LeftPaneTooltip => BuildPaneTooltip(isLeftSide: true, LeftPaneRole, hotkey: "A");
+    public string RightPaneTooltip => BuildPaneTooltip(isLeftSide: false, RightPaneRole, hotkey: "S");
     [ObservableProperty]
     private bool _isCompactVideoChrome;
 
@@ -166,6 +198,19 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         IsBilingualSubtitlesOn = enabled;
         if (IsSubtitleModeOn)
             ApplySubtitleState();
+    }
+
+    public void SyncPaneLayoutFromSettings()
+    {
+        var changed = false;
+        changed |= SetPipelinePaneVisibleCore(_coordinator.CurrentSettings.IsPipelinePaneVisible);
+        changed |= SetSegmentsPaneVisibleCore(_coordinator.CurrentSettings.IsSegmentsPaneVisible);
+        changed |= SetPipelinePaneWidthCore(NormalizePipelinePaneWidth(_coordinator.CurrentSettings.PipelinePaneWidth));
+        changed |= SetSegmentsPaneWidthCore(NormalizeSegmentsPaneWidth(_coordinator.CurrentSettings.SegmentsPaneWidth));
+        changed |= SetSwapPaneSidesCore(_coordinator.CurrentSettings.SwapPaneSides);
+
+        if (changed)
+            NotifyPaneLayoutProjectionChanged();
     }
 
     public void SyncDubMixControlFromSettings()
@@ -477,7 +522,16 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private void ToggleFullscreen() => IsFullscreen = !IsFullscreen;
 
     [RelayCommand]
-    private void ToggleSegmentPane() => IsSegmentPaneVisible = !IsSegmentPaneVisible;
+    private void ToggleLeftPane() => TogglePaneForSide(isLeftSide: true);
+
+    [RelayCommand]
+    private void ToggleRightPane() => TogglePaneForSide(isLeftSide: false);
+
+    [RelayCommand]
+    private void ResetLeftPaneWidth() => ResetPaneWidthForSide(isLeftSide: true);
+
+    [RelayCommand]
+    private void ResetRightPaneWidth() => ResetPaneWidthForSide(isLeftSide: false);
 
     [RelayCommand]
     private void ToggleSubtitles()
@@ -490,6 +544,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     public void Dispose()
     {
+        LocalizationService.Instance.CultureChanged -= OnLocalizationCultureChanged;
         _positionTimer.Stop();
         _positionTimer.Tick -= OnPositionTimerTick;
         _controlsHideTimer.Stop();
@@ -555,16 +610,15 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     {
         if (value)
         {
-            _preFullscreenSegmentPaneVisible = IsSegmentPaneVisible;
-            IsSegmentPaneVisible = false;
             NotifyControlsActivity();
         }
         else
         {
-            IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible;
             _controlsHideTimer.Stop();
             IsControlsVisible = true;
         }
+
+        NotifyPaneLayoutProjectionChanged();
     }
 
     partial void OnIsSubtitleModeOnChanged(bool value) => ApplySubtitleState();
@@ -589,6 +643,182 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _sortedSegments = sorted;
         _parent.SpeakerRouting.RebuildSpeakerIds(value, SelectedSegment?.SpeakerId);
     }
+
+    public void ResizeLeftPane(double desiredWidth, double hostWidth) =>
+        ResizePaneForSide(isLeftSide: true, desiredWidth, hostWidth);
+
+    public void ResizeRightPane(double desiredWidth, double hostWidth) =>
+        ResizePaneForSide(isLeftSide: false, desiredWidth, hostWidth);
+
+    public void CommitPaneLayout() => PersistPaneLayout();
+
+    private void TogglePaneForSide(bool isLeftSide)
+    {
+        if (IsPipelineAssignedToSide(isLeftSide))
+        {
+            if (SetPipelinePaneVisibleCore(!GetPaneVisibilityForSide(isLeftSide)))
+                PersistPaneLayout();
+        }
+        else if (SetSegmentsPaneVisibleCore(!GetPaneVisibilityForSide(isLeftSide)))
+        {
+            PersistPaneLayout();
+        }
+
+        NotifyPaneLayoutProjectionChanged();
+    }
+
+    private void ResetPaneWidthForSide(bool isLeftSide)
+    {
+        var changed = IsPipelineAssignedToSide(isLeftSide)
+            ? SetPipelinePaneWidthCore(AppSettings.PipelinePaneDefaultWidth)
+            : SetSegmentsPaneWidthCore(AppSettings.SegmentsPaneDefaultWidth);
+
+        if (!changed)
+            return;
+
+        NotifyPaneLayoutProjectionChanged();
+        PersistPaneLayout();
+    }
+
+    private void ResizePaneForSide(bool isLeftSide, double desiredWidth, double hostWidth)
+    {
+        var changed = IsPipelineAssignedToSide(isLeftSide)
+            ? SetPipelinePaneWidthCore(ClampPaneWidthForRole(isPipelineRole: true, desiredWidth, hostWidth))
+            : SetSegmentsPaneWidthCore(ClampPaneWidthForRole(isPipelineRole: false, desiredWidth, hostWidth));
+
+        if (changed)
+            NotifyPaneLayoutProjectionChanged();
+    }
+
+    private bool GetPaneVisibilityForSide(bool isLeftSide) =>
+        IsPipelineAssignedToSide(isLeftSide) ? IsPipelinePaneVisible : IsSegmentsPaneVisible;
+
+    private bool IsPipelineAssignedToSide(bool isLeftSide) =>
+        isLeftSide ? IsPipelinePaneOnLeft : !IsPipelinePaneOnLeft;
+
+    private double ClampPaneWidthForRole(bool isPipelineRole, double desiredWidth, double hostWidth)
+    {
+        var minWidth = isPipelineRole ? PipelinePaneMinWidth : SegmentsPaneMinWidth;
+        var maxWidth = isPipelineRole ? PipelinePaneMaxWidth : SegmentsPaneMaxWidth;
+        var normalizedDesired = Math.Clamp(desiredWidth, minWidth, maxWidth);
+
+        if (hostWidth <= 0)
+            return normalizedDesired;
+
+        var otherPaneVisible = isPipelineRole ? IsSegmentsPaneVisible : IsPipelinePaneVisible;
+        var otherPaneWidth = otherPaneVisible
+            ? (isPipelineRole ? SegmentsPaneWidth : PipelinePaneWidth)
+            : 0;
+        var splitterCount = (IsPipelinePaneVisible ? 1 : 0) + (IsSegmentsPaneVisible ? 1 : 0);
+        var maxByHost = hostWidth - PlayerPaneMinWidth - otherPaneWidth - (splitterCount * SplitterWidth);
+        if (double.IsNaN(maxByHost) || double.IsInfinity(maxByHost))
+            return normalizedDesired;
+
+        return Math.Clamp(normalizedDesired, minWidth, Math.Min(maxWidth, Math.Max(minWidth, maxByHost)));
+    }
+
+    private bool SetPipelinePaneVisibleCore(bool value)
+    {
+        if (_isPipelinePaneVisible == value)
+            return false;
+
+        _isPipelinePaneVisible = value;
+        OnPropertyChanged(nameof(IsPipelinePaneVisible));
+        return true;
+    }
+
+    private bool SetSegmentsPaneVisibleCore(bool value)
+    {
+        if (_isSegmentsPaneVisible == value)
+            return false;
+
+        _isSegmentsPaneVisible = value;
+        OnPropertyChanged(nameof(IsSegmentsPaneVisible));
+        return true;
+    }
+
+    private bool SetPipelinePaneWidthCore(double value)
+    {
+        var normalized = NormalizePipelinePaneWidth(value);
+        if (Math.Abs(_pipelinePaneWidth - normalized) < 0.01)
+            return false;
+
+        _pipelinePaneWidth = normalized;
+        OnPropertyChanged(nameof(PipelinePaneWidth));
+        return true;
+    }
+
+    private bool SetSegmentsPaneWidthCore(double value)
+    {
+        var normalized = NormalizeSegmentsPaneWidth(value);
+        if (Math.Abs(_segmentsPaneWidth - normalized) < 0.01)
+            return false;
+
+        _segmentsPaneWidth = normalized;
+        OnPropertyChanged(nameof(SegmentsPaneWidth));
+        return true;
+    }
+
+    private bool SetSwapPaneSidesCore(bool value)
+    {
+        if (_swapPaneSides == value)
+            return false;
+
+        _swapPaneSides = value;
+        OnPropertyChanged(nameof(SwapPaneSides));
+        return true;
+    }
+
+    private void NotifyPaneLayoutProjectionChanged()
+    {
+        OnPropertyChanged(nameof(IsPipelinePaneOnLeft));
+        OnPropertyChanged(nameof(IsSegmentsPaneOnLeft));
+        OnPropertyChanged(nameof(IsPipelinePaneShown));
+        OnPropertyChanged(nameof(IsSegmentsPaneShown));
+        OnPropertyChanged(nameof(IsLeftPaneVisible));
+        OnPropertyChanged(nameof(IsRightPaneVisible));
+        OnPropertyChanged(nameof(LeftPaneWidth));
+        OnPropertyChanged(nameof(RightPaneWidth));
+        OnPropertyChanged(nameof(PipelinePaneColumn));
+        OnPropertyChanged(nameof(SegmentsPaneColumn));
+        OnPropertyChanged(nameof(PipelinePaneMargin));
+        OnPropertyChanged(nameof(SegmentsPaneMargin));
+        OnPropertyChanged(nameof(PipelinePaneBorderThickness));
+        OnPropertyChanged(nameof(SegmentsPaneBorderThickness));
+        OnPropertyChanged(nameof(LeftPaneRole));
+        OnPropertyChanged(nameof(RightPaneRole));
+        OnPropertyChanged(nameof(LeftPaneTooltip));
+        OnPropertyChanged(nameof(RightPaneTooltip));
+    }
+
+    private void PersistPaneLayout()
+    {
+        _coordinator.CurrentSettings.IsPipelinePaneVisible = IsPipelinePaneVisible;
+        _coordinator.CurrentSettings.IsSegmentsPaneVisible = IsSegmentsPaneVisible;
+        _coordinator.CurrentSettings.PipelinePaneWidth = PipelinePaneWidth;
+        _coordinator.CurrentSettings.SegmentsPaneWidth = SegmentsPaneWidth;
+        _coordinator.CurrentSettings.SwapPaneSides = SwapPaneSides;
+        _coordinator.NotifySettingsModified();
+    }
+
+    private static double NormalizePipelinePaneWidth(double width) =>
+        Math.Clamp(width, PipelinePaneMinWidth, PipelinePaneMaxWidth);
+
+    private static double NormalizeSegmentsPaneWidth(double width) =>
+        Math.Clamp(width, SegmentsPaneMinWidth, SegmentsPaneMaxWidth);
+
+    private string BuildPaneTooltip(bool isLeftSide, string roleLabel, string hotkey) =>
+        string.Format(
+            LocalizationService.Instance.CurrentCulture,
+            GetLocalized("Tooltip_PaneSideFormat"),
+            GetLocalized(isLeftSide ? "Common_Left" : "Common_Right"),
+            roleLabel,
+            hotkey);
+
+    private static string GetLocalized(string key) => LocalizationService.Instance[key];
+
+    private void OnLocalizationCultureChanged(object? sender, System.Globalization.CultureInfo culture) =>
+        NotifyPaneLayoutProjectionChanged();
 
     private void OnPositionTimerTick(object? sender, EventArgs e)
     {

@@ -93,6 +93,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             ?? AppLanguageOptions[0];
         MaxRecentSessions      = current.MaxRecentSessions;
         AutoSaveEnabled        = current.AutoSaveEnabled;
+        SwapPaneSides          = current.SwapPaneSides;
         BilingualSubtitlesEnabled = current.BilingualSubtitlesEnabled;
         PreferredLocalGpuBackend = current.PreferredLocalGpuBackend;
         AdvancedGpuServiceUrl  = current.AdvancedGpuServiceUrl;
@@ -126,10 +127,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
         // Hotkeys (default values)
-        PlayPauseHotkey             = "Space";
-        ToggleSegmentPanelHotkey    = "S";
-        ToggleDubModeHotkey         = "D";
-        ToggleFullscreenHotkey      = "F11";
+        PlayPauseHotkey         = "Space";
+        ToggleLeftPaneHotkey    = "A";
+        ToggleRightPaneHotkey   = "S";
+        ToggleDubModeHotkey     = "D";
+        ToggleFullscreenHotkey  = "F11";
 
         _healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _healthTimer.Tick += (_, _) =>
@@ -445,6 +447,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _autoSaveEnabled;
 
+    [ObservableProperty]
+    private bool _swapPaneSides;
+
     /// <summary>When true, exported/embedded subtitles include both source and translated lines (see Settings ▸ Video).</summary>
     [ObservableProperty]
     private bool _bilingualSubtitlesEnabled;
@@ -728,7 +733,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private string _playPauseHotkey;
 
     [ObservableProperty]
-    private string _toggleSegmentPanelHotkey;
+    private string _toggleLeftPaneHotkey;
+
+    [ObservableProperty]
+    private string _toggleRightPaneHotkey;
 
     [ObservableProperty]
     private string _toggleDubModeHotkey;
@@ -758,6 +766,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _languageChangeCommitted = true;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
+        settings.SwapPaneSides     = SwapPaneSides;
         settings.BilingualSubtitlesEnabled = BilingualSubtitlesEnabled;
         settings.PreferredLocalGpuBackend = PreferredLocalGpuBackend;
         settings.AdvancedGpuServiceUrl = string.IsNullOrWhiteSpace(AdvancedGpuServiceUrl)
