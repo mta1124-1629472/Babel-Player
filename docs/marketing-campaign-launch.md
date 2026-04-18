@@ -1,3 +1,6 @@
+> Historical planning brief. Marketing copy here is not the source of current provider or runtime truth.
+> Use `README.md`, `docs/AI-CONTEXT.md`, and `docs/Engineering-Plan.md` for the current product surface.
+
 # Babel Player — Launch Campaign Brief
 ## "Run the dub locally"
 
@@ -47,7 +50,7 @@ Pain points:
 
 **Supporting messages:**
 
-1. "Local-first, not local-only" — Whisper for transcription, edge-tts or XTTS for voice, with optional cloud provider routing for each stage. You decide per-provider what runs where.
+1. "Local-first, not local-only" — Faster Whisper or Parakeet for transcription, Piper or Qwen3-TTS for local voice generation, with optional cloud provider routing for each stage. You decide per-provider what runs where.
 
 2. "Not a script, a workstation" — segment-level editing, per-speaker voice assignment, timeline scrubbing, SRT export. The kind of control you'd expect from a professional tool, built as open source.
 
