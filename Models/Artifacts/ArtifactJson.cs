@@ -25,6 +25,7 @@ public static class ArtifactJson
         var artifact = JsonSerializer.Deserialize<TranscriptArtifact>(json, ReadOptions)
             ?? throw CreateInvalidArtifactException("transcript", contextLabel, "JSON deserialized to null.");
 
+        EnsureSchemaVersion(artifact);
         ValidateTranscript(artifact, contextLabel);
         return artifact;
     }
@@ -34,6 +35,7 @@ public static class ArtifactJson
         var artifact = JsonSerializer.Deserialize<TranslationArtifact>(json, ReadOptions)
             ?? throw CreateInvalidArtifactException("translation", contextLabel, "JSON deserialized to null.");
 
+        EnsureSchemaVersion(artifact);
         ValidateTranslation(artifact, contextLabel);
         return artifact;
     }
@@ -56,18 +58,28 @@ public static class ArtifactJson
 
     public static string SerializeTranscript(TranscriptArtifact artifact)
     {
-        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
-            artifact.SchemaVersion = CurrentSchemaVersion;
+        EnsureSchemaVersion(artifact);
         ValidateTranscript(artifact, "serialize");
         return JsonSerializer.Serialize(artifact, WriteOptions);
     }
 
     public static string SerializeTranslation(TranslationArtifact artifact)
     {
-        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
-            artifact.SchemaVersion = CurrentSchemaVersion;
+        EnsureSchemaVersion(artifact);
         ValidateTranslation(artifact, "serialize");
         return JsonSerializer.Serialize(artifact, WriteOptions);
+    }
+
+    private static void EnsureSchemaVersion(TranscriptArtifact artifact)
+    {
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
+    }
+
+    private static void EnsureSchemaVersion(TranslationArtifact artifact)
+    {
+        if (string.IsNullOrWhiteSpace(artifact.SchemaVersion))
+            artifact.SchemaVersion = CurrentSchemaVersion;
     }
 
     private static void ValidateTranscript(TranscriptArtifact artifact, string contextLabel)

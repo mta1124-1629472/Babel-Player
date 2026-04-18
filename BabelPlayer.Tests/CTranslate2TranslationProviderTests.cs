@@ -35,7 +35,7 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
 
         await File.WriteAllTextAsync(
             transcriptPath,
-            "{\"language\":\"es\",\"language_probability\":1.0,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"hola\"}]}");
+            "{\"schema_version\":\"2.0\",\"language\":\"es\",\"language_probability\":1.0,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"hola\"}]}");
 
         var provider = new TestCTranslate2TranslationProvider(_log, "nllb-200-distilled-600M")
         {
@@ -43,7 +43,7 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             {
                 File.WriteAllText(
                     arguments[1],
-                    "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
+                    "{\"schema_version\":\"2.0\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"}]}");
                 return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
             }
         };
@@ -69,8 +69,8 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             OnRun = (arguments, _, standardInput) =>
             {
                 Assert.Equal("hola", standardInput);
-                File.WriteAllText(arguments[1], "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}");
-                return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult());
+                return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult(
+                    "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}"));
             }
         };
 
@@ -100,6 +100,6 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             OnRun?.Invoke(arguments, scriptPrefix, standardInput)
             ?? Task.FromResult(new ScriptResult(0, string.Empty, string.Empty));
 
-        public static ScriptResult SuccessResult() => new(0, string.Empty, string.Empty);
+        public static ScriptResult SuccessResult(string stdout = "") => new(0, stdout, string.Empty);
     }
 }

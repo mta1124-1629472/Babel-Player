@@ -526,7 +526,7 @@ internal sealed class TranslationArtifactStreamingWriter
         }
     }
 
-    public Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
+    public async Task<TranslationSegmentArtifact> ApplyTranslatedTextAsync(
         string segmentId,
         string translatedText,
         string? sourceLanguage,
@@ -537,7 +537,6 @@ internal sealed class TranslationArtifactStreamingWriter
         TranslationArtifact snapshot;
         string eventLine;
         TranslationSegmentArtifact result;
-        bool shouldCompact;
 
         lock (_sync)
         {
@@ -562,14 +561,13 @@ internal sealed class TranslationArtifactStreamingWriter
                 TranslatedText = translatedText,
             }, JournalJsonOptions);
             snapshot = CloneArtifact(_artifact);
-            shouldCompact = _eventsSinceCompaction >= CompactEveryEventCount;
+            _eventsSinceCompaction = 0;
         }
 
         EnqueueAppend(eventLine);
-        if (shouldCompact)
-            EnqueueCompact(snapshot, _nextSequence);
-
-        return Task.FromResult(result);
+        EnqueueCompact(snapshot, _nextSequence);
+        await EnqueueBarrier().WaitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
     public async Task ReloadFromDiskAsync(CancellationToken cancellationToken)
@@ -707,6 +705,21 @@ internal sealed class TranslationArtifactStreamingWriter
         {
             throw new InvalidOperationException("Translation journal writer was not accepting compaction work.");
         }
+    }
+
+    private Task EnqueueBarrier()
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_operations.Writer.TryWrite(_ =>
+            {
+                tcs.TrySetResult();
+                return Task.CompletedTask;
+            }))
+        {
+            throw new InvalidOperationException("Translation journal writer was not accepting flush work.");
+        }
+
+        return tcs.Task;
     }
 
     private async Task CompactAsync(CancellationToken cancellationToken)

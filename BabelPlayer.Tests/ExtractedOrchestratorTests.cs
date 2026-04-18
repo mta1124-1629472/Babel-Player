@@ -56,7 +56,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(InferenceStage.Transcription, planner.RequestedStages[0]);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "sample.json"),
+            ArtifactIntegrity.GetWorkingPath(Path.Combine("transcripts", "sample.json")),
             committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal("sample.mp4", Path.GetFileName(session.CurrentSession.IngestedMediaPath));
@@ -108,7 +108,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(vocalsPath, engine.LastTranscriptionRequest!.SourceAudioPath);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "original.json"),
+            ArtifactIntegrity.GetWorkingPath(Path.Combine("transcripts", "original.json")),
             committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -248,7 +248,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal("es", committer.TranslationCommit!.Value.SourceLanguage);
         Assert.Equal("en", committer.TranslationCommit.Value.TargetLanguage);
         Assert.EndsWith(
-            Path.Combine("translations", "input_en.json"),
+            ArtifactIntegrity.GetWorkingPath(Path.Combine("translations", "input_en.json")),
             committer.TranslationCommit.Value.TranslationPath,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -600,8 +600,7 @@ public sealed class ExtractedOrchestratorTests
         {
             TranscriptionRequests.Add(request);
             LastTranscriptionRequest = request;
-            return TranscribeAsyncImpl?.Invoke(provider, request, cancellationToken)
-                ?? Task.FromException<TranscriptionResult>(new InvalidOperationException("TranscribeAsync was not configured."));
+            return CompleteTranscriptionAsync(provider, request, cancellationToken);
         }
 
         public Task<TranscriptionResult> TranscribeStreamingAsync(
@@ -617,8 +616,66 @@ public sealed class ExtractedOrchestratorTests
             CancellationToken cancellationToken = default)
         {
             LastTranslationRequest = request;
-            return TranslateAsyncImpl?.Invoke(provider, request, cancellationToken)
-                ?? Task.FromException<TranslationResult>(new InvalidOperationException("TranslateAsync was not configured."));
+            return CompleteTranslationAsync(provider, request, cancellationToken);
+        }
+
+        private async Task<TranscriptionResult> CompleteTranscriptionAsync(
+            ITranscriptionProvider provider,
+            TranscriptionRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await (TranscribeAsyncImpl?.Invoke(provider, request, cancellationToken)
+                ?? Task.FromException<TranscriptionResult>(new InvalidOperationException("TranscribeAsync was not configured.")));
+            if (result.Success && !File.Exists(request.OutputJsonPath))
+            {
+                var artifact = new TranscriptArtifact
+                {
+                    SchemaVersion = ArtifactJson.CurrentSchemaVersion,
+                    Language = result.Language,
+                    LanguageProbability = result.LanguageProbability,
+                    Segments = [.. result.Segments.Select(segment => new TranscriptSegmentArtifact
+                    {
+                        Start = segment.StartSeconds,
+                        End = segment.EndSeconds,
+                        Text = segment.Text,
+                    })],
+                };
+                Directory.CreateDirectory(Path.GetDirectoryName(request.OutputJsonPath)!);
+                await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(artifact), cancellationToken);
+            }
+
+            return result;
+        }
+
+        private async Task<TranslationResult> CompleteTranslationAsync(
+            ITranslationProvider provider,
+            TranslationRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await (TranslateAsyncImpl?.Invoke(provider, request, cancellationToken)
+                ?? Task.FromException<TranslationResult>(new InvalidOperationException("TranslateAsync was not configured.")));
+            if (result.Success && !File.Exists(request.OutputJsonPath))
+            {
+                var artifact = new TranslationArtifact
+                {
+                    SchemaVersion = ArtifactJson.CurrentSchemaVersion,
+                    SourceLanguage = result.SourceLanguage,
+                    TargetLanguage = result.TargetLanguage,
+                    Segments = [.. result.Segments.Select(segment => new TranslationSegmentArtifact
+                    {
+                        Id = SessionWorkflowCoordinator.SegmentId(segment.StartSeconds),
+                        Start = segment.StartSeconds,
+                        End = segment.EndSeconds,
+                        Text = segment.Text,
+                        TranslatedText = segment.TranslatedText,
+                        SpeakerId = segment.SpeakerId,
+                    })],
+                };
+                Directory.CreateDirectory(Path.GetDirectoryName(request.OutputJsonPath)!);
+                await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranslation(artifact), cancellationToken);
+            }
+
+            return result;
         }
 
         public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(

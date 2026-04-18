@@ -51,6 +51,7 @@ public sealed class TranslationArtifactStreamingWriterTests : IDisposable
         Assert.Equal("segment_1.0", updated.Id);
         Assert.Equal("World", updated.TranslatedText);
 
+        await writer.ReloadFromDiskAsync(ct);
         var artifact = await ArtifactJson.LoadTranslationAsync(partialPath, ct);
         var seg0 = artifact.Segments!.Single(s => s.Id == "segment_0.0");
         var seg1 = artifact.Segments!.Single(s => s.Id == "segment_1.0");

@@ -146,7 +146,9 @@ public sealed partial class SessionWorkflowCoordinator
                 segment.Id!,
                 segmentAudioPaths[segment.Id!]))
             .ToList();
-        var translationHash = ArtifactIntegrity.LoadManifest(candidateSnapshot.TranslationPath!).Sha256;
+        var translationHash = ArtifactIntegrity.TryGetArtifactSha256(candidateSnapshot.TranslationPath)
+            ?? throw new InvalidOperationException(
+                $"Translation artifact hash could not be resolved for TTS integrity: {candidateSnapshot.TranslationPath ?? "<null>"}");
         var segmentUpstream = ArtifactIntegrity.BuildUpstreamHashes(("translation", candidateSnapshot.TranslationPath));
         var segmentTiming = ArtifactIntegrity.BuildTranslationTimingSummary(orderedSegments);
         var segmentProvenance = ArtifactIntegrity.ComputeTtsSegmentSetProvenanceDigest(
@@ -164,9 +166,7 @@ public sealed partial class SessionWorkflowCoordinator
                 cancellationToken)
             .ConfigureAwait(false);
 
-        var ambianceHash = !string.IsNullOrWhiteSpace(candidateSnapshot.AmbianceAudioPath)
-            ? ArtifactIntegrity.LoadManifest(candidateSnapshot.AmbianceAudioPath!).Sha256
-            : null;
+        var ambianceHash = ArtifactIntegrity.TryGetArtifactSha256(candidateSnapshot.AmbianceAudioPath);
         var dubUpstream = ArtifactIntegrity.BuildUpstreamHashes(
             ("tts_segment_set", segmentsDir),
             ("ambiance_stem", candidateSnapshot.AmbianceAudioPath));

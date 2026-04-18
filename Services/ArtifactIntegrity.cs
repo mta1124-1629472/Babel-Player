@@ -71,6 +71,26 @@ internal static class ArtifactIntegrity
         }
     }
 
+    public static bool HasManifest(string? artifactPath) =>
+        !string.IsNullOrWhiteSpace(artifactPath)
+        && File.Exists(ArtifactPersistence.GetManifestPath(artifactPath));
+
+    public static string? TryGetArtifactSha256(string? artifactPath)
+    {
+        if (string.IsNullOrWhiteSpace(artifactPath))
+            return null;
+
+        if (TryLoadManifest(artifactPath, out var manifest, out _)
+            && !string.IsNullOrWhiteSpace(manifest?.Sha256))
+        {
+            return manifest.Sha256;
+        }
+
+        return File.Exists(artifactPath)
+            ? ComputeFileSha256(artifactPath)
+            : null;
+    }
+
     public static string ComputeFileSha256(string path)
     {
         using var stream = File.OpenRead(path);
@@ -148,13 +168,10 @@ internal static class ArtifactIntegrity
         {
             if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(artifactPath))
                 continue;
-            if (!TryLoadManifest(artifactPath, out var manifest, out _)
-                || string.IsNullOrWhiteSpace(manifest?.Sha256))
-            {
-                continue;
-            }
 
-            result[key] = manifest.Sha256!;
+            var hash = TryGetArtifactSha256(artifactPath);
+            if (!string.IsNullOrWhiteSpace(hash))
+                result[key] = hash;
         }
 
         return result;

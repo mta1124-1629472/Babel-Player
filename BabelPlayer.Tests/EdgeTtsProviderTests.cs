@@ -230,6 +230,7 @@ public sealed class EdgeTtsProviderTests : IDisposable
     {
         var json = """
         {
+          "schema_version": "2.0",
           "sourceLanguage": "es",
           "targetLanguage": "en",
           "segments": [
