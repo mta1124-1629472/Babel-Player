@@ -34,6 +34,14 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         return path;
     }
 
+    private const string MinimalTranscriptJson = """
+{"schema_version":"2.0","language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}
+""";
+
+    private const string MinimalTranslationJson = """
+{"schema_version":"2.0","sourceLanguage":"es","targetLanguage":"en","segments":[{"id":"segment_0.0","start":0.0,"end":1.0,"text":"hola","translatedText":"hello"}]}
+""";
+
     // ── ResolveArtifactStage ──────────────────────────────────────────────────
 
     [Fact]
@@ -70,7 +78,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ResolveArtifactStage_Transcribed_WithBothFiles_ReturnsTranscribed()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Transcribed,
@@ -97,7 +105,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ResolveArtifactStage_Diarized_WithMarker_ReturnsDiarized()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var now = DateTimeOffset.UtcNow;
         var snap = WorkflowSessionSnapshot.CreateNew(now) with
         {
@@ -115,8 +123,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ResolveArtifactStage_TtsGenerated_WithAllFiles_ReturnsTtsGenerated()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
-        var translationPath = WriteFile("translation.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
+        var translationPath = WriteFile("translation.json", MinimalTranslationJson);
         var ttsPath = WriteFile("tts.mp3");
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
@@ -133,8 +141,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ResolveArtifactStage_TtsGenerated_MissingTtsFile_ReturnsTranslated()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
-        var translationPath = WriteFile("translation.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
+        var translationPath = WriteFile("translation.json", MinimalTranslationJson);
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
@@ -161,8 +169,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ValidateArtifacts_TtsGeneratedWithAllFiles_NoClearedArtifacts()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
-        var translationPath = WriteFile("translation.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
+        var translationPath = WriteFile("translation.json", MinimalTranslationJson);
         var ttsPath = WriteFile("tts.mp3");
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
@@ -182,8 +190,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ValidateArtifacts_MissingTts_DegradesToTranslated()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
-        var translationPath = WriteFile("translation.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
+        var translationPath = WriteFile("translation.json", MinimalTranslationJson);
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
@@ -204,7 +212,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ValidateArtifacts_MissingTranslation_DegradesToTranscribed()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Translated,
@@ -224,7 +232,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ValidateArtifacts_MissingTranslation_WithDiarizationMarker_DegradesToDiarized()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var now = DateTimeOffset.UtcNow;
         var snap = WorkflowSessionSnapshot.CreateNew(now) with
         {
@@ -248,7 +256,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ValidateArtifacts_DiarizedMissingMarker_DegradesToTranscribed()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Diarized,
@@ -327,7 +335,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     public void ValidateArtifacts_MissingVocalsStem_AtTranscribedStage_DegradesToMediaLoaded()
     {
         var mediaPath = WriteFile("video.mp4");
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var missingVocalsPath = Path.Combine(_dir, "missing-vocals.wav");
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
@@ -387,7 +395,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     [Fact]
     public void ComputeInvalidation_TranscribedStageNoChange_ReturnsNone()
     {
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Transcribed,
@@ -407,7 +415,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     [Fact]
     public void ComputeInvalidation_TranscribedStageModelChanged_ReturnsTranscription()
     {
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Transcribed,
@@ -427,7 +435,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     [Fact]
     public void ComputeInvalidation_TranscribedStage_VocalSeparationToggleChanged_ReturnsTranscription()
     {
-        var transcriptPath = WriteFile("transcript.json");
+        var transcriptPath = WriteFile("transcript.json", MinimalTranscriptJson);
         var vocalsPath = WriteFile("vocals.wav");
         var instrumentalPath = WriteFile("instrumental.wav");
         var mediaPath = WriteFile("video.mp4");
@@ -459,8 +467,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         {
             Stage = SessionWorkflowStage.TtsGenerated,
             IngestedMediaPath = WriteFile("video.mp4"),
-            TranscriptPath = WriteFile("transcript.json"),
-            TranslationPath = WriteFile("translation.json"),
+            TranscriptPath = WriteFile("transcript.json", MinimalTranscriptJson),
+            TranslationPath = WriteFile("translation.json", MinimalTranslationJson),
             TtsPath = ttsPath,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
@@ -493,8 +501,8 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         {
             Stage = SessionWorkflowStage.TtsGenerated,
             IngestedMediaPath = WriteFile("video.mp4"),
-            TranscriptPath = WriteFile("transcript.json"),
-            TranslationPath = WriteFile("translation.json"),
+            TranscriptPath = WriteFile("transcript.json", MinimalTranscriptJson),
+            TranslationPath = WriteFile("translation.json", MinimalTranslationJson),
             TtsPath = ttsPath,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
