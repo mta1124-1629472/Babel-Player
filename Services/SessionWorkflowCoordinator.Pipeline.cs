@@ -816,17 +816,31 @@ public sealed partial class SessionWorkflowCoordinator
             return;
 
         _log.Info($"Generating {batchRequests.Count} Qwen batch TTS segments.");
-        var generatedPaths = await qwenProvider.GenerateSegmentsAsync(
+        var completedSegments = 0;
+        var generationTask = qwenProvider.GenerateSegmentsAsync(
             batchRequests,
             new Progress<(int Completed, int Total)>(update =>
             {
+                completedSegments = Math.Max(completedSegments, update.Completed);
                 ReportStage(
                     stageContext,
-                    $"Generated segment clip {update.Completed} of {update.Total}…",
+                    $"Generated clip {update.Completed} of {update.Total}.",
                     progress01: update.Total <= 0 ? 0 : (double)update.Completed / update.Total,
                     isIndeterminate: false);
             }),
             cancellationToken);
+        var generatedPaths = await AwaitWithTtsHeartbeatAsync(
+            generationTask,
+            stageContext,
+            elapsed =>
+            {
+                var currentClip = Math.Min(Math.Max(completedSegments + 1, 1), batchRequests.Count);
+                return $"Still generating clip {currentClip} of {batchRequests.Count}. {FormatTtsHeartbeatElapsed(elapsed)} elapsed.";
+            },
+            progressFactory: () => batchRequests.Count <= 0 ? 0 : (double)completedSegments / batchRequests.Count,
+            isIndeterminate: false,
+            cancellationToken,
+            streamingStatusFactory: _ => "Dub generation is still running.");
 
         foreach (var batchRequest in batchRequests)
         {
