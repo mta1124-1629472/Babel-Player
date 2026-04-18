@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Resources;
 using System.Text.RegularExpressions;
+using Babel.Player.Resources;
 using Xunit;
 
 namespace BabelPlayer.Tests;
@@ -28,28 +30,38 @@ public sealed class MainWindowBindingsTests
         AssertCommandButtonAttributes(
             axaml,
             "Playback.Preview.PlayPauseSourceCommand",
-            expectedTooltip: "Play / Pause (Space)",
-            expectedAutomationName: "Play or pause");
+            expectedTooltipKey: "Tooltip_PlayPause",
+            expectedTooltipEnglish: "Play / Pause (Space)",
+            expectedAutomationKey: "Automation_PlayPause",
+            expectedAutomationEnglish: "Play or pause");
         AssertCommandButtonAttributes(
             axaml,
             "Playback.Preview.ToggleSubtitlesCommand",
-            expectedTooltip: "Toggle subtitles (C)",
-            expectedAutomationName: "Toggle subtitles");
+            expectedTooltipKey: "Tooltip_ToggleSubtitles",
+            expectedTooltipEnglish: "Toggle subtitles (C)",
+            expectedAutomationKey: "Automation_ToggleSubtitles",
+            expectedAutomationEnglish: "Toggle subtitles");
         AssertCommandButtonAttributes(
             axaml,
             "Playback.Preview.ToggleSegmentPaneCommand",
-            expectedTooltip: "Toggle side panels (S)",
-            expectedAutomationName: "Toggle side panes");
+            expectedTooltipKey: "Tooltip_ToggleSidePanes",
+            expectedTooltipEnglish: "Toggle side panels (S)",
+            expectedAutomationKey: "Automation_ToggleSidePanes",
+            expectedAutomationEnglish: "Toggle side panes");
         AssertCommandButtonAttributes(
             axaml,
             "Playback.Preview.ToggleDubModeCommand",
-            expectedTooltip: "Toggle Dub Mode (D)",
-            expectedAutomationName: "Toggle Dub Mode");
+            expectedTooltipKey: "Tooltip_ToggleDubMode",
+            expectedTooltipEnglish: "Toggle Dub Mode (D)",
+            expectedAutomationKey: "Automation_ToggleDubMode",
+            expectedAutomationEnglish: "Toggle Dub Mode");
         AssertCommandButtonAttributes(
             axaml,
             "Playback.Preview.ToggleFullscreenCommand",
-            expectedTooltip: "Toggle fullscreen (F11)",
-            expectedAutomationName: "Toggle fullscreen");
+            expectedTooltipKey: "Tooltip_ToggleFullscreen",
+            expectedTooltipEnglish: "Toggle fullscreen (F11)",
+            expectedAutomationKey: "Automation_ToggleFullscreen",
+            expectedAutomationEnglish: "Toggle fullscreen");
     }
 
     [Fact]
@@ -111,23 +123,31 @@ public sealed class MainWindowBindingsTests
     private static void AssertCommandButtonAttributes(
         string axaml,
         string commandBinding,
-        string expectedTooltip,
-        string expectedAutomationName)
+        string expectedTooltipKey,
+        string expectedTooltipEnglish,
+        string expectedAutomationKey,
+        string expectedAutomationEnglish)
     {
         var tags = FindButtonTagsByCommand(axaml, commandBinding);
 
-        Assert.Equal(
-            2,
-            tags.Length);
-        Assert.Equal(
-            2,
-            CountOccurrences(axaml, expectedTooltip));
+        Assert.Equal(2, tags.Length);
+
+        var tooltipMarkup = $"{{local:Localize {expectedTooltipKey}}}";
+        var automationMarkup = $"{{local:Localize {expectedAutomationKey}}}";
+
+        // Both chrome layouts must reference the localized keys for the tooltip + automation name.
+        Assert.Equal(2, CountOccurrences(axaml, tooltipMarkup));
 
         foreach (var tag in tags)
         {
-            Assert.Equal(expectedTooltip, GetAttributeValue(tag, "ToolTip.Tip"));
-            Assert.Equal(expectedAutomationName, GetAttributeValue(tag, "AutomationProperties.Name"));
+            Assert.Equal(tooltipMarkup, GetAttributeValue(tag, "ToolTip.Tip"));
+            Assert.Equal(automationMarkup, GetAttributeValue(tag, "AutomationProperties.Name"));
         }
+
+        // The English resx value that ultimately renders through the markup
+        // extension must still match the human-visible copy the app ships with.
+        Assert.Equal(expectedTooltipEnglish, Strings.ResourceManager.GetString(expectedTooltipKey, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(expectedAutomationEnglish, Strings.ResourceManager.GetString(expectedAutomationKey, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static string FindTagByName(string axaml, string controlName)
