@@ -97,6 +97,7 @@ internal sealed class TranslationOrchestrator
             var translationPath = Path.Combine(
                 translationDir,
                 $"{fileName}_{normalizedTargetLanguage}.json");
+            var workingTranslationPath = ArtifactIntegrity.GetWorkingPath(translationPath);
 
             _log.Debug(
                 $"Starting translation: {_session.CurrentSession.TranscriptPath} " +
@@ -106,7 +107,7 @@ internal sealed class TranslationOrchestrator
                     translationService,
                     new TranslationRequest(
                         _session.CurrentSession.TranscriptPath,
-                        translationPath,
+                        workingTranslationPath,
                         normalizedSourceLanguage,
                         normalizedTargetLanguage,
                         _session.CurrentSettings.TranslationModel),
@@ -125,7 +126,7 @@ internal sealed class TranslationOrchestrator
 
             await _committer.CommitTranslationSessionStateAsync(
                 result,
-                translationPath,
+                workingTranslationPath,
                 normalizedSourceLanguage,
                 normalizedTargetLanguage).ConfigureAwait(false);
             stageSucceeded = true;

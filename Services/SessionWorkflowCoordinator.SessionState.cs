@@ -50,7 +50,9 @@ public sealed partial class SessionWorkflowCoordinator
             TranslationModel: null,
             TtsRuntime: null,
             TtsProvider: null,
-            SegmentTimingModeOverrides: null);
+            SegmentTimingModeOverrides: null,
+            DubTimingMode: null,
+            AmbianceMixDb: null);
 
     private static WorkflowSessionSnapshot ResetToMediaLoadedSession(WorkflowSessionSnapshot snapshot) =>
         snapshot with
@@ -82,6 +84,8 @@ public sealed partial class SessionWorkflowCoordinator
             TranslationModel = null,
             TtsRuntime = null,
             TtsProvider = null,
+            DubTimingMode = null,
+            AmbianceMixDb = null,
             SpeakerVoiceAssignments = null,
             SpeakerReferenceAudioPaths = null,
             DefaultTtsVoiceFallback = null,

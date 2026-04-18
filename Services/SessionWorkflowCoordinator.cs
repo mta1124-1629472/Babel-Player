@@ -451,6 +451,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             Directory.CreateDirectory(mediaDir);
             var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
             File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
+            WriteMediaManifest(ingestedPath);
             _log.Debug($"Copied media to session artifact: {ingestedPath}");
 
             lock (_sessionLock)
@@ -488,6 +489,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             Directory.CreateDirectory(mediaDir);
             var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
             File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
+            WriteMediaManifest(ingestedPath);
             _log.Debug($"Copied media to session artifact: {ingestedPath}");
 
             lock (_sessionLock)
@@ -587,6 +589,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 TranslationModel = null,
                 TtsRuntime = null,
                 TtsProvider = null,
+                DubTimingMode = null,
+                AmbianceMixDb = null,
                 SpeakerVoiceAssignments = null,
                 SpeakerReferenceAudioPaths = null,
                 DefaultTtsVoiceFallback = null,
@@ -623,6 +627,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 TranslationModel = null,
                 TtsRuntime = null,
                 TtsProvider = null,
+                DubTimingMode = null,
+                AmbianceMixDb = null,
                 StatusMessage = "Reset to speaker analysis."
             };
         }
@@ -647,6 +653,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 TtsGeneratedAtUtc = null,
                 TtsRuntime = null,
                 TtsProvider = null,
+                DubTimingMode = null,
+                AmbianceMixDb = null,
                 StatusMessage = "Reset to translation."
             };
         }
@@ -854,20 +862,35 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new InvalidOperationException($"Segment TTS regeneration failed: {errorMsg}");
         }
 
+        var updatedSegmentPaths = CurrentSession.TtsSegmentAudioPaths is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [segmentId] = segmentAudioPath,
+            }
+            : new Dictionary<string, string>(CurrentSession.TtsSegmentAudioPaths, StringComparer.Ordinal)
+            {
+                [segmentId] = segmentAudioPath,
+            };
+        var updatedDurations = CurrentSession.TtsSegmentDurations is null
+            ? new Dictionary<string, double>(StringComparer.Ordinal)
+            : new Dictionary<string, double>(CurrentSession.TtsSegmentDurations, StringComparer.Ordinal);
+        if (result.DurationSeconds.HasValue)
+            updatedDurations[segmentId] = result.DurationSeconds.Value;
+
         lock (_sessionLock)
         {
-            CurrentSession = CurrentSession with
+            CurrentSession = SessionSnapshotSemantics.ClearTtsOutputs(CurrentSession) with
             {
-                TtsSegmentAudioPaths = CurrentSession.TtsSegmentAudioPaths is null
-                    ? new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        [segmentId] = segmentAudioPath,
-                    }
-                    : new Dictionary<string, string>(CurrentSession.TtsSegmentAudioPaths, StringComparer.Ordinal)
-                    {
-                        [segmentId] = segmentAudioPath,
-                    },
-                StatusMessage = $"Regenerated TTS for segment {segmentId}.",
+                Stage = SessionWorkflowStage.Translated,
+                TtsSegmentsPath = segmentsDir,
+                TtsSegmentAudioPaths = updatedSegmentPaths,
+                TtsSegmentDurations = updatedDurations.Count == 0 ? null : updatedDurations,
+                TtsVoice = regenVoice,
+                TtsRuntime = CurrentSettings.TtsRuntime,
+                TtsProvider = CurrentSettings.TtsProvider,
+                DubTimingMode = CurrentSettings.DubTimingMode,
+                AmbianceMixDb = CurrentSettings.AmbianceMixDb,
+                StatusMessage = $"Regenerated TTS for segment {segmentId}. Re-render the dub to finalize it.",
             };
         }
 
@@ -921,13 +944,11 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText[..Math.Min(30, sourceText.Length)]}...");
 
-        var result = await _inferenceEngine.TranslateSingleSegmentAsync(
+        var result = await _inferenceEngine.TranslateSingleSegmentTextAsync(
             _translationService,
-            new SingleSegmentTranslationRequest(
+            new SingleSegmentTranslationTextRequest(
                 sourceText,
                 segmentId,
-                CurrentSession.TranslationPath,
-                CurrentSession.TranslationPath,
                 sourceLanguage,
                 targetLanguage,
                 CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel),
@@ -940,15 +961,49 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new InvalidOperationException($"Segment translation regeneration failed: {errorMsg}");
         }
 
+        var translationPath = CurrentSession.TranslationPath;
+        var artifact = await _artifactReader.LoadTranslationAsync(translationPath, cancellationToken).ConfigureAwait(false);
+        var matchedSegment = artifact.Segments?.FirstOrDefault(segment => string.Equals(segment.Id, segmentId, StringComparison.Ordinal));
+        if (matchedSegment is null)
+            throw new InvalidOperationException($"Translation segment not found for regeneration: {segmentId}");
+
+        matchedSegment.TranslatedText = result.TranslatedText;
+        artifact.SourceLanguage = result.SourceLanguage;
+        artifact.TargetLanguage = result.TargetLanguage;
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                translationPath,
+                ArtifactJson.SerializeTranslation(artifact),
+                cancellationToken)
+            .ConfigureAwait(false);
+        await WriteTranslationManifestAsync(
+                translationPath,
+                artifact,
+                result.SourceLanguage,
+                result.TargetLanguage,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var candidate = SessionSnapshotSemantics.ClearTtsOutputs(CurrentSession) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            TranslationPath = translationPath,
+            SourceLanguage = result.SourceLanguage,
+            TargetLanguage = result.TargetLanguage,
+            TranslationRuntime = CurrentSettings.TranslationRuntime,
+            TranslationProvider = CurrentSettings.TranslationProvider,
+            TranslationModel = CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel,
+            TranslatedAtUtc = DateTimeOffset.UtcNow,
+            StatusMessage = $"Regenerated translation for segment {segmentId}. Re-render the dub to finalize it.",
+        };
+        if (!ArtifactIntegrityValidator.ValidateTranslation(candidate, out var integrityError))
+            throw new InvalidOperationException($"Translation integrity validation failed after segment regeneration: {integrityError}");
+
         _log.Info($"Segment translation regenerated: {segmentId}");
         lock (_sessionLock)
         {
-            CurrentSession = CurrentSession with
-            {
-                StatusMessage = $"Regenerated translation for segment {segmentId}.",
-            };
+            CurrentSession = candidate;
         }
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
     public async Task<List<WorkflowSegmentState>> GetSegmentWorkflowListAsync()

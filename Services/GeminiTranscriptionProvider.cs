@@ -92,6 +92,7 @@ public sealed class GeminiTranscriptionProvider : ITranscriptionProvider
 
         var transcriptArtifact = new TranscriptArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             Language = detectedLanguage,
             LanguageProbability = 1.0,
             Segments =
@@ -109,7 +110,11 @@ public sealed class GeminiTranscriptionProvider : ITranscriptionProvider
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(transcriptArtifact), cancellationToken);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                request.OutputJsonPath,
+                ArtifactJson.SerializeTranscript(transcriptArtifact),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         _log.Debug($"[GeminiTranscription] Complete: {segments.Count} segments.");
 

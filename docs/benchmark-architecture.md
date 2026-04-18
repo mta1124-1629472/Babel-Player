@@ -1,3 +1,6 @@
+> Historical benchmark-design note. This file documents a specific instrumentation effort and should not be read as the current milestone status source.
+> Use `docs/Engineering-Plan.md` and `docs/history/benchmarks/` for current benchmark context.
+
 # Benchmark Architecture
 
 This document describes the measurement infrastructure added in the

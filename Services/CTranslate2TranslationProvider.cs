@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -84,7 +85,6 @@ print('CTranslate2 translation complete')
 
     private const string TranslateSingleSegmentScriptTemplate = @"
 import json
-import os
 import sys
 
 import ctranslate2
@@ -94,10 +94,8 @@ FLORES = __FLORES_DICT_BODY__
 
 src_lang = sys.argv[1]
 tgt_lang = sys.argv[2]
-json_path = sys.argv[3]
-seg_id = sys.argv[4]
-model_dir = sys.argv[5]
-repo_id = sys.argv[6]
+model_dir = sys.argv[3]
+repo_id = sys.argv[4]
 text = sys.stdin.read()
 
 if not os.path.isdir(model_dir):
@@ -116,25 +114,7 @@ if text.strip():
     translated_text = tokenizer.decode(tokenizer.convert_tokens_to_ids(translated_tokens), skip_special_tokens=True)
 else:
     translated_text = ''
-
-with open(json_path, encoding='utf-8') as f:
-    data = json.load(f)
-
-updated = False
-for seg in data.get('segments', []):
-    if seg.get('id') == seg_id:
-        seg['translatedText'] = translated_text
-        updated = True
-        break
-
-if not updated:
-    print(f'Segment not found: {seg_id}', file=sys.stderr)
-    sys.exit(1)
-
-with open(json_path, 'w', encoding='utf-8') as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
-
-print(f'CTranslate2 single segment translated: {seg_id}')
+print(json.dumps({'translatedText': translated_text, 'sourceLanguage': src_lang, 'targetLanguage': tgt_lang}, ensure_ascii=False))
 ";
 
     private static readonly string TranslateSingleSegmentScript = TranslateSingleSegmentScriptTemplate.Replace(
@@ -180,16 +160,12 @@ print(f'CTranslate2 single segment translated: {seg_id}')
         return BuildTranslationResult(translationData, request.SourceLanguage, request.TargetLanguage);
     }
 
-    public async Task<TranslationResult> TranslateSingleSegmentAsync(
-        SingleSegmentTranslationRequest request,
+    public async Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.SourceText))
             throw new ArgumentException("Source text cannot be empty", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
-            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
         Log.Debug($"Starting CTranslate2 single segment translation: {request.SegmentId}");
 
@@ -198,8 +174,6 @@ print(f'CTranslate2 single segment translated: {seg_id}')
             [
                 request.SourceLanguage,
                 request.TargetLanguage,
-                request.TranslationJsonPath,
-                request.SegmentId,
                 ModelDownloader.GetCTranslate2TranslationModelDir(_model),
                 GetTokenizerRepositoryId(_model),
             ],
@@ -207,9 +181,13 @@ print(f'CTranslate2 single segment translated: {seg_id}')
             standardInput: request.SourceText,
             cancellationToken: cancellationToken);
         ThrowIfFailed(result, "CTranslate2 segment translation");
-
-        var translationData = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-        return BuildTranslationResult(translationData, request.SourceLanguage, request.TargetLanguage);
+        using var json = JsonDocument.Parse(result.Stdout);
+        return new SingleSegmentTranslationTextResult(
+            true,
+            json.RootElement.GetProperty("translatedText").GetString() ?? string.Empty,
+            json.RootElement.GetProperty("sourceLanguage").GetString() ?? request.SourceLanguage,
+            json.RootElement.GetProperty("targetLanguage").GetString() ?? request.TargetLanguage,
+            null);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)

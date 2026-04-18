@@ -1,117 +1,103 @@
-# Babel-Player — Engineering Plan
+# Babel Player — Engineering Status
 
-**Last updated:** April 15, 2026 — Parakeet + streaming status refresh  
-**Status:** Phases 1–6 implemented in code; remaining work is verification/benchmark follow-up.
+Last verified against the codebase: 2026-04-18
 
----
+This is the maintained engineering status document. Dated milestone trackers and implementation plans are historical only.
 
-## Project Context
+## Current Summary
 
-Babel-Player is a local-first multilingual video dubbing application. Stack: C# / .NET 10 / Avalonia 12.0.0 / CommunityToolkit.Mvvm. The pipeline runs three inference stages — Transcription, Translation, TTS — plus Diarization for speaker identification. Provider registries per stage support CPU, GPU, and Cloud compute profiles. All local inference runs through a single FastAPI server at `inference/main.py` inside a managed Python 3.12 `.venv`. Zero data leaves the machine on local profiles.
+The repo now implements the main product loop:
 
-### Architecture notes (verified April 13, 2026)
+```text
+load media -> transcribe -> optional diarize -> translate -> generate dubbed speech -> preview -> export -> resume later
+```
 
-- Default local inference does not require Docker. All local providers (faster-whisper, NLLB/CTranslate2, Qwen TTS, NeMo diarization) run as endpoints in a single FastAPI process inside a managed `.venv`. Docker is an advanced optional backend; not required for CPU or managed-GPU paths.
-- `nemo-toolkit[asr]==2.7.2` is installed in the GPU `.venv`, verified working with `torch 2.8.0` and Python 3.12.
-- Multi-speaker voice cloning is fully implemented. `SessionWorkflowCoordinator.TtsReference.cs` extracts per-speaker reference clips via `/speakers/extract-reference`. The diarization → speaker extraction → per-speaker TTS chain is complete and tested.
-- Edge TTS, Piper, and WeSpeaker are subprocess-based providers. Everything else runs in the persistent FastAPI server.
-- Managed CPU diarization bootstrap now uses dedicated `inference/cpu-requirements.txt` and `inference/cpu-constraints.txt` manifests plus a persisted import-validation record before WeSpeaker is marked ready.
-- XTTS v2 removed. All XTTS references are legacy.
+The codebase is no longer in the state described by the older April 2026 "remaining implementation" snapshots:
 
-### Provider map (verified April 13, 2026)
+- playback view-model decomposition is done
+- coordinator constructor cleanup landed
+- channel-based streaming orchestration landed
+- Qwen GPU TTS is active
+- XTTS is not part of the active pipeline
+- export is present for `.srt`, `.mp3`, and `.mp4`
 
-| Stage | Provider | Profile | Deployment | Token |
-|---|---|---|---|---|
-| ASR | faster-whisper | CPU / GPU | `.venv` FastAPI | No |
-| ASR | Parakeet-TDT | GPU | `.venv` FastAPI | No |
-| Translation | NLLB / CTranslate2 | CPU / GPU | `.venv` FastAPI | No |
-| TTS | Qwen TTS | GPU | `.venv` FastAPI | No |
-| TTS | Piper | CPU | Subprocess | No |
-| TTS | Edge TTS | Cloud | Subprocess | No |
-| TTS | OpenAI TTS | Cloud | HTTP client | API key |
-| TTS | ElevenLabs | Cloud | HTTP client | API key |
-| Diarization | NeMo ClusteringDiarizer | GPU | `.venv` FastAPI | No |
-| Diarization | WeSpeaker (CPU) | CPU | Managed CPU `.venv` subprocess | No |
+## Runtime and Hosting Posture
 
----
+- Public compute profiles are `CPU`, `GPU`, and `Cloud`.
+- The default GPU path is the managed local GPU host.
+- Docker remains an advanced optional GPU backend.
+- Local CPU paths remain available for Faster Whisper, CTranslate2, Piper, and WeSpeaker.
+- Local GPU paths currently cover Faster Whisper, Parakeet, NLLB-200, Qwen3-TTS, and NeMo.
 
-## Completed Work
+## Active Provider Surface
 
-### Phase 1 — Foundation Stabilization ✅
+### Transcription
 
-| Item | Resolution |
-|---|---|
-| 1.0 — Avalonia 12.0.0 upgrade | `BabelPlayer.csproj` targets `Avalonia 12.0.0` |
-| 1.1 — `_mediaSnapshotCache` thread safety | `ConcurrentDictionary` |
-| 1.2 — Fire-and-forget async helper | `Services/TaskExtensions.cs` |
-| 1.3 — Duplicated startup code | Refactored in `App.axaml.cs` |
-| 1.4 — Hardcoded language fallback | Explicit checks in `SessionWorkflowCoordinator.Pipeline.cs` |
-| 1.5 — Stream TTS audio downloads | `ReadAsStreamAsync` + `CopyToAsync` in all three HTTP clients |
-| 1.6 — Reuse `HttpClient` | Reused in all cloud provider instances |
+- Faster Whisper: CPU and GPU
+- Parakeet TDT 0.6B: GPU
+- OpenAI Whisper API: Cloud
+- Google STT: Cloud
+- Google Gemini: Cloud
 
-### Phase 2 — TTS Performance Quick Wins ✅
+### Translation
 
-| Item | Resolution |
-|---|---|
-| 2.1 — Eliminate double TTS synthesis | Sequential synthesis bottleneck removed |
-| 2.2 — Provider-aware parallelism cap | `MaxConcurrency` property implemented and used by coordinator |
+- CTranslate2: CPU
+- NLLB-200: GPU
+- DeepL: Cloud
+- OpenAI: Cloud
+- Google Gemini: Cloud
 
-### Phase 3 — Diarization Provider Overhaul ✅
+### TTS
 
-| Item | Resolution | Verified |
-|---|---|---|
-| 3.1 — NeMo-only `/diarize` | `_run_nemo_diarization()` → `ClusteringDiarizer`; zero pyannote imports | April 13, 2026 |
-| 3.2 — WeSpeaker `/diarize/wespeaker` | Endpoint returns HTTP 410 Gone; deprecated in favour of managed CPU runtime | April 13, 2026 |
-| 3.3 — Update `/capabilities` | Reflects current provider set | April 13, 2026 |
-| 3.4 — NeMo + WeSpeaker C# providers | Both registered in `DiarizationRegistry`; GPU containerized variant deleted | April 13, 2026 |
-| 3.5 — pyannote + HF token removal | Zero pyannote/HF_TOKEN refs in `requirements.txt` and `main.py` | April 13, 2026 |
-| 3.6 — UI wiring audit | Complete | Pre-tracker |
-| 3.7 — Diarization provider ComboBox | ComboBox in `MainWindow.axaml` | Pre-tracker |
-| 3.8 — Re-diarize command | `RunDiarizationOnlyCommand` exists | Pre-tracker |
-| 3.9 — SpeakerId in segment row | Colored badge with `SpeakerIdToShortLabelConverter` | Pre-tracker |
+- Piper: CPU
+- Qwen3-TTS: GPU
+- Edge TTS: Cloud, no API key
+- ElevenLabs: Cloud
+- OpenAI TTS: Cloud
 
-### Phase 5 — Subprocess Provider Polish ✅
+### Diarization
 
-| Item | Resolution |
-|---|---|
-| 5.1 — Batch Python scripts | Superseded by 5.2; worker pool JSON-RPC achieves the same goal |
-| 5.2 — Persistent Python worker pool | `PythonJsonWorkerPool.cs` with Edge TTS + Piper workers; stderr reading hardened April 13, 2026 |
+- WeSpeaker: CPU
+- NeMo: GPU
 
-### Phase 4 — ASR Provider Expansion (NeMo Parakeet) ✅
+## Current Structural State
 
-| Item | Resolution | Verified |
-|---|---|---|
-| 4.1 — Python `/transcribe/parakeet` endpoint | Endpoint implemented in `inference/main.py` using NeMo Parakeet-TDT-0.6B-v3 with timed segment shaping | April 15, 2026 |
-| 4.2 — C# Parakeet provider | `ParakeetTranscriptionProvider` implemented and routed through `ContainerizedInferenceClient.TranscribeParakeetAsync` | April 15, 2026 |
-| 4.3 — UI wiring | Parakeet exposed in GPU transcription provider options via `TranscriptionRegistry` | April 15, 2026 |
+- `SessionWorkflowCoordinator` remains the primary workflow and session owner.
+- The coordinator is split across partials and no longer matches the older constructor-bloat plan docs.
+- `EmbeddedPlaybackViewModel` is now a composition root with focused child view-models:
+  - `EmbeddedPlaybackPreviewViewModel`
+  - `EmbeddedPlaybackPipelineViewModel`
+  - `EmbeddedPlaybackSpeakerRoutingViewModel`
+- The streaming pipeline uses `System.Threading.Channels` in `SessionWorkflowCoordinator.Orchestrators.Streaming.cs`.
 
-### Phase 6 (partial) — Architectural Refactors ✅ (items below)
+## Verification and Quality Posture
 
-| Item | Resolution |
-|---|---|
-| 6.1b — VM decomposition | `EmbeddedPlaybackViewModel.cs` reduced to 163 lines; preview, pipeline, and speaker-routing child VMs now own their binding surfaces |
-| 6.2a — Channel streaming pipeline | `SessionWorkflowCoordinator.Pipeline.cs` now uses channel-based overlap (`TranscriptChannelItem` → `TranslationChannelItem` → `TtsChannelItem`) for streaming execution paths |
-| 6.3 — Qwen TTS server-side batching | `/tts/qwen/batch` endpoint live |
-| 6.4 — Constructor cleanup | `CoordinatorCoreServices` added; coordinator constructors reduced to ≤ 5 parameters; all call sites updated |
-| 6.5 — Clean shutdown | `Environment.Exit` removed; Part 4 staged |
+Routine maintained verification:
 
----
+```powershell
+dotnet build Babel-Player.sln -c Release
+dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release
+python scripts/check-architecture.py
+python -m py_compile inference/main.py
+```
 
-## Remaining Work
+The maintained suite is `BabelPlayer.Tests`, not `dotnet test Babel-Player.sln`.
 
-Implementation milestones are complete; remaining follow-up is verification evidence:
+## What Is Still Active Work
 
-- Run and record an end-to-end benchmark showing overlap improvements from the channel pipeline path.
-- Run manual app-shell smoke to validate streaming stage messaging/progress UX during real sessions.
-- Keep historical smoke notes synchronized so retired docs do not imply open implementation gaps.
+The main open work is follow-up, not missing core stages:
 
-**Next engineering intent (April 2026):** See `docs/Next-Priorities-2026-04-16.md` — Gordon refactor Tier 2 (post–Tier 1), and wiring **real** fractional pipeline progress into the existing pipeline progress bar bindings.
+1. Gordon refactor Tier 2 and further coordinator/runtime cleanup.
+2. More truthful fractional progress wiring for long-running pipeline stages.
+3. Continued validation and hardening of runtime behavior on clean machines and alternate GPU backends.
+4. Keeping historical docs and smoke notes aligned so they do not imply stale open gaps.
 
----
+See [Next-Priorities-2026-04-16.md](Next-Priorities-2026-04-16.md) for the short active list.
 
-## Impact Reference
+## Historical References
 
-| Item | Pipeline Impact | Effort | Risk |
-|---|---|---|---|
-| 6.1b — VM decomposition | — | 2–3 days | Low |
-| 6.2a — Channel streaming | ~30–50% end-to-end | Implemented (verification follow-up) | Medium |
+These files are preserved for chronology and evidence, not as current status:
+
+- [Remaining-Implementation-Plan-2026-04-12.md](Remaining-Implementation-Plan-2026-04-12.md)
+- [Milestones-Tracker-2026-04-08.md](Milestones-Tracker-2026-04-08.md)
+- [history/smoke/](history/smoke/)
