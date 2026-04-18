@@ -1,3 +1,6 @@
+Historical architecture snapshot. This file is preserved for chronology and does not define the current repo structure.
+Use docs/AI-CONTEXT.md, docs/architecture.md, and docs/Engineering-Plan.md for maintained current truth.
+
 Source Media File
         ↓ (LoadMedia)
 Ingested Media (session dir)
