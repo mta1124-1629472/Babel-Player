@@ -1,3 +1,6 @@
+> Historical follow-up analysis. This file records a point-in-time design discussion and is not maintained as current repo truth.
+> Use `docs/AI-CONTEXT.md`, `docs/Engineering-Plan.md`, and `docs/containers.md` for the current runtime and provider posture.
+
 # My response to Initial Opus Hardware Acceleration AnalysiS 
 
 Couple things, for one XTTS isn't a part of the TTS pipeline at this point, so whatever document or memory youre pulling from that mentions XTTS as implemented needs to be revised. Qwen3 is the only vocal cloning TTS option integrated as of now.
