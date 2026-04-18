@@ -92,7 +92,7 @@ public sealed class ContainerizedInferenceManager(
         var preflight = await SafeCheckHealthAsync(serviceUrl, PreflightHealthTimeout, cancellationToken);
         if (preflight.IsAvailable)
         {
-            _log.Info($"Container autostart skipped: service already healthy at {serviceUrl}.");
+            _log.Debug($"Container autostart skipped: service already healthy at {serviceUrl}.");
             return new ContainerizedStartResult(false, true, $"Containerized inference service already available at {serviceUrl}.");
         }
 
@@ -101,7 +101,7 @@ public sealed class ContainerizedInferenceManager(
         {
             if (_inFlightStartTask is not null)
             {
-                _log.Info($"Container autostart reusing in-flight start task for {serviceUrl} (trigger={trigger}).");
+                _log.Debug($"Container autostart reusing in-flight start task for {serviceUrl} (trigger={trigger}).");
                 task = _inFlightStartTask;
             }
             else
@@ -253,7 +253,7 @@ public sealed class ContainerizedInferenceManager(
         }
         catch (Exception ex)
         {
-            _log.Info($"Container health preflight failed for {serviceUrl}: {ex.Message}");
+            _log.Debug($"Container health preflight failed for {serviceUrl}: {ex.Message}");
             return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
         }
     }
@@ -267,7 +267,7 @@ public sealed class ContainerizedInferenceManager(
 
     private ContainerizedStartResult Skip(string message)
     {
-        _log.Info(message);
+        _log.Debug(message);
         return new ContainerizedStartResult(false, false, message);
     }
 

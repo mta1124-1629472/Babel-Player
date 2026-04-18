@@ -118,7 +118,7 @@ public sealed partial class SessionWorkflowCoordinator
     private void LogPlanDecision(StageExecutionPlan plan, StageExecutionPlan fallbackPlan)
     {
         var fallbackReason = plan.IsFallback ? $" fallback_reason=\"{plan.Reason}\"" : string.Empty;
-        _log.Info(
+        _log.Debug(
             $"Execution plan decision stage={plan.Stage} " +
             $"requested_provider={fallbackPlan.ProviderId} requested_runtime={fallbackPlan.Runtime} " +
             $"selected_provider={plan.ProviderId} selected_runtime={plan.Runtime} selected_role={plan.Role} " +

@@ -107,7 +107,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             // Check cache first to prevent race condition with in-flight task completion
             if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
             {
-                _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}");
+                _log.Debug($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}");
                 ReportCacheAccess(normalizedUrl, true);
                 // Return cached result with WasCacheHit flag set
                 return entry.CachedResult with { WasCacheHit = true };
@@ -118,7 +118,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                 // Double-check cache: the task may have completed between our first check and now
                 if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
                 {
-                    _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
+                    _log.Debug($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
                     ReportCacheAccess(normalizedUrl, true);
                     return entry.CachedResult with { WasCacheHit = true };
                 }
@@ -146,26 +146,26 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                         if (completedResult.State == ContainerizedProbeState.Available)
                             entry.LastAvailableResult = completedResult;
                     }
-                    _log.Info($"Container probe completed (observer not yet run): url={normalizedUrl}, state={completedResult.State}");
+                    _log.Debug($"Container probe completed (observer not yet run): url={normalizedUrl}, state={completedResult.State}");
                     return completedResult;
                 }
 
                 var staleAvailable = GetStaleAvailableResult(entry);
                 if (staleAvailable is not null)
                 {
-                    _log.Info($"Container probe returning stale available result while refresh is in-flight: url={normalizedUrl}");
+                    _log.Debug($"Container probe returning stale available result while refresh is in-flight: url={normalizedUrl}");
                     ReportCacheAccess(normalizedUrl, true);
                     return staleAvailable with { WasCacheHit = true, IsStale = true };
                 }
 
-                _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
+                _log.Debug($"Container probe reuse in-flight: url={normalizedUrl}");
                 return Checking(normalizedUrl);
             }
 
             // If forceRefresh and there's an in-flight task, cancel it and start a fresh probe.
             if (forceRefresh && entry.InFlightTask is not null)
             {
-                _log.Info($"Container probe force refresh: url={normalizedUrl}, cancelling previous probe and starting new one");
+                _log.Debug($"Container probe force refresh: url={normalizedUrl}, cancelling previous probe and starting new one");
                 try
                 {
                     entry.Cts?.Cancel();
@@ -180,14 +180,14 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
 
             entry.Cts = new CancellationTokenSource();
             entry.InFlightTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
-            _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
+            _log.Debug($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
             
             // Fire-and-forget; FireAndForgetAsync routes unhandled exceptions to the log.
             ObserveCompletionAsync(normalizedUrl, entry, entry.InFlightTask).FireAndForgetAsync(_log, "Containerized probe observer");
             var staleCachedAvailable = !forceRefresh ? GetStaleAvailableResult(entry) : null;
             if (staleCachedAvailable is not null)
             {
-                _log.Info($"Container probe returning stale available result while refresh is starting: url={normalizedUrl}");
+                _log.Debug($"Container probe returning stale available result while refresh is starting: url={normalizedUrl}");
                 ReportCacheAccess(normalizedUrl, true);
                 return staleCachedAvailable with { WasCacheHit = true, IsStale = true };
             }
@@ -260,17 +260,17 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         // If we timed out, return the last failure if one exists, otherwise Checking.
         if (lastFailure != null)
         {
-            _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning last unavailable state.");
+            _log.Debug($"Container probe wait budget exhausted: url={normalizedUrl}, returning last unavailable state.");
             return lastFailure;
         }
 
         if (lastAvailable != null)
         {
-            _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning last stale available state.");
+            _log.Debug($"Container probe wait budget exhausted: url={normalizedUrl}, returning last stale available state.");
             return lastAvailable;
         }
  
-        _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning Checking state.");
+        _log.Debug($"Container probe wait budget exhausted: url={normalizedUrl}, returning Checking state.");
         return Checking(normalizedUrl);
     }
 
@@ -292,7 +292,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
         catch (OperationCanceledException)
         {
-            _log.Info($"Container probe cancelled: url={normalizedUrl}");
+            _log.Debug($"Container probe cancelled: url={normalizedUrl}");
             ReportProbeResult(normalizedUrl, ProbeResult.Cancellation, duration: null, wasCacheHit: false, errorDetail: null);
             lock (entry.Gate)
             {
@@ -307,7 +307,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
         catch (Exception ex)
         {
-            _log.Info($"Container probe observer caught fault: url={normalizedUrl}, error={ex.Message}");
+            _log.Debug($"Container probe observer caught fault: url={normalizedUrl}, error={ex.Message}");
             result = new ContainerizedProbeResult(
                 normalizedUrl,
                 ContainerizedProbeState.Unavailable,
@@ -352,7 +352,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             
             ReportProbeResult(normalizedUrl, probeResult, result.Duration, result.WasCacheHit, result.ErrorDetail);
 
-            _log.Info(
+            _log.Debug(
                 $"Container probe complete: url={normalizedUrl}, state={result.State}, " +
                 $"detail={result.ErrorDetail ?? "<none>"}");
             ProbeResultUpdated?.Invoke(result);

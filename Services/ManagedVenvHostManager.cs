@@ -175,7 +175,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         if (preflight.IsAvailable && !scriptChangedSinceLastStart)
         {
             State = ManagedHostState.Ready;
-            _log.Info("Managed GPU host startup path: reuse");
+            _log.Debug("Managed GPU host startup path: reuse");
             return new ContainerizedStartResult(false, true, $"Managed local GPU host already available at {serviceUrl}.");
         }
 
@@ -190,7 +190,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             {
                 State = ManagedHostState.Ready;
                 var deferMessage = BuildBusyHostDeferMessage(serviceUrl, preflight);
-                _log.Info(
+                _log.Debug(
                     $"Managed GPU host startup deferred: trigger={trigger}, active_requests={_requestLeaseTracker?.ActiveRequests ?? 0}, " +
                     $"host_busy={preflight.Busy}, reason='{deferMessage}'");
                 return new ContainerizedStartResult(false, true, deferMessage);
@@ -205,14 +205,14 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
 
         if (preflight.IsAvailable)
-            _log.Info("Managed GPU host script changed since last start; will stop stale process and restart.");
+            _log.Debug("Managed GPU host script changed since last start; will stop stale process and restart.");
 
         Task<ContainerizedStartResult> task;
         lock (_gate)
         {
             if (_inFlightStartTask is not null)
             {
-                _log.Info($"Managed GPU host reusing in-flight start task for {serviceUrl} (trigger={trigger}).");
+                _log.Debug($"Managed GPU host reusing in-flight start task for {serviceUrl} (trigger={trigger}).");
                 task = _inFlightStartTask;
             }
             else
@@ -297,7 +297,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var pythonPath = Path.Combine(venvDir, "Scripts", "python.exe");
         var hostPidPath = Path.Combine(runtimeRoot, "managed-host.pid");
         Directory.CreateDirectory(runtimeRoot);
-        _log.Info(
+        _log.Debug(
             $"Managed GPU runtime paths: runtime_root={runtimeRoot}, venv_dir={venvDir}, python={pythonPath}, " +
             $"script={inferenceScriptPath}, requirements={requirementsPath}, constraints={constraintsPath}, uv={uvPath}, compute_type={computeType}");
 
@@ -305,7 +305,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var markerPath = Path.Combine(runtimeRoot, ".bootstrap-version");
         var markerValue = File.Exists(markerPath) ? (await File.ReadAllTextAsync(markerPath, cancellationToken)).Trim() : null;
         var needsBootstrap = !File.Exists(pythonPath) || !string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal);
-        _log.Info(
+        _log.Debug(
             $"Managed GPU runtime bootstrap state: python_exists={File.Exists(pythonPath)}, marker_exists={File.Exists(markerPath)}, " +
             $"marker_matches={string.Equals(markerValue, bootstrapVersion, StringComparison.Ordinal)}, needs_bootstrap={needsBootstrap}, " +
             $"bootstrap_version={bootstrapVersion}, marker_path={markerPath}");
@@ -314,11 +314,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             State = ManagedHostState.Installing;
             var rebuildExistingRuntime = Directory.Exists(venvDir);
-            _log.Info(
+            _log.Debug(
                 rebuildExistingRuntime
                     ? $"Rebuilding stale or incomplete managed GPU runtime at {venvDir}."
                     : $"Bootstrapping managed GPU runtime at {venvDir}.");
-            _log.Info(rebuildExistingRuntime
+            _log.Debug(rebuildExistingRuntime
                 ? "Managed GPU host startup path: bootstrap-rebuild"
                 : "Managed GPU host startup path: bootstrap-fresh");
 
@@ -348,10 +348,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         else
         {
-            _log.Info($"Managed GPU runtime already matches bootstrap version at {venvDir}; skipping bootstrap.");
+            _log.Debug($"Managed GPU runtime already matches bootstrap version at {venvDir}; skipping bootstrap.");
         }
 
-        _log.Info($"Validating managed GPU runtime via {pythonPath}.");
+        _log.Debug($"Validating managed GPU runtime via {pythonPath}.");
         ManagedGpuRuntimeValidationResult runtimeValidation;
         try
         {
@@ -376,7 +376,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                     if (File.Exists(rebuildMarkerPath))
                     {
                         File.Delete(rebuildMarkerPath);
-                        _log.Info($"Cleared bootstrap marker at {rebuildMarkerPath} to trigger rebuild.");
+                        _log.Debug($"Cleared bootstrap marker at {rebuildMarkerPath} to trigger rebuild.");
                     }
                 }
                 catch (Exception ex)
@@ -409,7 +409,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                     return Fail(DescribeBootstrapFailure(ex, venvDir));
                 }
 
-                _log.Info($"Re-validating managed GPU runtime after auto-rebuild.");
+                _log.Debug($"Re-validating managed GPU runtime after auto-rebuild.");
                 try
                 {
                     runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
@@ -424,7 +424,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                     return Fail(
                         $"Managed local GPU runtime validation failed after auto-rebuild: {runtimeValidation.Message}");
                 }
-                _log.Info($"Managed GPU runtime validation passed after auto-rebuild: {runtimeValidation.Message}");
+                _log.Debug($"Managed GPU runtime validation passed after auto-rebuild: {runtimeValidation.Message}");
             }
             else
             {
@@ -434,7 +434,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         else
         {
-            _log.Info(
+            _log.Debug(
                 $"Managed GPU runtime validation passed: {runtimeValidation.Message}");
         }
 
@@ -445,10 +445,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             cancellationToken);
 
         State = ManagedHostState.Starting;
-        _log.Info(stoppedStaleHost
+        _log.Debug(stoppedStaleHost
             ? "Managed GPU host startup path: stale-host-stop"
             : "Managed GPU host startup path: fresh-start");
-        _log.Info(
+        _log.Debug(
             $"Launching managed GPU host process: url={AppSettings.ManagedGpuServiceUrl}, " +
             $"compute_type={computeType}, gpu_architecture={hardware.GpuComputeCapability ?? "<unknown>"}, " +
             $"host_pid_path={hostPidPath}");
@@ -456,7 +456,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         // Log FP8 request details if applicable
         if (computeType == "float8")
         {
-            _log.Info(
+            _log.Debug(
                 $"FP8 compute type detected: blackwell_capable={hardware.IsBlackwellCapable}, " +
                 $"gpu_compute_capability={hardware.GpuComputeCapability ?? "<unknown>"}, " +
                 $"Note: Python host will validate and downgrade to float16 if any stage does not support FP8");
@@ -472,7 +472,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var scriptVersionPath = Path.Combine(runtimeRoot, ".script-version");
         await File.WriteAllTextAsync(scriptVersionPath, ComputeScriptVersion(inferenceScriptPath), cancellationToken);
 
-        _log.Info(
+        _log.Debug(
             $"Waiting for managed GPU host readiness: url={AppSettings.ManagedGpuServiceUrl}, timeout={_postStartProbeTimeout.TotalSeconds}s");
         var readiness = _probe is not null
             ? await _probe.WaitForProbeAsync(
@@ -482,7 +482,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 cancellationToken)
             : FromHealth(await SafeCheckHealthAsync(AppSettings.ManagedGpuServiceUrl, _postStartProbeTimeout, cancellationToken));
 
-        _log.Info(
+        _log.Debug(
             $"Managed GPU host readiness probe result: state={readiness.State}, error='{readiness.ErrorDetail ?? "<none>"}', " +
             $"cuda_available={readiness.CudaAvailable}, cuda_version='{readiness.CudaVersion ?? "<none>"}', " +
             $"capabilities={FormatCapabilities(readiness.Capabilities)}");
@@ -491,7 +491,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             && readiness.Capabilities is not null
             && !AllCapabilitiesReady(readiness.Capabilities))
         {
-            _log.Info(
+            _log.Debug(
                 $"Managed GPU host is live while capabilities are still warming: {FormatCapabilities(readiness.Capabilities)}");
         }
 
@@ -585,13 +585,13 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     {
         var psi = CreateHostProcessStartInfo(pythonPath, inferenceScriptPath, computeType);
 
-        _log.Info(
+        _log.Debug(
             $"Starting managed GPU host: python={pythonPath}, script={inferenceScriptPath}, compute_type={computeType}, require_cuda={RequiresCuda(computeType)}");
 
         _hostProcess = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start managed GPU host process.");
 
-        _log.Info($"Managed GPU host process started with pid={_hostProcess.Id}.");
+        _log.Debug($"Managed GPU host process started with pid={_hostProcess.Id}.");
 
         _ = DrainProcessStreamAsync(_hostProcess.StandardOutput, "managed-gpu");
         _ = DrainProcessStreamAsync(_hostProcess.StandardError, "managed-gpu:stderr");
@@ -722,7 +722,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         catch (ArgumentException)
         {
-            _log.Info($"Managed GPU host pid file '{hostPidPath}' pointed to exited process pid={pid}. Removing stale pid file.");
+            _log.Debug($"Managed GPU host pid file '{hostPidPath}' pointed to exited process pid={pid}. Removing stale pid file.");
             await DeletePidFileIfPresentAsync(hostPidPath);
             return false;
         }
@@ -1113,7 +1113,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
-        _log.Info(
+        _log.Debug(
             $"Running managed GPU process: {fileName} {ProcessArgFormatter.FormatArgs(arguments)}");
 
         using var process = Process.Start(psi)
@@ -1124,7 +1124,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         var stdoutLines = new System.Text.StringBuilder();
         while (await process.StandardOutput.ReadLineAsync(cancellationToken) is { } line)
         {
-            _log.Info(line);
+            _log.Debug(line);
             onStatusLine?.Invoke(line);
             if (!string.IsNullOrWhiteSpace(line))
                 stdoutLines.AppendLine(line);
@@ -1133,7 +1133,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         await process.WaitForExitAsync(cancellationToken);
         var stderr = await stderrTask;
 
-        _log.Info(
+        _log.Debug(
             $"Managed GPU process exited: file={fileName}, exit_code={process.ExitCode}");
 
         if (process.ExitCode != 0)
@@ -1144,7 +1144,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
 
         if (!string.IsNullOrWhiteSpace(stderr))
-            _log.Info(stderr.Trim());
+            _log.Debug(stderr.Trim());
     }
 
 
@@ -1164,7 +1164,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             if (line is null)
                 break;
             if (!string.IsNullOrWhiteSpace(line))
-                _log.Info($"[{prefix}] {line}");
+                _log.Debug($"[{prefix}] {line}");
         }
     }
 
@@ -1182,9 +1182,9 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     {
         try
         {
-            _log.Info($"Managed GPU host health probe starting: url={serviceUrl}, timeout={timeout.TotalSeconds}s");
+            _log.Debug($"Managed GPU host health probe starting: url={serviceUrl}, timeout={timeout.TotalSeconds}s");
             var health = await _healthCheckFunc(serviceUrl, timeout, cancellationToken);
-            _log.Info(
+            _log.Debug(
                 $"Managed GPU host health probe finished: status='{health.StatusLine}', available={health.IsAvailable}, " +
                 $"cuda_available={health.CudaAvailable}, cuda_version='{health.CudaVersion ?? "<none>"}', " +
                 $"busy={health.Busy}, active_requests={health.ActiveRequests}, active_qwen={health.ActiveQwenRequests}, " +
@@ -1194,7 +1194,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
         catch (Exception ex)
         {
-            _log.Info($"Managed GPU host health preflight failed for {serviceUrl}: {ex.Message}");
+            _log.Debug($"Managed GPU host health preflight failed for {serviceUrl}: {ex.Message}");
             return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
         }
     }
@@ -1211,7 +1211,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
     private ContainerizedStartResult Skip(string message)
     {
-        _log.Info(message);
+        _log.Debug(message);
         return new ContainerizedStartResult(false, false, message);
     }
 

@@ -33,7 +33,7 @@ public sealed class ParakeetTranscriptionProvider : ITranscriptionProvider
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        _log.Info($"[ParakeetTranscription] Transcribing: {request.SourceAudioPath}");
+        _log.Debug($"[ParakeetTranscription] Transcribing: {request.SourceAudioPath}");
 
         var result = await _client.TranscribeParakeetAsync(
             request.SourceAudioPath,
@@ -67,7 +67,7 @@ public sealed class ParakeetTranscriptionProvider : ITranscriptionProvider
             ArtifactJson.SerializeTranscript(transcript),
             cancellationToken);
 
-        _log.Info($"[ParakeetTranscription] Complete: {result.Segments.Count} segments, lang={result.Language}");
+        _log.Debug($"[ParakeetTranscription] Complete: {result.Segments.Count} segments, lang={result.Language}");
         return result;
     }
 

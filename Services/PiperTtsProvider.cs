@@ -104,7 +104,7 @@ public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
         ThrowIfDisposed();
         ValidateSegmentRequest(request);
 
-        Log.Info(
+        Log.Debug(
             $"Starting Piper segment TTS ({request.VoiceName}): {request.Text[..Math.Min(30, request.Text.Length)]}... -> {request.OutputAudioPath}");
 
         var response = await _workerPool.ExecuteAsync(
@@ -124,7 +124,7 @@ public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
             ? response.FileSizeBytes
             : new FileInfo(response.OutputPath).Length;
 
-        Log.Info($"Piper segment TTS completed: {response.OutputPath}");
+        Log.Debug($"Piper segment TTS completed: {response.OutputPath}");
         return new TtsResult(true, response.OutputPath, response.Voice, fileSize, null, response.DurationSeconds);
     }
 
@@ -157,7 +157,7 @@ public sealed class PiperTtsProvider : PythonSubprocessServiceBase, ITtsProvider
         var voice = settings.TtsVoice;
         if (!ModelDownloader.IsPiperVoiceDownloaded(voice, settings.PiperModelDir))
         {
-            Log.Info($"Voice {voice} requires download. Starting download...");
+            Log.Debug($"Voice {voice} requires download. Starting download...");
             return await new ModelDownloader(Log).DownloadPiperVoiceAsync(voice, settings.PiperModelDir, progress, ct);
         }
 

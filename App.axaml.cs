@@ -81,7 +81,7 @@ public partial class App : Application
             var appSettings = _settingsService.LoadOrDefault();
             if (!string.Equals(appSettings.EffectiveContainerizedServiceUrl, appSettings.ContainerizedServiceUrl, StringComparison.Ordinal))
             {
-                appLog.Info(
+                appLog.Debug(
                     $"Environment override active: {AppSettings.InferenceServiceUrlEnvVar}={appSettings.EffectiveContainerizedServiceUrl}");
             }
 
@@ -333,7 +333,7 @@ public partial class App : Application
         // binaries that exist but aren't runnable).
         var ffmpeg = DependencyLocator.FindFfmpeg() ?? "<missing>";
         var ffprobe = DependencyLocator.FindFfprobe() ?? "<missing>";
-        log.Info($"Audio tool resolution ({context}): ffmpeg={ffmpeg}; ffprobe={ffprobe}");
+        log.Debug($"Audio tool resolution ({context}): ffmpeg={ffmpeg}; ffprobe={ffprobe}");
     }
 
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)

@@ -232,9 +232,12 @@ public sealed partial class SessionWorkflowCoordinator
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken)
     {
+        var readinessMessage = BuildInfo.IsDevBuild
+            ? $"Checking transcription runtime, provider readiness, and model availability for {CurrentSettings.TranscriptionProvider} / {CurrentSettings.TranscriptionModel}…"
+            : "Checking transcription runtime and model availability…";
         ReportStage(
             stageContext,
-            $"Checking transcription runtime, provider readiness, and model availability for {CurrentSettings.TranscriptionProvider} / {CurrentSettings.TranscriptionModel}…",
+            readinessMessage,
             progress01: 0,
             isIndeterminate: true);
 
@@ -306,7 +309,7 @@ public sealed partial class SessionWorkflowCoordinator
             };
         }
 
-        _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
+        _log.Debug($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
@@ -333,7 +336,7 @@ public sealed partial class SessionWorkflowCoordinator
             };
         }
 
-        _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
+        _log.Debug($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
         await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
@@ -347,9 +350,12 @@ public sealed partial class SessionWorkflowCoordinator
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken)
     {
+        var readinessMessage = BuildInfo.IsDevBuild
+            ? $"Checking TTS runtime, provider readiness, voice assets, and speaker/reference setup for {CurrentSettings.TtsProvider} / {voice}…"
+            : "Checking TTS runtime and voice readiness…";
         ReportStage(
             stageContext,
-            $"Checking TTS runtime, provider readiness, voice assets, and speaker/reference setup for {CurrentSettings.TtsProvider} / {voice}…",
+            readinessMessage,
             progress01: 0,
             isIndeterminate: true);
 
@@ -467,7 +473,7 @@ public sealed partial class SessionWorkflowCoordinator
                 // is already thread-safe; Qwen takes the batch branch above.
                 var maxConcurrency = Math.Max(1, _ttsService?.MaxConcurrency ?? 1);
                 var parallelism = Math.Max(1, Math.Min(maxConcurrency, candidateSegments.Count));
-                _log.Info(
+                _log.Debug(
                     $"TTS segment generation: provider={_ttsService?.GetType().Name ?? "<none>"} " +
                     $"max_concurrency={maxConcurrency} parallelism={parallelism} " +
                     $"segments={candidateSegments.Count}");
@@ -535,7 +541,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(id))
         {
-            _log.Info($"Skipping segment {id}: empty text or ID");
+            _log.Debug($"Skipping segment {id}: empty text or ID");
             return;
         }
 
@@ -543,7 +549,7 @@ public sealed partial class SessionWorkflowCoordinator
         var resolvedVoice = ResolveVoiceForSegment(seg, defaultVoice);
         var referenceAudioPath = ResolveReferenceAudioForSegment(seg);
 
-        _log.Info($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text[..Math.Min(30, text.Length)]}...");
+        _log.Debug($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text[..Math.Min(30, text.Length)]}...");
 
         try
         {
@@ -572,7 +578,7 @@ public sealed partial class SessionWorkflowCoordinator
                     $"Generated segment clip {done} of {totalSegments}…",
                     progress01: (double)done / totalSegments,
                     isIndeterminate: false);
-                _log.Info($"Segment TTS generated: {id} -> {segmentAudioPath}");
+                _log.Debug($"Segment TTS generated: {id} -> {segmentAudioPath}");
             }
             else
             {
@@ -607,7 +613,7 @@ public sealed partial class SessionWorkflowCoordinator
             throw new InvalidOperationException(
                 "No eligible segment audio files were produced. Stitching cannot proceed. Check provider configuration and logs.");
 
-        _log.Info($"Stitching {orderedPaths.Count} segment clips into combined dub file...");
+        _log.Debug($"Stitching {orderedPaths.Count} segment clips into combined dub file...");
         ReportStage(
             stageContext,
             "Stitching segment clips into combined dub file…",
@@ -748,7 +754,7 @@ public sealed partial class SessionWorkflowCoordinator
         {
             if (overrideMode == SegmentTimingMode.Pause)
             {
-                _log.Info(
+                _log.Debug(
                     $"Ignoring preview-only Pause timing override for render on segment '{segmentId}'; using session default timing mode.");
                 return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
             }
@@ -815,7 +821,7 @@ public sealed partial class SessionWorkflowCoordinator
         if (batchRequests.Count == 0)
             return;
 
-        _log.Info($"Generating {batchRequests.Count} Qwen batch TTS segments.");
+        _log.Debug($"Generating {batchRequests.Count} Qwen batch TTS segments.");
         var completedSegments = 0;
         var generationTask = qwenProvider.GenerateSegmentsAsync(
             batchRequests,
@@ -847,7 +853,7 @@ public sealed partial class SessionWorkflowCoordinator
             if (generatedPaths.TryGetValue(batchRequest.SegmentId, out var outputPath) && File.Exists(outputPath))
             {
                 segmentAudioPaths[batchRequest.SegmentId] = outputPath;
-                _log.Info($"Qwen batch segment TTS generated: {batchRequest.SegmentId} -> {outputPath}");
+                _log.Debug($"Qwen batch segment TTS generated: {batchRequest.SegmentId} -> {outputPath}");
             }
             else
             {

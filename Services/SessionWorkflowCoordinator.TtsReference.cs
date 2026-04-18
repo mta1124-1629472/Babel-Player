@@ -63,7 +63,7 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updatedRefs };
         }
         await SaveCurrentSessionAsync().ConfigureAwait(false);
-        _log.Info($"Prepared Qwen single-speaker reference clip: {outputPath}");
+        _log.Debug($"Prepared Qwen single-speaker reference clip: {outputPath}");
     }
 
     private async Task EnsureMultiSpeakerReferenceClipsAsync(CancellationToken cancellationToken = default)
@@ -143,7 +143,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             updated[speakerId] = outputPath;
             anyNew = true;
-            _log.Info($"Auto-extracted {extractDuration:F1}s reference for speaker '{speakerId}': {outputPath}");
+            _log.Debug($"Auto-extracted {extractDuration:F1}s reference for speaker '{speakerId}': {outputPath}");
         }
 
         if (!anyNew)
@@ -154,7 +154,7 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
         }
         await SaveCurrentSessionAsync().ConfigureAwait(false);
-        _log.Info($"Multi-speaker reference extraction complete: {bestBySpeaker.Count} speakers processed.");
+        _log.Debug($"Multi-speaker reference extraction complete: {bestBySpeaker.Count} speakers processed.");
     }
 
     private string? ResolvePreferredReferenceSourcePath()

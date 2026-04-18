@@ -73,7 +73,7 @@ public sealed class GeminiTranscriptionProvider : ITranscriptionProvider
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        _log.Info($"[GeminiTranscription] Transcribing: {request.SourceAudioPath} (model={request.ModelName}, mode={TranscribeMode})");
+        _log.Debug($"[GeminiTranscription] Transcribing: {request.SourceAudioPath} (model={request.ModelName}, mode={TranscribeMode})");
 
         var prompt = BuildTranscriptionPrompt(request.LanguageHint);
 
@@ -111,7 +111,7 @@ public sealed class GeminiTranscriptionProvider : ITranscriptionProvider
 
         await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(transcriptArtifact), cancellationToken);
 
-        _log.Info($"[GeminiTranscription] Complete: {segments.Count} segments.");
+        _log.Debug($"[GeminiTranscription] Complete: {segments.Count} segments.");
 
         return new TranscriptionResult(
             true,
