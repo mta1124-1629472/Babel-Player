@@ -16,10 +16,19 @@ namespace Babel.Player.ViewModels;
 
 public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, IDisposable
 {
+    private enum DubPreviewAudioMode
+    {
+        DuckSource,
+        SeparatedAmbiance,
+    }
+
     private static readonly string DebugLogPath = ResolveDebugLogPath();
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
     private string? _lastKnownSourceMediaPath;
+    private string? _loadedAmbiancePath;
+    private DubPreviewAudioMode? _lastReportedDubPreviewMode;
+    private string? _lastReportedAmbiancePath;
     private bool _isUpdatingPositionFromTimer;
     private bool _isUpdatingActiveSegment;
     private WorkflowSegmentState? _lastDubbedSegment;
@@ -31,6 +40,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _controlsHideTimer;
     private const int ControlsHideDelayMs = 3000;
+    private const double AmbianceSyncThresholdMs = 50.0;
     private const double PositionUpdateThresholdMs = 0.5;
 
     public EmbeddedPlaybackPreviewViewModel(
@@ -176,20 +186,18 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         OnPropertyChanged(nameof(DubMixControlDb));
         OnPropertyChanged(nameof(DubMixControlValueLabel));
 
-        // When vocal separation is enabled the slider writes AmbianceMixDb; the live
-        // preview would otherwise keep using the old AudioDuckingDb, making the
-        // control a no-op for what the user hears. Reapply volumes so preview
-        // tracks the ambience level too.
+        // Reapply volumes so preview immediately reflects either the real ambiance
+        // bed or the ducked-source fallback after settings/session changes.
         RecalculateOutputVolumes();
     }
 
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
-    public bool UsesAmbianceMixControl => _coordinator.CurrentSettings.VocalSeparationEnabled;
+    public bool UsesAmbianceMixControl => TryGetAmbiancePreviewPath() is not null;
     public string DubMixControlLabel => UsesAmbianceMixControl ? "Ambience" : "Duck";
     public string DubMixControlTooltip => UsesAmbianceMixControl
-        ? "Set separated ambiance level under the dub"
-        : "Lower source audio during dub preview";
+        ? "Set separated ambience level under dub preview"
+        : "Approximate dub preview by lowering source audio";
     public string DubMixControlValueLabel => $"{DubMixControlDb:F1} dB";
     public double DubMixControlDb
     {
@@ -221,6 +229,11 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         var oldPath = _lastKnownSourceMediaPath;
         var newPath = _coordinator.CurrentSession.SourceMediaPath;
         IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
+
+        PauseAmbiancePreview(resetLoadedPath: true);
+        _lastReportedDubPreviewMode = null;
+        _lastReportedAmbiancePath = null;
+        SyncDubMixControlFromSettings();
 
         if (newPath != oldPath)
         {
@@ -390,11 +403,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         {
             try
             {
-                if (IsDubModeOn)
-                    SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
-
                 await Task.Run(player.Play);
                 IsSourcePaused = false;
+                if (IsDubModeOn)
+                    SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
                 _parent.ClearStatusErrorDetail();
             }
             catch (Exception ex)
@@ -490,6 +502,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     public void Dispose()
     {
+        PauseAmbiancePreview(resetLoadedPath: true);
         _positionTimer.Stop();
         _positionTimer.Tick -= OnPositionTimerTick;
         _controlsHideTimer.Stop();
@@ -525,6 +538,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             return;
 
         _coordinator.SourceMediaPlayer?.Seek((long)value);
+        if (IsDubModeOn && ResolveDubPreviewAudioMode() == DubPreviewAudioMode.SeparatedAmbiance)
+            SyncSeparatedAmbiancePreview(shouldPlay: !IsSourcePaused, forceSeek: true);
         if (IsDubModeOn && !IsSourcePaused)
             SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
     }
@@ -543,6 +558,9 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     {
         if (!value)
         {
+            _lastReportedDubPreviewMode = null;
+            _lastReportedAmbiancePath = null;
+            PauseAmbiancePreview();
             ApplyDubForSegment(null);
         }
         else if (!IsSourcePaused)
@@ -575,10 +593,13 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         {
             _controlsHideTimer.Stop();
             IsControlsVisible = true;
+            PauseAmbiancePreview();
         }
         else
         {
             NotifyControlsActivity();
+            if (IsDubModeOn && ResolveDubPreviewAudioMode() == DubPreviewAudioMode.SeparatedAmbiance)
+                SyncSeparatedAmbiancePreview(shouldPlay: true, forceSeek: true);
         }
     }
 
@@ -639,6 +660,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         if (player is null)
         {
             await PlaySourceAtSegmentAsync(segment);
+            if ((previewTimingOverride.HasValue || IsDubModeOn) && !IsSourcePaused)
+                ApplyDubForSegment(segment, previewTimingOverride: previewTimingOverride);
             return;
         }
 
@@ -686,18 +709,22 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private void RecalculateOutputVolumes()
     {
         var masterGain = IsMuted ? 0.0 : SourceVolume;
-        // When vocal separation is on, the dub-mix slider writes AmbianceMixDb and
-        // that's the level the user is shaping; for live preview we don't have a
-        // separated ambience track, but applying the same dB to the source gives
-        // the slider an audible effect that tracks the render.
-        var duckingDb = UsesAmbianceMixControl
+        var previewMode = ResolveDubPreviewAudioMode();
+        var duckingDb = previewMode == DubPreviewAudioMode.SeparatedAmbiance
             ? _coordinator.CurrentSettings.AmbianceMixDb
             : AudioDuckingDb;
-        var sourceGain = _isDucked
-            ? masterGain * Math.Pow(10.0, duckingDb / 20.0)
-            : masterGain;
+        var sourceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+            ? 0.0
+            : _isDucked
+                ? masterGain * Math.Pow(10.0, duckingDb / 20.0)
+                : masterGain;
+        var ambianceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+            ? masterGain * Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0)
+            : 0.0;
 
         _coordinator.SourceMediaPlayer?.Volume = sourceGain;
+        if (_coordinator.AmbiancePlayer is { } ambiancePlayer)
+            ambiancePlayer.Volume = ambianceGain;
         _coordinator.TtsVolume = masterGain;
     }
 
@@ -806,11 +833,33 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         RestoreDucking();
         _coordinator.StopTtsPlayback();
         _lastDubbedSegment = segment;
+        var previewMode = ResolveDubPreviewAudioMode();
+
+        if (!IsDubModeOn)
+        {
+            PauseAmbiancePreview();
+            if (segment is null)
+                return;
+        }
+
+        if (seekVideoToSegmentStart && segment is not null)
+            _coordinator.SourceMediaPlayer?.Seek((long)(segment.StartSeconds * 1000));
+
+        if (IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance)
+        {
+            SyncSeparatedAmbiancePreview(shouldPlay: !IsSourcePaused, forceSeek: seekVideoToSegmentStart);
+        }
+        else
+        {
+            PauseAmbiancePreview();
+            if (IsDubModeOn)
+                AnnounceDubPreviewMode(DubPreviewAudioMode.DuckSource, null);
+        }
+
+        RecalculateOutputVolumes();
+
         if (segment is null)
             return;
-
-        if (seekVideoToSegmentStart)
-            _coordinator.SourceMediaPlayer?.Seek((long)(segment.StartSeconds * 1000));
 
         if (segment.HasTtsAudio)
         {
@@ -818,7 +867,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             var effectiveMode = previewTimingOverride
                 ?? segment.TimingModeOverride
                 ?? _coordinator.CurrentSettings.DubTimingMode;
-            ApplyDucking();
+            if (previewMode == DubPreviewAudioMode.DuckSource)
+                ApplyDucking();
             _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, effectiveMode);
         }
     }
@@ -837,6 +887,87 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart) =>
         ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
+
+    private string? TryGetAmbiancePreviewPath()
+    {
+        var path = _coordinator.CurrentSession.AmbianceAudioPath;
+        return !string.IsNullOrWhiteSpace(path) && File.Exists(path)
+            ? path
+            : null;
+    }
+
+    private DubPreviewAudioMode ResolveDubPreviewAudioMode() =>
+        TryGetAmbiancePreviewPath() is not null
+            ? DubPreviewAudioMode.SeparatedAmbiance
+            : DubPreviewAudioMode.DuckSource;
+
+    private void AnnounceDubPreviewMode(DubPreviewAudioMode mode, string? ambiancePath)
+    {
+        if (!IsDubModeOn)
+            return;
+
+        if (_lastReportedDubPreviewMode == mode &&
+            string.Equals(_lastReportedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastReportedDubPreviewMode = mode;
+        _lastReportedAmbiancePath = ambiancePath;
+
+        if (mode == DubPreviewAudioMode.SeparatedAmbiance)
+        {
+            _coordinator.Log.Debug(
+                $"Dub preview mode: real-ambiance-preview, path='{ambiancePath}', gainDb={_coordinator.CurrentSettings.AmbianceMixDb:F1}");
+            _parent.StatusText = "Dub preview uses separated ambience.";
+            return;
+        }
+
+        _coordinator.Log.Debug(
+            $"Dub preview mode: ducked-source-fallback, gainDb={AudioDuckingDb:F1}");
+        _parent.StatusText = "Dub preview uses source audio fallback.";
+    }
+
+    private void PauseAmbiancePreview(bool resetLoadedPath = false)
+    {
+        _coordinator.AmbiancePlayer?.Pause();
+        if (resetLoadedPath)
+            _loadedAmbiancePath = null;
+    }
+
+    private void SyncSeparatedAmbiancePreview(bool shouldPlay, bool forceSeek = false)
+    {
+        var sourcePlayer = _coordinator.SourceMediaPlayer;
+        var ambiancePath = TryGetAmbiancePreviewPath();
+        if (sourcePlayer is null || ambiancePath is null)
+        {
+            PauseAmbiancePreview(resetLoadedPath: ambiancePath is null);
+            return;
+        }
+
+        var ambiancePlayer = _coordinator.GetOrCreateAmbiancePlayer();
+        if (!string.Equals(_loadedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+        {
+            ambiancePlayer.Load(ambiancePath);
+            _loadedAmbiancePath = ambiancePath;
+            forceSeek = true;
+        }
+
+        ambiancePlayer.PlaybackRate = sourcePlayer.PlaybackRate;
+        ambiancePlayer.Volume = (IsMuted ? 0.0 : SourceVolume) *
+            Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0);
+
+        var sourcePositionMs = sourcePlayer.CurrentTime;
+        if (forceSeek || Math.Abs(ambiancePlayer.CurrentTime - sourcePositionMs) > AmbianceSyncThresholdMs)
+            ambiancePlayer.Seek(sourcePositionMs);
+
+        AnnounceDubPreviewMode(DubPreviewAudioMode.SeparatedAmbiance, ambiancePath);
+
+        if (shouldPlay)
+            ambiancePlayer.Play();
+        else
+            ambiancePlayer.Pause();
+    }
 
     /// <summary>
     /// Applies a per-segment timing mode override through the coordinator (session state owner),

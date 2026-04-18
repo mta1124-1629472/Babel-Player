@@ -3,8 +3,9 @@ using System;
 namespace Babel.Player.Services;
 
 /// <summary>
-/// Manages the lifecycle of the two media transport instances used by the coordinator:
-/// a headless segment player (for TTS audio playback) and an embedded source player
+/// Manages the lifecycle of the media transport instances used by the coordinator:
+/// a headless segment player (for TTS audio playback), a headless ambiance player
+/// (for separated ambiance preview), and an embedded source player
 /// (for GPU-accelerated video rendering). Neither transport is a workflow state owner —
 /// they are infrastructure, not session state.
 /// </summary>
@@ -23,6 +24,12 @@ public interface IMediaTransportManager : IDisposable
     IMediaTransport GetOrCreateSourcePlayer();
 
     /// <summary>
+    /// Returns the headless ambiance player, creating it on first access.
+    /// Used for separated ambiance playback under dub preview.
+    /// </summary>
+    IMediaTransport GetOrCreateAmbiancePlayer();
+
+    /// <summary>
     /// The headless segment player if it has been created; null otherwise.
     /// Exposed so callers can stop/pause playback without forcing creation.
     /// </summary>
@@ -33,4 +40,10 @@ public interface IMediaTransportManager : IDisposable
     /// Exposed so callers can attach it to a window handle or subscribe to events.
     /// </summary>
     IMediaTransport? SourceMediaPlayer { get; }
+
+    /// <summary>
+    /// The headless ambiance player if it has been created; null otherwise.
+    /// Exposed so callers can pause or synchronize separated ambiance preview without forcing creation.
+    /// </summary>
+    IMediaTransport? AmbiancePlayer { get; }
 }
