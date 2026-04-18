@@ -70,20 +70,6 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
     }
 
     [Fact]
-    public async Task PausePreview_WithAmbianceStem_UsesSeparatedPreviewAudioWhenDubModeIsOff()
-    {
-        using var harness = new PreviewHarness(includeAmbiance: true);
-
-        await harness.Playback.Preview.SelectSegmentAndSeekAsync(harness.Segment, playSource: false);
-        await harness.Playback.Preview.PreviewSelectedSegmentWithPauseAsync();
-        await harness.AmbiancePlayer.WaitForPlayCountAsync();
-
-        Assert.False(harness.Playback.Preview.IsDubModeOn);
-        Assert.Equal(harness.AmbiancePath, harness.AmbiancePlayer.LastLoadedFile);
-        Assert.Equal(0.0, harness.SourcePlayer.Volume);
-    }
-
-    [Fact]
     public async Task DubPreview_WithoutAmbianceStem_UsesDuckedSourceFallback()
     {
         using var harness = new PreviewHarness(includeAmbiance: false);

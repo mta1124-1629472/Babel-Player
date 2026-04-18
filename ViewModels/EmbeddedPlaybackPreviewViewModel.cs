@@ -34,7 +34,6 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private bool _isUpdatingPositionFromTimer;
     private bool _isUpdatingActiveSegment;
     private bool _isStartingAmbiancePlayback;
-    private bool _isOverrideDubPreviewActive;
     private WorkflowSegmentState? _lastDubbedSegment;
     private WorkflowSegmentState[] _sortedSegments = [];
     private double _preMuteVolume = 1.0;
@@ -55,7 +54,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _parent = parent;
         _coordinator = coordinator;
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
-        RefreshAmbiancePreviewAvailability();
+        InvalidateAmbiancePreviewPathCache();
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
         _speechRate = coordinator.TtsPlaybackRate;
 
@@ -234,7 +233,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     {
         var oldPath = _lastKnownSourceMediaPath;
         var newPath = _coordinator.CurrentSession.SourceMediaPath;
-        RefreshAmbiancePreviewAvailability();
+        InvalidateAmbiancePreviewPathCache();
         IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
 
         PauseAmbiancePreview(resetLoadedPath: true);
@@ -650,25 +649,17 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _isUpdatingActiveSegment = false;
     }
 
-    public Task PreviewSelectedSegmentWithPauseAsync()
-    {
-        if (SelectedSegment is null || !SelectedSegment.HasTtsAudio || !IsSourceMediaLoaded)
-            return Task.CompletedTask;
-
-        return SeekAndPlayAsync(SelectedSegment, SegmentTimingMode.Pause);
-    }
-
     private Task SeekAndPlayAsync(WorkflowSegmentState segment) =>
-        SeekAndPlayAsync(segment, null);
+        SeekAndPlayAsync(segment, seekVideoToSegmentStart: false);
 
-    private async Task SeekAndPlayAsync(WorkflowSegmentState segment, SegmentTimingMode? previewTimingOverride)
+    private async Task SeekAndPlayAsync(WorkflowSegmentState segment, bool seekVideoToSegmentStart)
     {
         var player = _coordinator.SourceMediaPlayer;
         if (player is null)
         {
             await PlaySourceAtSegmentAsync(segment);
-            if ((previewTimingOverride.HasValue || IsDubModeOn) && !IsSourcePaused)
-                ApplyDubForSegment(segment, previewTimingOverride: previewTimingOverride);
+            if (IsDubModeOn && !IsSourcePaused)
+                ApplyDubForSegment(segment);
             return;
         }
 
@@ -690,8 +681,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             }
         }
 
-        if ((previewTimingOverride.HasValue || IsDubModeOn) && !IsSourcePaused)
-            ApplyDubForSegment(segment, previewTimingOverride: previewTimingOverride);
+        if (IsDubModeOn && !IsSourcePaused)
+            ApplyDubForSegment(segment, seekVideoToSegmentStart);
     }
 
     private async Task PlaySourceAtSegmentAsync(WorkflowSegmentState? segment)
@@ -717,16 +708,15 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     {
         var masterGain = IsMuted ? 0.0 : SourceVolume;
         var previewMode = ResolveDubPreviewAudioMode();
-        var isPreviewAudioActive = IsDubModeOn || _isOverrideDubPreviewActive;
         var duckingDb = previewMode == DubPreviewAudioMode.SeparatedAmbiance
             ? _coordinator.CurrentSettings.AmbianceMixDb
             : AudioDuckingDb;
-        var sourceGain = isPreviewAudioActive && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+        var sourceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
             ? 0.0
             : _isDucked
                 ? masterGain * Math.Pow(10.0, duckingDb / 20.0)
                 : masterGain;
-        var ambianceGain = isPreviewAudioActive && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+        var ambianceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
             ? masterGain * Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0)
             : 0.0;
 
@@ -835,17 +825,13 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private void ApplyDubForSegment(
         WorkflowSegmentState? segment,
-        bool seekVideoToSegmentStart = false,
-        SegmentTimingMode? previewTimingOverride = null)
+        bool seekVideoToSegmentStart = false)
     {
         RestoreDucking();
         _coordinator.StopTtsPlayback();
         _lastDubbedSegment = segment;
         var previewMode = ResolveDubPreviewAudioMode();
-        var isPreviewAudioActive = IsDubModeOn || previewTimingOverride.HasValue;
-        _isOverrideDubPreviewActive = !IsDubModeOn && previewTimingOverride.HasValue && segment is not null;
-
-        if (!isPreviewAudioActive)
+        if (!IsDubModeOn)
         {
             PauseAmbiancePreview();
             RecalculateOutputVolumes();
@@ -856,7 +842,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         if (seekVideoToSegmentStart && segment is not null)
             _coordinator.SourceMediaPlayer?.Seek((long)(segment.StartSeconds * 1000));
 
-        if (isPreviewAudioActive && previewMode == DubPreviewAudioMode.SeparatedAmbiance)
+        if (IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance)
         {
             SyncSeparatedAmbiancePreview(shouldPlay: !IsSourcePaused, forceSeek: seekVideoToSegmentStart);
         }
@@ -875,8 +861,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         if (segment.HasTtsAudio)
         {
             // Resolve effective timing mode: per-segment override takes priority, then session setting.
-            var effectiveMode = previewTimingOverride
-                ?? segment.TimingModeOverride
+            var effectiveMode = segment.TimingModeOverride
                 ?? _coordinator.CurrentSettings.DubTimingMode;
             if (previewMode == DubPreviewAudioMode.DuckSource)
                 ApplyDucking();
@@ -902,7 +887,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private string? TryGetAmbiancePreviewPath()
         => _resolvedAmbiancePreviewPath;
 
-    private void RefreshAmbiancePreviewAvailability()
+    private void InvalidateAmbiancePreviewPathCache()
     {
         var path = _coordinator.CurrentSession.AmbianceAudioPath;
         _resolvedAmbiancePreviewPath = !string.IsNullOrWhiteSpace(path) && File.Exists(path)
