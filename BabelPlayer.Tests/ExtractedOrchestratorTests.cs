@@ -56,8 +56,8 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(InferenceStage.Transcription, planner.RequestedStages[0]);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "sample.json"),
-            ArtifactIntegrity.ResolveFinalPath(committer.TranscriptionCommit!.Value.TranscriptPath),
+            Path.Combine("transcripts", "sample.json.work"),
+            committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal("sample.mp4", Path.GetFileName(session.CurrentSession.IngestedMediaPath));
         Assert.Equal(1, providers.CreateTranscriptionServiceCalls);
@@ -108,8 +108,8 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(vocalsPath, engine.LastTranscriptionRequest!.SourceAudioPath);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "original.json"),
-            ArtifactIntegrity.ResolveFinalPath(committer.TranscriptionCommit!.Value.TranscriptPath),
+            Path.Combine("transcripts", "original.json.work"),
+            committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -248,8 +248,8 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal("es", committer.TranslationCommit!.Value.SourceLanguage);
         Assert.Equal("en", committer.TranslationCommit.Value.TargetLanguage);
         Assert.EndsWith(
-            Path.Combine("translations", "input_en.json"),
-            ArtifactIntegrity.ResolveFinalPath(committer.TranslationCommit.Value.TranslationPath),
+            Path.Combine("translations", "input_en.json.work"),
+            committer.TranslationCommit.Value.TranslationPath,
             StringComparison.OrdinalIgnoreCase);
     }
 

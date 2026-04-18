@@ -657,4 +657,120 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         File.WriteAllText(path, ArtifactJson.SerializeTranslation(artifact));
         return path;
     }
+
+    private static Task WriteMediaCopyManifestAsync(string mediaPath, CancellationToken cancellationToken = default) =>
+        ArtifactIntegrity.WriteFileManifestAsync(
+            mediaPath,
+            "media_copy",
+            artifactSchemaVersion: null,
+            probedDurationSeconds: null,
+            segmentCount: null,
+            segmentIds: null,
+            segmentTiming: null,
+            upstreamArtifactHashes: null,
+            provenanceDigest: ArtifactIntegrity.ComputeCompositeSha256(["stage=media_copy"]),
+            cancellationToken);
+
+    private async Task WriteTranscriptBundleAsync(
+        string transcriptPath,
+        string ingestedMediaPath,
+        TranscriptArtifact artifact,
+        string? vocalsPath = null,
+        CancellationToken cancellationToken = default)
+    {
+        var dir = Path.GetDirectoryName(transcriptPath);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        await File.WriteAllTextAsync(transcriptPath, ArtifactJson.SerializeTranscript(artifact), cancellationToken)
+            .ConfigureAwait(false);
+        var upstream = ArtifactIntegrity.BuildUpstreamHashes(
+            ("media_copy", ingestedMediaPath),
+            ("vocals_stem", vocalsPath));
+        upstream.TryGetValue("media_copy", out var mediaHash);
+        var provenance = ArtifactIntegrity.ComputeTranscriptionProvenanceDigest(
+            mediaHash,
+            vocalSeparationEnabled: !string.IsNullOrWhiteSpace(vocalsPath),
+            _settings);
+        await ArtifactIntegrity.WriteFileManifestAsync(
+                transcriptPath,
+                "transcript",
+                artifact.SchemaVersion,
+                probedDurationSeconds: null,
+                segmentCount: artifact.Segments?.Count ?? 0,
+                segmentIds: ArtifactIntegrity.BuildTranscriptSegmentIds(artifact.Segments),
+                segmentTiming: ArtifactIntegrity.BuildTranscriptTimingSummary(artifact.Segments),
+                upstreamArtifactHashes: upstream,
+                provenanceDigest: provenance,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task WriteStemPairManifestsAsync(
+        string ingestedMediaPath,
+        string vocalsPath,
+        string ambiancePath,
+        CancellationToken cancellationToken = default)
+    {
+        var upstream = ArtifactIntegrity.BuildUpstreamHashes(("media_copy", ingestedMediaPath));
+        upstream.TryGetValue("media_copy", out var mediaHash);
+        var provenance = ArtifactIntegrity.ComputeCompositeSha256(
+        [
+            "stage=vocal_separation",
+            $"media_copy={mediaHash ?? string.Empty}",
+        ]);
+        await ArtifactIntegrity.WriteFileManifestAsync(
+                vocalsPath,
+                "vocals_stem",
+                artifactSchemaVersion: null,
+                probedDurationSeconds: null,
+                segmentCount: null,
+                segmentIds: null,
+                segmentTiming: null,
+                upstreamArtifactHashes: upstream,
+                provenanceDigest: provenance,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await ArtifactIntegrity.WriteFileManifestAsync(
+                ambiancePath,
+                "ambiance_stem",
+                artifactSchemaVersion: null,
+                probedDurationSeconds: null,
+                segmentCount: null,
+                segmentIds: null,
+                segmentTiming: null,
+                upstreamArtifactHashes: upstream,
+                provenanceDigest: provenance,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task WriteTranslationBundleAsync(
+        string translationPath,
+        string transcriptPath,
+        TranslationArtifact artifact,
+        CancellationToken cancellationToken = default)
+    {
+        await File.WriteAllTextAsync(translationPath, ArtifactJson.SerializeTranslation(artifact), cancellationToken)
+            .ConfigureAwait(false);
+        var upstream = ArtifactIntegrity.BuildUpstreamHashes(("transcript", transcriptPath));
+        upstream.TryGetValue("transcript", out var transcriptHash);
+        var provenance = ArtifactIntegrity.ComputeTranslationProvenanceDigest(
+            transcriptHash,
+            _settings,
+            artifact.SourceLanguage ?? "es",
+            artifact.TargetLanguage ?? "en");
+        await ArtifactIntegrity.WriteFileManifestAsync(
+                translationPath,
+                "translation",
+                artifact.SchemaVersion,
+                probedDurationSeconds: null,
+                segmentCount: artifact.Segments?.Count ?? 0,
+                segmentIds: ArtifactIntegrity.BuildTranslationSegmentIds(artifact.Segments),
+                segmentTiming: ArtifactIntegrity.BuildTranslationTimingSummary(artifact.Segments),
+                upstreamArtifactHashes: upstream,
+                provenanceDigest: provenance,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 }

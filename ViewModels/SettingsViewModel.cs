@@ -124,6 +124,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
+        LocalizationService.Instance.CultureChanged += OnCultureChanged;
 
         // Hotkeys (default values)
         PlayPauseHotkey             = "Space";
@@ -353,7 +354,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         public override string ToString() => DisplayName;
     }
 
-    public AppLanguageOption[] AppLanguageOptions { get; }
+    public AppLanguageOption[] AppLanguageOptions { get; private set; }
 
     [ObservableProperty]
     private AppLanguageOption _selectedAppLanguage = null!;
@@ -372,23 +373,18 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// Builds the app-language dropdown from <see cref="SupportedUiLanguageCatalog"/>
-    /// (languages with a shipping <c>Strings.*.resx</c>), not from the pipeline
-    /// translation catalog.  Listing pipeline-only codes would silently fall back
-    /// to English UI strings with no user feedback.
-    /// </summary>
     private static AppLanguageOption[] BuildAppLanguageOptions()
     {
+        var currentCulture = LocalizationService.Instance.CurrentCulture;
         var options = new System.Collections.Generic.List<AppLanguageOption>
         {
             new("auto", Babel.Player.Resources.Strings.ResourceManager
-                .GetString("Settings_Option_AutoSystem", LocalizationService.Instance.CurrentCulture)
+                .GetString("Settings_Option_AutoSystem", currentCulture)
                 ?? "Auto (system)"),
         };
-        foreach (var code in SupportedUiLanguageCatalog.IsoCodes)
+        foreach (var code in LocalizationService.SupportedUiLanguages.OrderBy(c => c, StringComparer.Ordinal))
         {
-            options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code)));
+            options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code, currentCulture)));
         }
         return options.ToArray();
     }
@@ -752,7 +748,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.AppLanguage        = string.IsNullOrWhiteSpace(SelectedAppLanguage?.Code)
             ? settings.AppLanguage
-            : SelectedAppLanguage.Code;
+            : string.Equals(SelectedAppLanguage.Code, "auto", StringComparison.OrdinalIgnoreCase)
+                ? "auto"
+                : LocalizationService.ResolveAppLanguage(SelectedAppLanguage.Code);
         // Applied language is now persisted; suppress the Dispose-time revert to
         // _originalCulture even if the user later closes the window via the X button.
         _languageChangeCommitted = true;
@@ -877,6 +875,17 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _readinessSignalSubscription?.Dispose();
         _readinessSignalSubscription = null;
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
+        LocalizationService.Instance.CultureChanged -= OnCultureChanged;
+    }
+
+    private void OnCultureChanged(object? sender, CultureInfo newCulture)
+    {
+        var previousCode = SelectedAppLanguage?.Code;
+        AppLanguageOptions = BuildAppLanguageOptions();
+        SelectedAppLanguage = AppLanguageOptions.FirstOrDefault(o =>
+            string.Equals(o.Code, previousCode, StringComparison.OrdinalIgnoreCase))
+            ?? AppLanguageOptions[0];
+        OnPropertyChanged(nameof(AppLanguageOptions));
     }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)

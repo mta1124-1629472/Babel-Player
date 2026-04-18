@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Babel.Player.Resources;
-using Babel.Player.Services;
 
 namespace Babel.Player.Models;
 
 /// <summary>User-facing labels for ISO 639-1 pipeline language codes (aligned with <see cref="LanguageSupport.NllbLanguageCatalog"/>).</summary>
 /// <remarks>
 /// Display names are sourced from the app's resource files so the label
-/// follows the currently selected UI culture.  The hard-coded English
+/// follows the supplied culture.  The hard-coded English
 /// fallbacks mirror the <c>Language_xx</c> keys in <c>Resources/Strings.resx</c>
 /// and exist so tests and code paths that run before the resource manager is
 /// initialized still return a meaningful label.
@@ -35,14 +35,14 @@ public static class LanguageDisplayNames
         ["zh"] = "Chinese (Simplified)",
     };
 
-    /// <summary>Returns the display name for an ISO 639-1 code in the current UI culture.</summary>
-    public static string ForIso639(string code)
+    /// <summary>Returns the display name for an ISO 639-1 code in the specified culture.</summary>
+    public static string ForIso639(string code, CultureInfo culture)
     {
         if (string.IsNullOrWhiteSpace(code))
             return code;
 
         var key = "Language_" + code.Trim().ToLowerInvariant();
-        var localized = Strings.ResourceManager.GetString(key, LocalizationService.Instance.CurrentCulture);
+        var localized = Strings.ResourceManager.GetString(key, culture);
         if (!string.IsNullOrEmpty(localized))
             return localized;
 

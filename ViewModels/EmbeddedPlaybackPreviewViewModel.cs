@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Specialized;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -9,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using Babel.Player.Models;
+using Babel.Player.Resources;
 using Babel.Player.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -40,6 +43,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private bool _isDucked;
     private bool _preFullscreenSegmentPaneVisible = true;
     private string? _activeSrtPath;
+    private ObservableCollection<WorkflowSegmentState>? _observedSegments;
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _controlsHideTimer;
     private int _ambiancePlayRequestVersion;
@@ -66,6 +70,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _controlsHideTimer.Tick += OnControlsHideTimerTick;
 
         _isBilingualSubtitlesOn = coordinator.CurrentSettings.BilingualSubtitlesEnabled;
+        LocalizationService.Instance.CultureChanged += OnLocalizationCultureChanged;
     }
 
     [ObservableProperty]
@@ -228,6 +233,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     }
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
+    public string SegmentCountLabel => FormatSegmentCount(Segments.Count);
 
     public async Task HandleCurrentSessionChangedAsync()
     {
@@ -509,6 +515,9 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     public void Dispose()
     {
         PauseAmbiancePreview(resetLoadedPath: true);
+        LocalizationService.Instance.CultureChanged -= OnLocalizationCultureChanged;
+        if (_observedSegments is not null)
+            _observedSegments.CollectionChanged -= OnSegmentsCollectionChanged;
         _positionTimer.Stop();
         _positionTimer.Tick -= OnPositionTimerTick;
         _controlsHideTimer.Stop();
@@ -611,11 +620,24 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     partial void OnSegmentsChanged(ObservableCollection<WorkflowSegmentState> value)
     {
+        if (_observedSegments is not null)
+            _observedSegments.CollectionChanged -= OnSegmentsCollectionChanged;
+
+        _observedSegments = value;
+        _observedSegments.CollectionChanged += OnSegmentsCollectionChanged;
+        OnPropertyChanged(nameof(SegmentCountLabel));
+
         var sorted = value.ToArray();
         Array.Sort(sorted, (a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
         _sortedSegments = sorted;
         _parent.SpeakerRouting.RebuildSpeakerIds(value, SelectedSegment?.SpeakerId);
     }
+
+    private void OnLocalizationCultureChanged(object? sender, CultureInfo culture) =>
+        OnPropertyChanged(nameof(SegmentCountLabel));
+
+    private void OnSegmentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        OnPropertyChanged(nameof(SegmentCountLabel));
 
     private void OnPositionTimerTick(object? sender, EventArgs e)
     {
@@ -771,6 +793,15 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         var segment = _sortedSegments[candidate];
         return positionSeconds < segment.EndSeconds ? segment : null;
+    }
+
+    private static string FormatSegmentCount(int count)
+    {
+        var culture = LocalizationService.Instance.CurrentCulture;
+        var key = count == 1 ? "Label_SegmentCount_One" : "Label_SegmentCount_Many";
+        var format = Strings.ResourceManager.GetString(key, culture)
+            ?? (count == 1 ? "{0} segment" : "{0} segments");
+        return string.Format(culture, format, count);
     }
 
     private WorkflowSegmentState? FindPreviousSegmentEndingBefore(double positionSeconds)
