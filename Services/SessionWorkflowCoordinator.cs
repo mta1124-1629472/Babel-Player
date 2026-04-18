@@ -863,15 +863,12 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// </summary>
     /// <param name="segmentId">The identifier of the translated segment to regenerate TTS for.</param>
     /// <remarks>
-    /// Preconditions: the session must have a translation artifact available (TranslationPath set and readable).
-    /// On success: updates CurrentSession.TtsSegmentAudioPaths with the regenerated segment audio path, sets a status message, and persists the session.
-    /// Readiness guard: ensures the configured TTS runtime/provider is ready; if the provider is not ready and no model download is required a <see cref="PipelineProviderException"/> is thrown.
-    /// Cancellation: this method does not accept or observe a cancellation token and cannot be cancelled.
+    /// Preconditions: <see cref="CurrentSession.TranslationPath"/> must be set and the translation file must exist; otherwise this method throws (<see cref="InvalidOperationException"/> or <see cref="FileNotFoundException"/>). The method ensures any required containerized runtime is started and checks provider readiness before generation; if the configured TTS provider is not ready for execution and a model download is not required, a <see cref="PipelineProviderException"/> is thrown. On success the session's <c>TtsSegmentAudioPaths</c> and <c>StatusMessage</c> are updated and the session is persisted via <see cref="SaveCurrentSession"/>. The operation supports cooperative cancellation through <paramref name="cancellationToken"/>.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when no translation is available or the specified segment text is missing.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session cannot be found.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
-    public async Task RegenerateSegmentTtsAsync(string segmentId)
+    public async Task RegenerateSegmentTtsAsync(string segmentId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -883,27 +880,38 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var segmentText = await _artifactReader.GetTranslatedTextAsync(CurrentSession.TranslationPath, segmentId);
+        var segmentText = await _artifactReader.GetTranslatedTextAsync(
+            CurrentSession.TranslationPath,
+            segmentId,
+            cancellationToken);
 
         if (string.IsNullOrEmpty(segmentText))
         {
             throw new InvalidOperationException($"Segment not found: {segmentId}");
         }
 
-        var translation = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath);
+        var translation = await _artifactReader.LoadTranslationAsync(
+            CurrentSession.TranslationPath,
+            cancellationToken);
         var targetSegment = translation.Segments?.FirstOrDefault(s => s.Id == segmentId);
         var regenVoice = targetSegment is not null
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
             : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
-        await EnsureSingleSpeakerQwenReferenceClipAsync();
+        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, "TTS");
+        await EnsureContainerizedExecutionRuntimeStartedAsync(
+            CurrentSettings.TtsRuntime,
+            "TTS",
+            cancellationToken);
 
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(CurrentSettings, _containerizedProbe)
+            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(
+                CurrentSettings,
+                _containerizedProbe,
+                cancellationToken: cancellationToken)
             : TtsRegistry.CheckReadiness(
                 CurrentSettings.TtsProvider,
                 regenVoice,
@@ -933,7 +941,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 regenVoice,
                 targetSegment?.SpeakerId,
                 referenceAudioPath,
-                Language: targetLanguage));
+                Language: targetLanguage),
+            cancellationToken);
         TrackPendingTtsTask(ttsTask);
         var result = await ttsTask;
 
@@ -970,11 +979,11 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// </summary>
     /// <param name="segmentId">Identifier of the segment to regenerate (stable segment id produced by SegmentId).</param>
     /// <remarks>
-    /// Preconditions: the session must have a translation artifact path (CurrentSession.TranslationPath) and that file must exist; source and target languages must be set on the session. The method ensures the translation execution runtime is ready before invoking translation. On success the session's status message is updated and the session is persisted via SaveCurrentSession; the session pipeline stage is not advanced by this operation. This method does not support cancellation.
+    /// Preconditions: the session must have a translation artifact path (CurrentSession.TranslationPath) and that file must exist; source and target languages must be set on the session. The method ensures the translation execution runtime is ready before invoking translation. On success the session's status message is updated and the session is persisted via SaveCurrentSession; the session pipeline stage is not advanced by this operation. The operation supports cooperative cancellation through <paramref name="cancellationToken"/>.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the segment source text is missing, when source or target language is not set, or when the translation attempt fails.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by CurrentSession.TranslationPath does not exist.</exception>
-    public async Task RegenerateSegmentTranslationAsync(string segmentId)
+    /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the source or target language is not set, when the segment source text is not found, or when the translation attempt fails.</exception>
+    public async Task RegenerateSegmentTranslationAsync(string segmentId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -986,14 +995,17 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var sourceText = await _artifactReader.GetSourceTextAsync(CurrentSession.TranslationPath, segmentId);
+        var sourceText = await _artifactReader.GetSourceTextAsync(
+            CurrentSession.TranslationPath,
+            segmentId,
+            cancellationToken);
 
         if (string.IsNullOrEmpty(sourceText))
         {
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
 
-        await EnsureTranslationExecutionReadyAsync();
+        await EnsureTranslationExecutionReadyAsync(cancellationToken: cancellationToken);
 
         _translationService ??= CreateTranslationService();
 
@@ -1017,7 +1029,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 CurrentSession.TranslationPath,
                 sourceLanguage,
                 targetLanguage,
-                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel));
+                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel),
+            cancellationToken);
 
         if (!result.Success)
         {
