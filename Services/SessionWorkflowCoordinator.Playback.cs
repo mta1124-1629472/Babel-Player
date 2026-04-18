@@ -1258,7 +1258,15 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     public void StopSourceMedia()
     {
-        _transportManager.SourceMediaPlayer?.Pause();
+        StopAmbiancePlayback();
+        try
+        {
+            _transportManager.SourceMediaPlayer?.Pause();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown/race path: source transport was disposed during pause.
+        }
     }
 
     /// <summary>
@@ -1266,7 +1274,14 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     public void StopAmbiancePlayback()
     {
-        _transportManager.AmbiancePlayer?.Pause();
+        try
+        {
+            _transportManager.AmbiancePlayer?.Pause();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown/race path: ambiance transport was disposed during pause.
+        }
     }
 
     public IMediaTransport GetOrCreateSourcePlayer() =>

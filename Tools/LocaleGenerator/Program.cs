@@ -243,12 +243,14 @@ internal static class Program
         var succeeded = new List<string>();
         var skipped = new List<string>();
         var failed = new List<string>();
+        var cancelled = false;
 
         foreach (var lang in options.Targets)
         {
             if (cts.IsCancellationRequested)
             {
                 Console.Error.WriteLine("Cancelled by user.");
+                cancelled = true;
                 break;
             }
 
@@ -271,6 +273,7 @@ internal static class Program
             catch (OperationCanceledException)
             {
                 Console.Error.WriteLine($"[{lang}] CANCELLED");
+                cancelled = true;
                 break;
             }
             catch (Exception ex)
@@ -288,7 +291,7 @@ internal static class Program
         if (failed.Count > 0)
             Console.WriteLine($"Failed     : {failed.Count}  ({string.Join(", ", failed)})");
 
-        return failed.Count > 0 ? 1 : 0;
+        return failed.Count > 0 || cancelled ? 1 : 0;
     }
 
     private static async Task TranslateOneLanguageAsync(

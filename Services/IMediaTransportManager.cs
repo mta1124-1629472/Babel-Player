@@ -6,7 +6,7 @@ namespace Babel.Player.Services;
 /// Manages the lifecycle of the media transport instances used by the coordinator:
 /// a headless segment player (for TTS audio playback), a headless ambiance player
 /// (for separated ambiance preview), and an embedded source player
-/// (for GPU-accelerated video rendering). Neither transport is a workflow state owner —
+/// (for GPU-accelerated video rendering). These transports are not workflow state owners —
 /// they are infrastructure, not session state.
 /// </summary>
 public interface IMediaTransportManager : IDisposable
