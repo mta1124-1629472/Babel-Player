@@ -212,6 +212,7 @@ public static class SessionSnapshotSemantics
             TtsGeneratedAtUtc = null,
             TtsSegmentsPath = null,
             TtsSegmentAudioPaths = null,
+            TtsSegmentDurations = null,
             TtsRuntime = null,
             TtsProvider = null,
         };

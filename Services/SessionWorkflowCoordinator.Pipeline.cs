@@ -308,7 +308,7 @@ public sealed partial class SessionWorkflowCoordinator
         _transcriptionService ??= CreateTranscriptionService();
     }
 
-    private void CommitTranscriptionSessionState(TranscriptionResult result, string transcriptPath)
+    private async Task CommitTranscriptionSessionStateAsync(TranscriptionResult result, string transcriptPath)
     {
         var nowUtc = DateTimeOffset.UtcNow;
         // When vocal separation is disabled, clear any stale stem paths from a previous run that
@@ -338,10 +338,10 @@ public sealed partial class SessionWorkflowCoordinator
         }
 
         _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
-    private void CommitTranslationSessionState(
+    private async Task CommitTranslationSessionStateAsync(
         TranslationResult result,
         string translationPath,
         string sourceLanguage,
@@ -365,7 +365,7 @@ public sealed partial class SessionWorkflowCoordinator
         }
 
         _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -716,7 +716,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="totalSegments">Total number of segments expected for the translation/TTS run.</param>
     /// <param name="stageContext">Optional pipeline stage context used for final reporting.</param>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="totalSegments"/> &gt; 0 but no segments were successfully generated.</exception>
-    private void CommitTtsSessionState(
+    private async Task CommitTtsSessionStateAsync(
         string voice,
         string ttsPath,
         DubRenderResult renderResult,
@@ -759,7 +759,7 @@ public sealed partial class SessionWorkflowCoordinator
             };
         }
 
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         ReportStage(
             stageContext,
@@ -1300,7 +1300,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// On success:
     /// - If <paramref name="remainingDownstream"/> is true, the method advances the pipeline from MediaLoaded through whatever downstream stages are required (the final stage depends on pipeline progression).
     /// - If <paramref name="remainingDownstream"/> is false, the method runs only the transcription stage and leaves the session at <see cref="SessionWorkflowStage.Transcribed"/>.
-    /// The method persists the session immediately after resetting the pipeline (synchronous save) and delegates persistence of later stage changes to downstream operations invoked.
+    /// The method persists the session immediately after resetting the pipeline (async save) and delegates persistence of later stage changes to downstream operations invoked.
     /// Cancellation: honors the provided <paramref name="cancellationToken"/> and will propagate cancellation to the advanced or transcription operations, which may throw <see cref="OperationCanceledException"/>.
     /// </remarks>
     /// <param name="remainingDownstream">If true, continue running the pipeline after transcription (advance through remaining stages); if false, run only the transcription stage.</param>
@@ -1322,7 +1322,7 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken)
     {
         ResetPipelineToMediaLoaded();
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         if (remainingDownstream)
         {
@@ -1343,7 +1343,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <remarks>
     /// Entry state: intended to run on a session that contains transcribed audio (the method will operate correctly if transcription output exists).  
     /// Exit state on success: the session stage will be left at one of Transcribed, Diarized, or Translated depending on whether diarization markers are present and whether downstream stages are requested.  
-    /// Persistence: when the pipeline is reset to Transcribed, Diarized, or Translated this method saves the session state via SaveCurrentSession().  
+    /// Persistence: when the pipeline is reset to Transcribed, Diarized, or Translated this method saves the session state via <c>SaveCurrentSessionAsync()</c>.
     /// Cancellation: the provided <paramref name="cancellationToken"/> is honored and will cause the operation to cancel when requested.
     /// </remarks>
     /// <param name="remainingDownstream">If true, continue executing downstream pipeline stages after rerunning diarization; if false, only rerun diarization and return.</param>
@@ -1376,7 +1376,7 @@ public sealed partial class SessionWorkflowCoordinator
             if (speakerAssignmentsChanged && hadTranslatableOutput)
             {
                 ResetPipelineToTranslated();
-                SaveCurrentSession();
+                await SaveCurrentSessionAsync().ConfigureAwait(false);
             }
 
             return;
@@ -1385,13 +1385,13 @@ public sealed partial class SessionWorkflowCoordinator
         if (HasDiarizationMarker(CurrentSession))
         {
             ResetPipelineToDiarized();
-            SaveCurrentSession();
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
             await ContinuePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             ResetPipelineToTranscribed();
-            SaveCurrentSession();
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
             await AdvancePipelineAsync(null, stageProgress, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -1441,7 +1441,7 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken)
     {
         ResetPipelineToTranslated();
-        SaveCurrentSession();
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
         await RunTtsOnlyAsync(null, null, stageProgress, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,0 +1,92 @@
+using System;
+using Babel.Player.Models;
+
+namespace Babel.Player.Services;
+
+public sealed partial class SessionWorkflowCoordinator
+{
+    private static WorkflowSessionSnapshot CreateMediaLoadedSession(
+        Guid sessionId,
+        string sourceMediaPath,
+        string ingestedMediaPath,
+        DateTimeOffset nowUtc) =>
+        new(
+            sessionId,
+            SessionWorkflowStage.MediaLoaded,
+            nowUtc,
+            nowUtc,
+            "Media loaded.",
+            SourceMediaPath: sourceMediaPath,
+            IngestedMediaPath: ingestedMediaPath,
+            VocalsAudioPath: null,
+            AmbianceAudioPath: null,
+            InstrumentalAudioPath: null,
+            MediaLoadedAtUtc: nowUtc,
+            TranscriptPath: null,
+            TranscribedAtUtc: null,
+            TranslationPath: null,
+            SourceLanguage: null,
+            TargetLanguage: null,
+            TranslatedAtUtc: null,
+            TtsPath: null,
+            MixedDubAudioPath: null,
+            TtsVoice: null,
+            TtsGeneratedAtUtc: null,
+            TtsSegmentsPath: null,
+            TtsSegmentAudioPaths: null,
+            TtsSegmentDurations: null,
+            SpeakerVoiceAssignments: null,
+            SpeakerReferenceAudioPaths: null,
+            MultiSpeakerEnabled: true,
+            DefaultTtsVoiceFallback: null,
+            DiarizationProvider: null,
+            SpeakersDetectedAtUtc: null,
+            TranscriptionRuntime: null,
+            TranscriptionProvider: null,
+            TranscriptionModel: null,
+            TranscriptionLanguageHint: null,
+            TranslationRuntime: null,
+            TranslationProvider: null,
+            TranslationModel: null,
+            TtsRuntime: null,
+            TtsProvider: null,
+            SegmentTimingModeOverrides: null);
+
+    private static WorkflowSessionSnapshot ResetToMediaLoadedSession(WorkflowSessionSnapshot snapshot) =>
+        snapshot with
+        {
+            Stage = SessionWorkflowStage.MediaLoaded,
+            VocalsAudioPath = null,
+            AmbianceAudioPath = null,
+            InstrumentalAudioPath = null,
+            TranscriptPath = null,
+            TranslationPath = null,
+            TtsPath = null,
+            MixedDubAudioPath = null,
+            TtsVoice = null,
+            TtsSegmentsPath = null,
+            TtsSegmentAudioPaths = null,
+            TtsSegmentDurations = null,
+            SegmentTimingModeOverrides = null,
+            SourceLanguage = null,
+            TargetLanguage = null,
+            TranscribedAtUtc = null,
+            TranslatedAtUtc = null,
+            TtsGeneratedAtUtc = null,
+            TranscriptionRuntime = null,
+            TranscriptionProvider = null,
+            TranscriptionModel = null,
+            TranscriptionLanguageHint = null,
+            TranslationRuntime = null,
+            TranslationProvider = null,
+            TranslationModel = null,
+            TtsRuntime = null,
+            TtsProvider = null,
+            SpeakerVoiceAssignments = null,
+            SpeakerReferenceAudioPaths = null,
+            DefaultTtsVoiceFallback = null,
+            DiarizationProvider = null,
+            SpeakersDetectedAtUtc = null,
+            StatusMessage = "Ready.",
+        };
+}

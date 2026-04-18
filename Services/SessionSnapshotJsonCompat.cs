@@ -48,29 +48,25 @@ internal static class SessionSnapshotJsonCompat
     /// </summary>
     /// <param name="obj">The JSON object to migrate; modified in place.</param>
     /// <remarks>
-    /// If the legacy property exists and "AmbianceAudioPath" is missing or explicitly null, the legacy value (or null) is copied into "AmbianceAudioPath" as a deep clone. The legacy "InstrumentalAudioPath" property is then removed so it will not populate any modern property during subsequent deserialization.
-    /// <summary>
-    /// Migrates a legacy "InstrumentalAudioPath" property into "AmbianceAudioPath" on the provided JSON object.
-    /// </summary>
-    /// <param name="obj">The JSON object to update; modifications are applied in place.</param>
-    /// <remarks>
-    /// If the object contains the legacy "InstrumentalAudioPath" property and the "AmbianceAudioPath" property is missing or explicitly null,
-    /// this method sets "AmbianceAudioPath" to a deep clone of the legacy value (or null if the legacy value is null) and then removes "InstrumentalAudioPath".
+    /// If the legacy property exists and "AmbianceAudioPath" is missing, the legacy value (or null)
+    /// is copied into "AmbianceAudioPath" as a deep clone and the legacy
+    /// "InstrumentalAudioPath" property is removed. If "AmbianceAudioPath" is already present,
+    /// the JSON is treated as modern and "InstrumentalAudioPath" is preserved.
     /// </remarks>
     private static void MigrateLegacyFields(JsonObject obj)
     {
         if (obj.TryGetPropertyValue(LegacyInstrumentalField, out var legacyNode))
         {
-            if (!obj.TryGetPropertyValue(AmbianceField, out var ambianceNode) || ambianceNode is null)
+            if (!obj.ContainsKey(AmbianceField))
             {
-                // AmbianceAudioPath missing or explicitly null: adopt the legacy value.
+                // Only migrate when the modern field is absent.
                 obj[AmbianceField] = legacyNode?.DeepClone();
-            }
 
-            // Older snapshots used InstrumentalAudioPath for the ambiance stem.
-            // Strip the legacy field before deserialization so it does not also
-            // populate the modern InstrumentalAudioPath slot.
-            obj.Remove(LegacyInstrumentalField);
+                // Older snapshots used InstrumentalAudioPath for the ambiance stem.
+                // Strip the legacy field before deserialization so it does not also
+                // populate the modern InstrumentalAudioPath slot.
+                obj.Remove(LegacyInstrumentalField);
+            }
         }
     }
 }

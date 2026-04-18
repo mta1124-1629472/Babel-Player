@@ -187,7 +187,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     pipelineToken).ConfigureAwait(false);
 
                 await transcriptArtifactWriter.CompleteAsync(transcriptionResult, transcriptPath, pipelineToken).ConfigureAwait(false);
-                _c.CommitTranscriptionSessionState(transcriptionResult, transcriptPath);
+                await _c.CommitTranscriptionSessionStateAsync(transcriptionResult, transcriptPath).ConfigureAwait(false);
                 ReportStage(
                     transcriptionStageContext,
                     $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}.",
@@ -196,7 +196,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 var translationResult = await translationTask.ConfigureAwait(false);
                 await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
-                _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+                await _c.CommitTranslationSessionStateAsync(
+                    translationResult,
+                    translationPath,
+                    translationResult.SourceLanguage,
+                    translationResult.TargetLanguage).ConfigureAwait(false);
                 ReportStage(
                     translationStageContext,
                     $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
@@ -211,7 +215,15 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     ttsPath,
                     ttsStageContext,
                     pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, renderResult, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                await _c.CommitTtsSessionStateAsync(
+                    voice,
+                    ttsPath,
+                    renderResult,
+                    segmentsDir,
+                    segmentAudioPaths,
+                    null,
+                    translationWriter.OrderedSegments.Count,
+                    ttsStageContext).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -368,7 +380,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 await producerTask.ConfigureAwait(false);
                 var translationResult = await translationTask.ConfigureAwait(false);
                 await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
-                _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+                await _c.CommitTranslationSessionStateAsync(
+                    translationResult,
+                    translationPath,
+                    translationResult.SourceLanguage,
+                    translationResult.TargetLanguage).ConfigureAwait(false);
                 ReportStage(
                     translationStageContext,
                     $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
@@ -383,7 +399,15 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     ttsPath,
                     ttsStageContext,
                     pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, renderResult, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                await _c.CommitTtsSessionStateAsync(
+                    voice,
+                    ttsPath,
+                    renderResult,
+                    segmentsDir,
+                    segmentAudioPaths,
+                    null,
+                    translationWriter.OrderedSegments.Count,
+                    ttsStageContext).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

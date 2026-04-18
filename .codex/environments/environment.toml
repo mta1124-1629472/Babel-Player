@@ -115,7 +115,12 @@ foreach ($relativePath in $filesToCopy) {
     }
 }
 
-$branchName = (& git -C $worktreePath branch --show-current).Trim()
+$branchNameOutput = & git -C $worktreePath branch --show-current
+if ($LASTEXITCODE -ne 0) {
+    Fail "git branch lookup failed for worktree: $worktreePath"
+}
+
+$branchName = if ($null -ne $branchNameOutput) { $branchNameOutput.Trim() } else { "" }
 if ([string]::IsNullOrWhiteSpace($branchName)) {
     $branchName = "<detached>"
 }
@@ -242,11 +247,16 @@ if ([string]::IsNullOrWhiteSpace($RepoPath)) {
 
 if (-not $RemoveExtraWorktrees -and -not $DeleteGoneLocalBranches -and -not $DeleteMergedLocalBranches -and -not $DeleteMergedRemoteBranches) {
     $RemoveExtraWorktrees = $true
-    $DeleteGoneLocalBranches = $true
 }
 
 $repoRoot = (Resolve-Path $RepoPath).Path
+$repoRoot = [System.IO.Path]::GetFullPath($repoRoot)
 $worktreesRoot = Join-Path $repoRoot ".worktrees"
+$worktreesRootPrefix = if ($worktreesRoot.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+    $worktreesRoot
+} else {
+    $worktreesRoot + [System.IO.Path]::DirectorySeparatorChar
+}
 
 Push-Location $repoRoot
 try {
@@ -266,8 +276,21 @@ try {
     Info "Fetching and pruning remotes..."
     Run-Git -Args @("fetch", "--all", "--prune") | Out-Null
 
-    $currentBranch = (Run-Git -Args @("branch", "--show-current")).Output[0].Trim()
-    Info "Current branch: $currentBranch"
+    $currentBranchOutput = (Run-Git -Args @("branch", "--show-current")).Output
+    $currentBranch = if (
+        $currentBranchOutput.Count -gt 0 -and
+        -not [string]::IsNullOrWhiteSpace($currentBranchOutput[0])
+    ) {
+        $currentBranchOutput[0].Trim()
+    } else {
+        ""
+    }
+
+    if ([string]::IsNullOrWhiteSpace($currentBranch)) {
+        Info "Current branch: <detached>"
+    } else {
+        Info "Current branch: $currentBranch"
+    }
 
     if ($RemoveExtraWorktrees) {
         Info "Scanning worktrees..."
@@ -291,7 +314,9 @@ try {
         }
 
         $extraWorktrees = $worktrees | Where-Object {
-            $_.Path -ne $repoRoot -and $_.Path.StartsWith($worktreesRoot, [System.StringComparison]::OrdinalIgnoreCase)
+            $worktreePath = [System.IO.Path]::GetFullPath($_.Path)
+            $worktreePath -ne $repoRoot -and
+                $worktreePath.StartsWith($worktreesRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)
         }
 
         foreach ($wt in $extraWorktrees) {
@@ -376,11 +401,18 @@ try {
             "--format=%(refname:short)",
             "refs/remotes/origin"
         )).Output | Where-Object {
-            $_ -and (Matches-AgentPrefix -BranchName ($_ -replace '^origin/', '') -Prefixes $BranchPrefixes)
+            if (-not $_) { return $false }
+
+            $shortBranch = $_ -replace '^origin/', ''
+            $shortBranch -ne $currentBranch -and
+                (Matches-AgentPrefix -BranchName $shortBranch -Prefixes $BranchPrefixes)
         }
 
         foreach ($remote in $remoteBranches) {
             $shortBranch = $remote -replace '^origin/', ''
+            if ($shortBranch -eq $currentBranch) {
+                continue
+            }
 
             $isMerged = Run-Git -Args @("merge-base", "--is-ancestor", $remote, "origin/main") -AllowFailure
             if ($isMerged.ExitCode -ne 0) {
