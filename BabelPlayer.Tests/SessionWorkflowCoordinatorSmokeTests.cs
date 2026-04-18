@@ -102,6 +102,7 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Smoke")]
     public void LoadMedia_NewSource_ReplacesStaleSessionState()
     {
         var coordinator = CreateCoordinator();
@@ -187,6 +188,7 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Smoke")]
     public void ResetPipelineToMediaLoaded_ClearsPerSegmentTimingState()
     {
         var coordinator = CreateCoordinator();

@@ -115,7 +115,12 @@ foreach ($relativePath in $filesToCopy) {
     }
 }
 
-$branchName = (& git -C $worktreePath branch --show-current).Trim()
+$branchNameOutput = & git -C $worktreePath branch --show-current
+if ($LASTEXITCODE -ne 0) {
+    Fail "git branch lookup failed for worktree: $worktreePath"
+}
+
+$branchName = if ($null -ne $branchNameOutput) { $branchNameOutput.Trim() } else { "" }
 if ([string]::IsNullOrWhiteSpace($branchName)) {
     $branchName = "<detached>"
 }
