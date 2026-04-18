@@ -621,9 +621,9 @@ public sealed class ExtractedOrchestratorTests
                 ?? Task.FromException<TranslationResult>(new InvalidOperationException("TranslateAsync was not configured."));
         }
 
-        public Task<TranslationResult> TranslateSingleSegmentAsync(
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
             ITranslationProvider provider,
-            SingleSegmentTranslationRequest request,
+            SingleSegmentTranslationTextRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
@@ -661,8 +661,8 @@ public sealed class ExtractedOrchestratorTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<TranslationResult> TranslateSingleSegmentAsync(
-            SingleSegmentTranslationRequest request,
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+            SingleSegmentTranslationTextRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

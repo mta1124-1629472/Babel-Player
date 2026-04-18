@@ -59,6 +59,7 @@ public sealed class DeepLTranslationProvider : ITranslationProvider
 
         var translationArtifact = new TranslationArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             SourceLanguage = ResolveSourceLanguage(request.SourceLanguage, translations),
             TargetLanguage = request.TargetLanguage,
             Segments =
@@ -80,18 +81,12 @@ public sealed class DeepLTranslationProvider : ITranslationProvider
         return BuildResult(translationArtifact);
     }
 
-    public async Task<TranslationResult> TranslateSingleSegmentAsync(
-        SingleSegmentTranslationRequest request,
+    public async Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.SourceText))
             throw new ArgumentException("Source text cannot be empty", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
-            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.OutputJsonPath))
-            throw new ArgumentException("Output JSON path cannot be null or empty.", nameof(request));
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
         using var client = _clientFactory();
         var translated = await client.TranslateTextsAsync(
@@ -102,26 +97,14 @@ public sealed class DeepLTranslationProvider : ITranslationProvider
 
         if (translated.Count == 0)
             throw new InvalidOperationException("DeepL returned no translation for single-segment request.");
-
-        var existing = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-        var updated = false;
-        foreach (var segment in existing.Segments ?? [])
-        {
-            if (segment.Id == request.SegmentId)
-            {
-                segment.TranslatedText = translated[0].Text;
-                updated = true;
-                break;
-            }
-        }
-
-        if (!updated)
-            throw new InvalidOperationException($"Segment '{request.SegmentId}' not found in translation JSON.");
-
-        await WriteTranslationArtifactAsync(existing, request.OutputJsonPath, cancellationToken);
         _log.Debug($"[DeepLTranslation] Single-segment regen complete: {request.SegmentId}");
 
-        return BuildResult(existing);
+        return new SingleSegmentTranslationTextResult(
+            true,
+            translated[0].Text,
+            request.SourceLanguage,
+            request.TargetLanguage,
+            null);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)

@@ -354,7 +354,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         public override string ToString() => DisplayName;
     }
 
-    public AppLanguageOption[] AppLanguageOptions { get; }
+    public AppLanguageOption[] AppLanguageOptions { get; private set; }
 
     [ObservableProperty]
     private AppLanguageOption _selectedAppLanguage = null!;

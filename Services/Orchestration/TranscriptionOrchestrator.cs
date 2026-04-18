@@ -87,13 +87,14 @@ internal sealed class TranscriptionOrchestrator
                 _session.CurrentSession.IngestedMediaPath,
                 transcriptionSourcePath);
             var transcriptPath = Path.Combine(transcriptDir, $"{transcriptStem}.json");
+            var workingTranscriptPath = ArtifactIntegrity.GetWorkingPath(transcriptPath);
 
             var transcriptionService = _providers.TranscriptionService ??= _providers.CreateTranscriptionService();
             var request = CpuTranscriptionRuntimePolicy.BuildTranscriptionRequest(
                 _session.CurrentSettings,
                 _session.HardwareSnapshot,
                 transcriptionSourcePath,
-                transcriptPath,
+                workingTranscriptPath,
                 _session.CurrentSettings.TranscriptionModel,
                 SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(
                     _session.CurrentSettings.TranscriptionLanguageHint),
@@ -157,7 +158,7 @@ internal sealed class TranscriptionOrchestrator
                     ex);
             }
 
-            await _committer.CommitTranscriptionSessionStateAsync(result, transcriptPath).ConfigureAwait(false);
+            await _committer.CommitTranscriptionSessionStateAsync(result, workingTranscriptPath).ConfigureAwait(false);
             stageSucceeded = true;
 
             var completionMessage = BuildInfo.IsDevBuild

@@ -50,18 +50,18 @@ internal sealed class CTranslate2FallbackTranslationProvider : ITranslationProvi
         return result;
     }
 
-    public async Task<TranslationResult> TranslateSingleSegmentAsync(
-        SingleSegmentTranslationRequest request,
+    public async Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default)
     {
         if (_fallbackActive)
-            return await _fallback.TranslateSingleSegmentAsync(request, cancellationToken);
+            return await _fallback.TranslateSingleSegmentTextAsync(request, cancellationToken);
 
-        var result = await _primary.TranslateSingleSegmentAsync(request, cancellationToken);
+        var result = await _primary.TranslateSingleSegmentTextAsync(request, cancellationToken);
         if (!result.Success && IsCTranslate2InitError(result.ErrorMessage))
         {
             ActivateFallback(result.ErrorMessage!);
-            return await _fallback.TranslateSingleSegmentAsync(request, cancellationToken);
+            return await _fallback.TranslateSingleSegmentTextAsync(request, cancellationToken);
         }
         return result;
     }

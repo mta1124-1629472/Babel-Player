@@ -546,9 +546,9 @@ except Exception as e:
         return model.Replace('/', '_').Replace('\\', '_');
     }
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"(\d+)%")]
+    [System.Text.RegularExpressions.GeneratedRegex(@"(\d+(?:\.\d+)?)%")]
     private static partial System.Text.RegularExpressions.Regex ProgressRegex();
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"\[progress\]\s*(\d+)")]
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[progress\]\s*(\d+(?:\.\d+)?)")]
     private static partial System.Text.RegularExpressions.Regex ExplicitProgressRegex();
 }

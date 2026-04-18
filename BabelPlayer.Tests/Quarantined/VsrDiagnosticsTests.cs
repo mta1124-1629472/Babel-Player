@@ -469,8 +469,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
         public Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken = default) =>
             Task.FromResult(new TranslationResult(true, [], request.SourceLanguage, request.TargetLanguage, null));
 
-        public Task<TranslationResult> TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new TranslationResult(true, [], request.SourceLanguage, request.TargetLanguage, null));
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(SingleSegmentTranslationTextRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SingleSegmentTranslationTextResult(true, request.SourceText, request.SourceLanguage, request.TargetLanguage, null));
     }
 
     private sealed class FakeTtsProvider : ITtsProvider

@@ -57,17 +57,16 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
         return BuildTranslationResult(translatedArtifact);
     }
 
-    public async Task<TranslationResult> TranslateSingleSegmentAsync(
-        SingleSegmentTranslationRequest request,
+    public async Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+        SingleSegmentTranslationTextRequest request,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.SourceText))
             throw new ArgumentException("Source text cannot be empty", nameof(request));
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
         var singleSegmentArtifact = new TranslationArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             SourceLanguage = request.SourceLanguage,
             TargetLanguage = request.TargetLanguage,
             Segments =
@@ -87,26 +86,14 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
 
         var translatedSingleSegment = await RequestTranslatedArtifactAsync(singleSegmentArtifact, request.ModelName, cancellationToken);
         var translatedText = translatedSingleSegment.Segments?[0].TranslatedText ?? string.Empty;
-
-        var existing = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-        var updated = false;
-        foreach (var segment in existing.Segments ?? [])
-        {
-            if (segment.Id == request.SegmentId)
-            {
-                segment.TranslatedText = translatedText;
-                updated = true;
-                break;
-            }
-        }
-
-        if (!updated)
-            throw new InvalidOperationException($"Segment '{request.SegmentId}' not found in translation JSON.");
-
-        await WriteTranslationArtifactAsync(existing, request.OutputJsonPath, cancellationToken);
         _log.Debug($"[GeminiTranslation] Single-segment regen complete: {request.SegmentId}");
 
-        return BuildTranslationResult(existing);
+        return new SingleSegmentTranslationTextResult(
+            true,
+            translatedText,
+            request.SourceLanguage,
+            request.TargetLanguage,
+            null);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
@@ -134,6 +121,7 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
         var outputArtifact = ArtifactJson.DeserializeTranslation(cleanedJson, "Gemini generateContent response");
         ValidateTranslatedArtifact(inputArtifact, outputArtifact);
 
+        outputArtifact.SchemaVersion = inputArtifact.SchemaVersion;
         outputArtifact.SourceLanguage = inputArtifact.SourceLanguage;
         outputArtifact.TargetLanguage = inputArtifact.TargetLanguage;
 
@@ -143,7 +131,8 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
     private static string BuildSystemPrompt() =>
         "You are a translation engine for Babel Player. " +
         "Return only raw JSON with no markdown fences, explanations, or extra keys. " +
-        "You will receive a JSON object with sourceLanguage, targetLanguage, and segments. " +
+        "You will receive a JSON object with schema_version, sourceLanguage, targetLanguage, and segments. " +
+        "Preserve schema_version exactly as provided. " +
         "For each segment, preserve id, start, end, and text exactly as provided. " +
         "Fill translatedText with a natural spoken-language translation suitable for dubbing. " +
         "Keep segment count and order unchanged. " +
@@ -175,6 +164,7 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
 
         return new TranslationArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             SourceLanguage = sourceLanguage,
             TargetLanguage = targetLanguage,
             Segments = segments,

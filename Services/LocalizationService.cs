@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Babel.Player.Models.LanguageSupport;
 using Babel.Player.Resources;
 
 namespace Babel.Player.Services;
@@ -22,13 +23,6 @@ namespace Babel.Player.Services;
 public sealed class LocalizationService : INotifyPropertyChanged
 {
     private static readonly Lazy<LocalizationService> _lazy = new(() => new LocalizationService());
-    private static readonly string[] _supportedUiLanguages =
-    [
-        "ar", "de", "en", "es", "fr", "hi", "it", "ja",
-        "ko", "nl", "pl", "pt", "ru", "sv", "tr", "zh",
-    ];
-    private static readonly HashSet<string> _supportedUiLanguageSet =
-        new(_supportedUiLanguages, StringComparer.Ordinal);
 
     /// <summary>
     /// OS culture captured once at type-load time before any <see cref="SetCulture"/> call.
@@ -51,7 +45,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public CultureInfo CurrentCulture => _currentCulture;
 
     /// <summary>Canonical UI language codes backed by localized resources.</summary>
-    public static IReadOnlyList<string> SupportedUiLanguages => _supportedUiLanguages;
+    public static IReadOnlyList<string> SupportedUiLanguages => SupportedUiLanguageCatalog.IsoCodes;
 
     /// <summary>Raised when the culture changes so XAML bindings refresh via <c>"Item[]"</c>.</summary>
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -103,7 +97,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     /// <para>
     /// <paramref name="configuredLanguage"/> is either <c>"auto"</c> (track OS locale on
     /// each launch, matching the <c>Theme = "System"</c> sentinel pattern) or an
-    /// canonical UI language code that appears in <see cref="SupportedUiLanguages"/>.
+    /// ISO 639-1 code in <see cref="SupportedUiLanguageCatalog.IsoCodes"/>.
     /// </para>
     /// <para>When auto-detection doesn't land on a supported code, falls back to <c>"en"</c>.</para>
     /// </remarks>
@@ -152,7 +146,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     private static string? TryGetSupportedLanguage(string? languageCode)
     {
         var canonical = CanonicalizeLanguageCode(languageCode);
-        return canonical is not null && _supportedUiLanguageSet.Contains(canonical)
+        return canonical is not null && SupportedUiLanguageCatalog.IsSupported(canonical)
             ? canonical
             : null;
     }

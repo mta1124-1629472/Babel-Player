@@ -20,7 +20,9 @@ public sealed class SpokenLanguageOption : INotifyPropertyChanged, IEquatable<Sp
     private readonly string? _staticDisplayName;
 
     /// <summary>Localized display name, re-resolved on each access; constant for the auto-detect entry.</summary>
-    public string DisplayName => _staticDisplayName ?? LanguageDisplayNames.ForIso639(Code!);
+    public string DisplayName => _staticDisplayName ?? LanguageDisplayNames.ForIso639(
+        Code!,
+        LocalizationService.Instance.CurrentCulture);
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

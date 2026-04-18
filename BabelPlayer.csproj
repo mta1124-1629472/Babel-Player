@@ -61,7 +61,7 @@
       <LastGenOutput>Strings.Designer.cs</LastGenOutput>
       <ManifestResourceName>Babel.Player.Resources.Strings</ManifestResourceName>
     </EmbeddedResource>
-    <Compile Include="Resources\Strings.Designer.cs">
+    <Compile Update="Resources\Strings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>Strings.resx</DependentUpon>
@@ -71,8 +71,11 @@
   <ItemGroup>
     <Compile Remove="BabelPlayer\**" />
     <Compile Remove="BabelPlayer.Tests\**" />
+    <Compile Remove="Tools\**" />
     <EmbeddedResource Remove="BabelPlayer\**" />
+    <EmbeddedResource Remove="Tools\**" />
     <None Remove="BabelPlayer\**" />
+    <None Remove="Tools\**" />
   </ItemGroup>
 
   <ItemGroup>
