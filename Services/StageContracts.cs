@@ -37,14 +37,19 @@ public sealed record TranslationRequest(
     string TargetLanguage, 
     string ModelName);
 
-public sealed record SingleSegmentTranslationRequest(
+public sealed record SingleSegmentTranslationTextRequest(
     string SourceText, 
     string SegmentId, 
-    string TranslationJsonPath, 
-    string OutputJsonPath, 
     string SourceLanguage, 
     string TargetLanguage, 
     string ModelName);
+
+public sealed record SingleSegmentTranslationTextResult(
+    bool Success,
+    string TranslatedText,
+    string SourceLanguage,
+    string TargetLanguage,
+    string? ErrorMessage);
 
 public sealed record TranslationResult(
     bool Success,
