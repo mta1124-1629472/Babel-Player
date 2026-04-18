@@ -71,7 +71,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(culture);
 
-        if (Equals(_currentCulture, culture))
+        if (string.Equals(_currentCulture.Name, culture.Name, StringComparison.Ordinal))
             return;
 
         _currentCulture = culture;
