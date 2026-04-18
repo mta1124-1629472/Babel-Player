@@ -11,6 +11,17 @@ namespace Babel.Player.Services;
 
 public sealed class AvaloniaDialogService : IDialogService
 {
+    /// <summary>
+    /// Shows a modal warmup notice dialog to the user on the UI thread and reports whether the user chose "Don't show again".
+    /// </summary>
+    /// <param name="cancellationToken">Accepted for API compatibility; not observed by this method.</param>
+    /// <returns>`true` if the user selected "Don't show again"; `false` otherwise (including when the application is not available or the dialog was dismissed).</returns>
+    /// <remarks>
+    /// - Guard: If <c>Application.Current</c> is <c>null</c>, the method returns <c>false</c> immediately and does not attempt to dispatch to the UI thread.
+    /// - Threading: Ensures the dialog is created and shown on the UI thread; if already on the UI thread it calls the UI routine directly, otherwise it invokes the UI routine via the UI dispatcher.
+    /// - Persistence: The returned value indicates the user's choice but this method does not persist that choice to any storage or session state.
+    /// - Cancellation: The provided <paramref name="cancellationToken"/> is not used; callers should not expect cancellation to abort the dialog display.
+    /// </remarks>
     public async Task<bool> ShowWarmupNoticeAsync(CancellationToken cancellationToken = default)
     {
         if (Application.Current is null)

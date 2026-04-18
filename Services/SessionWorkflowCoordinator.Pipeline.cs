@@ -1245,7 +1245,20 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>
     /// Re-run transcription, optionally continuing through diarization (if enabled), translation, and TTS.
+    /// <summary>
+    /// Resets the pipeline state to MediaLoaded and re-runs transcription, optionally continuing through remaining downstream stages.
     /// </summary>
+    /// <remarks>
+    /// Entry state: expects the session to have media ingested (a valid source media path) since the pipeline is reset to MediaLoaded.
+    /// On success:
+    /// - If <paramref name="remainingDownstream"/> is true, the method advances the pipeline from MediaLoaded through whatever downstream stages are required (the final stage depends on pipeline progression).
+    /// - If <paramref name="remainingDownstream"/> is false, the method runs only the transcription stage and leaves the session at <see cref="SessionWorkflowStage.Transcribed"/>.
+    /// The method persists the session immediately after resetting the pipeline (synchronous save) and delegates persistence of later stage changes to downstream operations invoked.
+    /// Cancellation: honors the provided <paramref name="cancellationToken"/> and will propagate cancellation to the advanced or transcription operations, which may throw <see cref="OperationCanceledException"/>.
+    /// </remarks>
+    /// <param name="remainingDownstream">If true, continue running the pipeline after transcription (advance through remaining stages); if false, run only the transcription stage.</param>
+    /// <param name="stageProgress">Optional progress reporter that will be forwarded to downstream stage execution for progress updates.</param>
+    /// <param name="cancellationToken">Cancellation token to observe while performing downstream operations.</param>
     internal async Task RerunTranscriptionAsync(
         bool remainingDownstream,
         IProgress<PipelineStageUpdate>? stageProgress,
@@ -1269,7 +1282,18 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>
     /// Re-run diarization; optionally continue with translation and TTS afterward.
+    /// <summary>
+    /// Reruns diarization for the current session and updates pipeline state; then either stops, continues, or advances the pipeline based on the caller's intent.
     /// </summary>
+    /// <remarks>
+    /// Entry state: intended to run on a session that contains transcribed audio (the method will operate correctly if transcription output exists).  
+    /// Exit state on success: the session stage will be left at one of Transcribed, Diarized, or Translated depending on whether diarization markers are present and whether downstream stages are requested.  
+    /// Persistence: when the pipeline is reset to Transcribed, Diarized, or Translated this method saves the session state via SaveCurrentSession().  
+    /// Cancellation: the provided <paramref name="cancellationToken"/> is honored and will cause the operation to cancel when requested.
+    /// </remarks>
+    /// <param name="remainingDownstream">If true, continue executing downstream pipeline stages after rerunning diarization; if false, only rerun diarization and return.</param>
+    /// <param name="stageProgress">Optional progress reporter used when continuing or advancing pipeline stages.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation.</param>
     internal async Task RerunDiarizationAsync(
         bool remainingDownstream,
         IProgress<PipelineStageUpdate>? stageProgress,

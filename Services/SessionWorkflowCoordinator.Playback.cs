@@ -535,6 +535,14 @@ public sealed partial class SessionWorkflowCoordinator
     /// </remarks>
     /// <param name="segmentId">The identifier of the segment to modify; must be non-empty and is trimmed before use.</param>
     /// <param name="mode">Override mode, or <c>null</c> to remove the entry (inherit session default).</param>
+    /// <summary>
+    /// Set or remove a per-segment timing mode override for the given segment ID.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment to modify; leading and trailing whitespace are ignored.</param>
+    /// <param name="mode">The timing mode to set, or null to remove any existing override for the segment.</param>
+    /// <remarks>
+    /// Operation is thread-safe and will persist the updated session when a change is made via SaveCurrentSession(); if the new value is identical to the existing one no persistence occurs. This method validates <paramref name="segmentId"/> and throws <see cref="ArgumentException"/> for null, empty, or whitespace values.
+    /// </remarks>
     /// <exception cref="ArgumentException">Thrown when <paramref name="segmentId"/> is null, empty, or whitespace.</exception>
     public void SetSegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
     {
@@ -586,6 +594,17 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Removes the voice assignment for the given speaker from the current session and persists the session when a change occurs.
+    /// </summary>
+    /// <param name="speakerId">The speaker identifier whose voice assignment should be removed; must not be null, empty, or whitespace.</param>
+    /// <remarks>
+    /// - Validates <paramref name="speakerId"/> and throws <see cref="ArgumentException"/> if it is null, empty, or whitespace.
+    /// - Acquires the coordinator's session lock while updating <c>CurrentSession.SpeakerVoiceAssignments</c>.
+    /// - If no assignment exists for the specified speaker, the method returns without persisting.
+    /// - When removal results in an empty assignments dictionary, the session value is set to <c>null</c>.
+    /// - On a successful change the method calls <c>SaveCurrentSession()</c> to persist the session.
+    /// </remarks>
     public void RemoveSpeakerVoiceAssignment(string speakerId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
@@ -666,6 +685,17 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Removes a stored reference audio path for the specified speaker from the current session and persists the session when a change is made.
+    /// </summary>
+    /// <param name="speakerId">The identifier of the speaker whose reference audio path should be removed. Must be non-empty and non-whitespace.</param>
+    /// <remarks>
+    /// Expected state on entry: a current session may be loaded; no specific pipeline stage is required. 
+    /// State on success: the session's <c>SpeakerReferenceAudioPaths</c> mapping will have the entry for <paramref name="speakerId"/> removed; if the mapping becomes empty the session field is set to <c>null</c>. 
+    /// Persistence: the method calls <c>SaveCurrentSession()</c> only when a removal actually occurs. 
+    /// Guard behavior: if the session has no speaker reference mappings or the given <paramref name="speakerId"/> is not present, the method performs no change and does not persist the session.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="speakerId"/> is null, empty, or consists only of whitespace.</exception>
     public void RemoveSpeakerReferenceAudioPath(string speakerId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
@@ -1388,7 +1418,13 @@ public sealed partial class SessionWorkflowCoordinator
     /// <summary>
     /// Schedules a fire-and-forget disposal of the TTS service on a thread-pool thread
     /// so that in-flight requests are not blocked by the calling Dispose context.
+    /// <summary>
+    /// Schedules disposal of the coordinator's TTS service on a background thread when the service implements <see cref="IDisposable"/>.
     /// </summary>
+    /// <remarks>
+    /// If no disposable TTS service is present, the method returns immediately. Disposal is performed asynchronously and any exception
+    /// thrown during disposal is caught and logged as a warning; exceptions are not propagated to the caller.
+    /// </remarks>
     private void ScheduleSafeTtsDisposal()
     {
         if (_ttsService is not IDisposable disposable) return;
