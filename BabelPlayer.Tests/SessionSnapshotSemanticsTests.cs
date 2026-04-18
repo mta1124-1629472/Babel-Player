@@ -537,6 +537,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         Assert.Null(result.TtsGeneratedAtUtc);
         Assert.Null(result.TtsSegmentsPath);
         Assert.Null(result.TtsSegmentAudioPaths);
+        Assert.Null(result.TtsSegmentDurations);
         Assert.Null(result.TtsRuntime);
     }
 
@@ -562,6 +563,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         // TTS should also be cleared
         Assert.Null(result.TtsPath);
         Assert.Null(result.TtsVoice);
+        Assert.Null(result.TtsSegmentDurations);
     }
 
     // ── ClearTranscriptionOutputs ─────────────────────────────────────────────
