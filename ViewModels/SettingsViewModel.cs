@@ -752,7 +752,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.AppLanguage        = string.IsNullOrWhiteSpace(SelectedAppLanguage?.Code)
             ? settings.AppLanguage
-            : SelectedAppLanguage.Code;
+            : string.Equals(SelectedAppLanguage.Code, "auto", StringComparison.OrdinalIgnoreCase)
+                ? "auto"
+                : LocalizationService.ResolveAppLanguage(SelectedAppLanguage.Code);
         // Applied language is now persisted; suppress the Dispose-time revert to
         // _originalCulture even if the user later closes the window via the X button.
         _languageChangeCommitted = true;

@@ -54,6 +54,14 @@ GERMAN_VERIFICATION: Dict[str, str] = {
     "Window_Title_Wizard": "Sprecher-Referenz-Assistent",
     "Section_Translation": "\u00dcBERSETZUNG",
     "Section_Transcription": "TRANSKRIPTION",
+    "Automation_RerunTranscription": "Transkription erneut ausf\u00fchren",
+    "Automation_RerunDiarization": "Sprecherzuordnung erneut ausf\u00fchren",
+    "Automation_RerunTranslation": "\u00dcbersetzung erneut ausf\u00fchren",
+    "Automation_RerunDub": "Dub-Audio neu erzeugen",
+    "Automation_ExpandErrorDetails": "Fehlerdetails erweitern",
+    "Label_SegmentCount_One": "{0} Segment",
+    "Label_SegmentCount_Many": "{0} Segmente",
+    "Automation_RefreshSegments": "Segmente aktualisieren",
     "Settings_Group_AppLanguage": "App-Sprache",
     "Settings_Hint_AppLanguage":
         "\u00c4ndert die Sprache der Babel Player-Oberfl\u00e4che. "
