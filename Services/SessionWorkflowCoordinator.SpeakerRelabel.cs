@@ -10,10 +10,19 @@ namespace Babel.Player.Services;
 public sealed partial class SessionWorkflowCoordinator
 {
     /// <summary>
-    /// Rewrites every segment with <paramref name="fromSpeakerId"/> to <paramref name="toSpeakerId"/> in the transcript
-    /// and translation (if present), then remaps per-speaker reference and voice dictionaries on the session.
+    /// Relabels all diarized transcript (and translation) segments from one speaker ID to another and updates session speaker mappings.
     /// </summary>
-    /// <returns>The number of transcript segments relabeled.</returns>
+    /// <param name="fromSpeakerId">The speaker ID to replace; leading/trailing whitespace is trimmed and must not be null or empty.</param>
+    /// <param name="toSpeakerId">The target speaker ID to assign; leading/trailing whitespace is trimmed and must not be null or empty.</param>
+    /// <param name="cancellationToken">Token to cancel I/O operations performed while loading or writing artifact files.</param>
+    /// <returns>The number of transcript segments whose SpeakerId was changed from <c>fromSpeakerId</c> to <c>toSpeakerId</c>.</returns>
+    /// <remarks>
+    /// Entry requirements: a saved transcript file path must exist on the current session (<see cref="CurrentSession.TranscriptPath"/>); otherwise the method throws.
+    /// On success the method persists changes to the transcript and translation files (if modified), updates the session's speaker voice and reference audio mappings atomically, and calls <see cref="SaveCurrentSession"/>.
+    /// If <c>fromSpeakerId</c> and <c>toSpeakerId</c> are equal after trimming, the method performs no work and returns 0.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="fromSpeakerId"/> or <paramref name="toSpeakerId"/> is null, empty, or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no saved transcript file is available on the current session.</exception>
     public async Task<int> MergeDiarizedSpeakersAsync(
         string fromSpeakerId,
         string toSpeakerId,
@@ -83,36 +92,22 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
-        var voices = CurrentSession.SpeakerVoiceAssignments is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
-        if (voices.TryGetValue(from, out var voicePath) && !string.IsNullOrWhiteSpace(voicePath))
-        {
-            if (!voices.ContainsKey(to))
-                voices[to] = voicePath;
-            voices.Remove(from);
-        }
-        else
-        {
-            voices.Remove(from);
-        }
-
-        var refs = CurrentSession.SpeakerReferenceAudioPaths is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
-        if (refs.TryGetValue(from, out var refPath) && !string.IsNullOrWhiteSpace(refPath))
-        {
-            if (!refs.ContainsKey(to))
-                refs[to] = refPath;
-            refs.Remove(from);
-        }
-        else
-        {
-            refs.Remove(from);
-        }
-
         lock (_sessionLock)
         {
+            var voices = CurrentSession.SpeakerVoiceAssignments is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(CurrentSession.SpeakerVoiceAssignments, StringComparer.Ordinal);
+            if (voices.TryGetValue(from, out var voicePath) && !string.IsNullOrWhiteSpace(voicePath) && !voices.ContainsKey(to))
+                voices[to] = voicePath;
+            voices.Remove(from);
+
+            var refs = CurrentSession.SpeakerReferenceAudioPaths is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(CurrentSession.SpeakerReferenceAudioPaths, StringComparer.Ordinal);
+            if (refs.TryGetValue(from, out var refPath) && !string.IsNullOrWhiteSpace(refPath) && !refs.ContainsKey(to))
+                refs[to] = refPath;
+            refs.Remove(from);
+
             CurrentSession = CurrentSession with
             {
                 SpeakerVoiceAssignments = voices.Count == 0 ? null : voices,

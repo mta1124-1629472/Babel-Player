@@ -103,6 +103,138 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
 
     [Fact]
     [Trait("Category", "Smoke")]
+    public void LoadMedia_NewSource_ReplacesStaleSessionState()
+    {
+        var coordinator = CreateCoordinator();
+        coordinator.Initialize();
+
+        var oldCreatedAt = DateTimeOffset.Parse("2024-01-15T12:00:00Z");
+        var staleSourcePath = CreateMediaFile("stale-source.mp4");
+
+        coordinator.CurrentSession = new WorkflowSessionSnapshot(
+            Guid.NewGuid(),
+            SessionWorkflowStage.TtsGenerated,
+            oldCreatedAt,
+            oldCreatedAt,
+            "stale",
+            SourceMediaPath: staleSourcePath,
+            IngestedMediaPath: Path.Combine(_dir, "stale-ingested.mp4"),
+            VocalsAudioPath: "/session/stems/vocals.wav",
+            AmbianceAudioPath: "/session/stems/ambiance.wav",
+            InstrumentalAudioPath: "/session/stems/instrumental.wav",
+            MediaLoadedAtUtc: oldCreatedAt,
+            TranscriptPath: "/session/transcripts/source.json",
+            TranscribedAtUtc: oldCreatedAt,
+            TranslationPath: "/session/translations/source.json",
+            SourceLanguage: "es",
+            TargetLanguage: "en",
+            TranslatedAtUtc: oldCreatedAt,
+            TtsPath: "/session/tts/source.mp3",
+            MixedDubAudioPath: "/session/tts/source-mixed.mp3",
+            TtsVoice: "custom-voice",
+            TtsGeneratedAtUtc: oldCreatedAt,
+            TtsSegmentsPath: "/session/tts/segments/source.json",
+            TtsSegmentAudioPaths: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = "/session/tts/segments/segment_0.0.mp3",
+            },
+            TtsSegmentDurations: new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = 1.25,
+            },
+            SpeakerVoiceAssignments: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["speaker_0"] = "speaker-voice",
+            },
+            SpeakerReferenceAudioPaths: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["speaker_0"] = "/session/tts/references/speaker_0.wav",
+            },
+            MultiSpeakerEnabled: false,
+            DefaultTtsVoiceFallback: "fallback-voice",
+            DiarizationProvider: "legacy-diarization",
+            SpeakersDetectedAtUtc: oldCreatedAt,
+            SegmentTimingModeOverrides: new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = SegmentTimingMode.Stretch,
+            });
+
+        var mediaPath = CreateMediaFile("fresh-source.mp4");
+        coordinator.LoadMedia(mediaPath);
+
+        var session = coordinator.CurrentSession;
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, session.Stage);
+        Assert.Equal(mediaPath, session.SourceMediaPath);
+        Assert.NotNull(session.IngestedMediaPath);
+        Assert.True(File.Exists(session.IngestedMediaPath));
+        Assert.NotEqual(oldCreatedAt, session.CreatedAtUtc);
+        Assert.Null(session.VocalsAudioPath);
+        Assert.Null(session.AmbianceAudioPath);
+        Assert.Null(session.InstrumentalAudioPath);
+        Assert.Null(session.TranscriptPath);
+        Assert.Null(session.TranslationPath);
+        Assert.Null(session.TtsPath);
+        Assert.Null(session.MixedDubAudioPath);
+        Assert.Null(session.TtsSegmentsPath);
+        Assert.Null(session.TtsSegmentAudioPaths);
+        Assert.Null(session.TtsSegmentDurations);
+        Assert.Null(session.SegmentTimingModeOverrides);
+        Assert.Null(session.SpeakerVoiceAssignments);
+        Assert.Null(session.SpeakerReferenceAudioPaths);
+        Assert.Null(session.DefaultTtsVoiceFallback);
+        Assert.Null(session.DiarizationProvider);
+        Assert.Null(session.SpeakersDetectedAtUtc);
+        Assert.True(session.MultiSpeakerEnabled);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public void ResetPipelineToMediaLoaded_ClearsPerSegmentTimingState()
+    {
+        var coordinator = CreateCoordinator();
+        coordinator.Initialize();
+
+        var mediaPath = CreateMediaFile("reset-source.mp4");
+        var ingestedPath = CreateMediaFile("reset-ingested.mp4");
+        var now = DateTimeOffset.Parse("2025-01-15T12:00:00Z");
+
+        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            SourceMediaPath = mediaPath,
+            IngestedMediaPath = ingestedPath,
+            MediaLoadedAtUtc = now,
+            TtsSegmentsPath = "/session/tts/segments/source.json",
+            TtsSegmentAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = "/session/tts/segments/segment_0.0.mp3",
+            },
+            TtsSegmentDurations = new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = 1.5,
+            },
+            SegmentTimingModeOverrides = new Dictionary<string, SegmentTimingMode>(StringComparer.Ordinal)
+            {
+                ["segment_0.0"] = SegmentTimingMode.Pause,
+            },
+        };
+
+        coordinator.ResetPipelineToMediaLoaded();
+
+        var session = coordinator.CurrentSession;
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, session.Stage);
+        Assert.Equal(mediaPath, session.SourceMediaPath);
+        Assert.Equal(ingestedPath, session.IngestedMediaPath);
+        Assert.Equal(now, session.MediaLoadedAtUtc);
+        Assert.Null(session.TtsSegmentsPath);
+        Assert.Null(session.TtsSegmentAudioPaths);
+        Assert.Null(session.TtsSegmentDurations);
+        Assert.Null(session.SegmentTimingModeOverrides);
+        Assert.Equal("Ready.", session.StatusMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
     public async Task GenerateTtsAsync_WithAmbiance_PersistsMixedDub()
     {
         var audioProcessing = new FakeAudioProcessingService();

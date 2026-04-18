@@ -46,8 +46,8 @@ public interface IProviderLifecycleManager
 /// Commits pipeline stage results to session state.
 public interface ISessionCommitter
 {
-    void CommitTranscriptionSessionState(TranscriptionResult result, string transcriptPath);
-    void CommitTranslationSessionState(
+    Task CommitTranscriptionSessionStateAsync(TranscriptionResult result, string transcriptPath);
+    Task CommitTranslationSessionStateAsync(
         TranslationResult result,
         string translationPath,
         string sourceLanguage,

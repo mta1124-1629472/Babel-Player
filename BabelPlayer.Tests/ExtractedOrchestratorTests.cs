@@ -542,15 +542,21 @@ public sealed class ExtractedOrchestratorTests
 
         public (TranslationResult Result, string TranslationPath, string SourceLanguage, string TargetLanguage)? TranslationCommit { get; private set; }
 
-        public void CommitTranscriptionSessionState(TranscriptionResult result, string transcriptPath) =>
+        public Task CommitTranscriptionSessionStateAsync(TranscriptionResult result, string transcriptPath)
+        {
             TranscriptionCommit = (result, transcriptPath);
+            return Task.CompletedTask;
+        }
 
-        public void CommitTranslationSessionState(
+        public Task CommitTranslationSessionStateAsync(
             TranslationResult result,
             string translationPath,
             string sourceLanguage,
-            string targetLanguage) =>
+            string targetLanguage)
+        {
             TranslationCommit = (result, translationPath, sourceLanguage, targetLanguage);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeDiarizationExecutor : IDiarizationExecutor

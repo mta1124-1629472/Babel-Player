@@ -72,17 +72,17 @@ public sealed partial class SessionWorkflowCoordinator :
             PipelineStageContext.FromShared(stageContext),
             cancellationToken);
 
-    void ISessionCommitter.CommitTranscriptionSessionState(
+    Task ISessionCommitter.CommitTranscriptionSessionStateAsync(
         TranscriptionResult result,
         string transcriptPath) =>
-        CommitTranscriptionSessionState(result, transcriptPath);
+        CommitTranscriptionSessionStateAsync(result, transcriptPath);
 
-    void ISessionCommitter.CommitTranslationSessionState(
+    Task ISessionCommitter.CommitTranslationSessionStateAsync(
         TranslationResult result,
         string translationPath,
         string sourceLanguage,
         string targetLanguage) =>
-        CommitTranslationSessionState(result, translationPath, sourceLanguage, targetLanguage);
+        CommitTranslationSessionStateAsync(result, translationPath, sourceLanguage, targetLanguage);
 
     async Task<(bool SpeakerAssignmentsChanged, int SpeakerCount, int SegmentCount)>
         IDiarizationExecutor.ExecuteDiarizationAsync(
