@@ -318,7 +318,13 @@ The English base `Resources/Strings.resx` is maintained by `scripts/build_string
 
 ```powershell
 $env:DEEPL_API_KEY = "<your-deepl-key>"
-dotnet run --project Tools/LocaleGenerator -c Release
+dotnet run --project Tools/LocaleGenerator -c Release -- --languages de,fr,ja
+```
+
+Pass LocaleGenerator flags after `--` so `dotnet run` does not consume them first. For example:
+
+```powershell
+dotnet run --project Tools/LocaleGenerator -c Release -- --api-key "<your-deepl-key>" --languages ar,de,fr --source Resources/Strings.resx --out Resources
 ```
 
 `--api-key <KEY>`, `--languages ar,de,...`, `--source`, and `--out` override the defaults. The tool skips any language that is not in DeepL's v2 catalog and prints it in the summary for manual review.

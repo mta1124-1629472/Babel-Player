@@ -70,10 +70,10 @@
     <value>Sluit</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Sla</value>
+    <value>Opslaan</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Duidelijk</value>
+    <value>Wissen</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
     <value>OK</value>
@@ -139,7 +139,7 @@
     <value>Vocalen scheiden voor transcriptie</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>OVERDRACHT</value>
+    <value>TRANSCRIPTIE</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
     <value>Transcriptie opnieuw uitvoeren (alleen deze stap kiezen of ook stroomafwaarts)</value>
@@ -154,7 +154,7 @@
     <value>Model</value>
   </data>
   <data name="Status_NeedsDownload" xml:space="preserve">
-    <value>Behoeften Downloaden</value>
+    <value>⬇ Download vereist</value>
   </data>
   <data name="Status_Ready" xml:space="preserve">
     <value>Klaar</value>
@@ -823,7 +823,7 @@
     <value>Wijs stemmen toe aan luidsprekers en stel referentie-audioclips in. Gebruik de preview om goede clips te vinden en klik dan op 'Use Playhead' om het huidige moment te pakken.</value>
   </data>
   <data name="Wizard_Toggle_NeedsAttention" xml:space="preserve">
-    <value>Show heeft aandacht nodig</value>
+    <value>Vereist aandacht</value>
   </data>
   <data name="Wizard_Tooltip_NeedsAttention" xml:space="preserve">
     <value>Laat alleen sprekers zien die moeten worden nagekeken of die slechte referenties hebben</value>
@@ -943,3 +943,5 @@
     <value>Chinees (Vereenvoudigd)</value>
   </data>
 </root>
+
+

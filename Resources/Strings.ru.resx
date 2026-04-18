@@ -91,7 +91,7 @@
     <value>Перезапустите</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Игрок Бабеля</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>Babel Player - Настройки</value>
@@ -190,13 +190,13 @@
     <value>Мастер настройки динамиков...</value>
   </data>
   <data name="Section_Translation" xml:space="preserve">
-    <value>TRANSLATION</value>
+    <value>ПЕРЕВОД</value>
   </data>
   <data name="Tooltip_RerunTranslation" xml:space="preserve">
     <value>Повторный перевод (выберите только этот этап или включите дубляж)</value>
   </data>
   <data name="Section_Dub" xml:space="preserve">
-    <value>DUB</value>
+    <value>ДУБЛЯЖ</value>
   </data>
   <data name="Tooltip_RerunDub" xml:space="preserve">
     <value>Перегенерируйте звук дубляжа из текущего перевода</value>
@@ -310,7 +310,7 @@
     <value>Используйте время рендеринга сессии для этого сегмента</value>
   </data>
   <data name="Option_Off" xml:space="preserve">
-    <value>С сайта</value>
+    <value>Выкл.</value>
   </data>
   <data name="Tooltip_TimingOff" xml:space="preserve">
     <value>Воспроизвести TTS как есть для этого сегмента в рендеринге дубляжа/экспорта</value>
@@ -463,7 +463,7 @@
     <value>Авто (система)</value>
   </data>
   <data name="Settings_Group_Gpu" xml:space="preserve">
-    <value>GPU Backend</value>
+    <value>Графический процессор (GPU)</value>
   </data>
   <data name="Settings_Label_PreferredGpu" xml:space="preserve">
     <value>Предпочтительный локальный бэкэнд GPU</value>
@@ -475,7 +475,7 @@
     <value>Состояние бэкэнда</value>
   </data>
   <data name="Settings_Group_DockerGpu" xml:space="preserve">
-    <value>Docker GPU Service</value>
+    <value>Служба Docker GPU</value>
   </data>
   <data name="Settings_Label_AdvancedGpuUrl" xml:space="preserve">
     <value>URL-адрес службы Advanced GPU</value>
@@ -625,7 +625,7 @@
     <value>Управляйте локально размещенными моделями. Облачные провайдеры не требуют загрузки.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Игрок Бабеля</value>
+    <value>Babel Player</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
     <value>Лицензия AGPL-3.0</value>
@@ -922,10 +922,10 @@
     <value>Корейский</value>
   </data>
   <data name="Language_nl" xml:space="preserve">
-    <value>Голландия</value>
+    <value>Нидерландский</value>
   </data>
   <data name="Language_pl" xml:space="preserve">
-    <value>Польша</value>
+    <value>Польский</value>
   </data>
   <data name="Language_pt" xml:space="preserve">
     <value>Португальский</value>
@@ -937,9 +937,10 @@
     <value>Шведский</value>
   </data>
   <data name="Language_tr" xml:space="preserve">
-    <value>Турецкая</value>
+    <value>Турецкий</value>
   </data>
   <data name="Language_zh" xml:space="preserve">
     <value>Китайский (упрощенный)</value>
   </data>
 </root>
+

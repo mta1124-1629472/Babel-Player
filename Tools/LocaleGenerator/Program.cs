@@ -18,9 +18,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -31,13 +33,148 @@ namespace Babel.Player.Tools.LocaleGenerator;
 
 internal static class Program
 {
-    // Canonical set of Babel Player UI target languages (lowercase ISO 639-1).
-    // Must match the NLLB catalog minus "en".
-    private static readonly string[] DefaultTargets =
-    [
-        "ar", "de", "es", "fr", "hi", "it", "ja", "ko",
-        "nl", "pl", "pt", "ru", "sv", "tr", "zh"
-    ];
+    // Protected overrides for product branding and UI terminology that DeepL
+    // routinely mistranslates in short command labels.
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ProtectedOverrides =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ar"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Menu_File_ForceClose"] = "إغلاق إجباري",
+                ["Language_nl"] = "الهولندية",
+                ["Wizard_Button_Play"] = "تشغيل",
+                ["Wizard_Tooltip_JumpToSegments"] = "انقر فوق الطابع الزمني للانتقال إلى تلك النقطة في الفيديو، ثم استخدم \"استخدام رأس التشغيل\".",
+                ["Settings_Nav_General"] = "عام",
+                ["Settings_Group_DockerGpu"] = "خدمة Docker لوحدة معالجة الرسومات",
+            },
+            ["de"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Status_Stale"] = "veraltet",
+                ["Tooltip_Volume"] = "Lautstärke",
+                ["Settings_Placeholder_TargetPeak"] = "Auto oder Nits",
+                ["Wizard_Button_Finish"] = "Fertigstellen",
+                ["Section_Transcription"] = "TRANSKRIPTION",
+                ["Section_Translation"] = "ÜBERSETZUNG",
+                ["Common_Clear"] = "Leeren",
+                ["Common_Apply"] = "Anwenden",
+                ["Window_Title_Main"] = "Babel Player",
+            },
+            ["es"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Common_Clear"] = "Limpiar",
+                ["Common_Ok"] = "Aceptar",
+                ["Common_Apply"] = "Aplicar",
+                ["Common_Browse"] = "Examinar",
+            },
+            ["fr"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Common_Save"] = "Enregistrer",
+                ["Common_Clear"] = "Effacer",
+                ["Common_Restart"] = "Redémarrer",
+                ["Status_NeedsDownload"] = "⬇ Téléchargement requis",
+                ["Wizard_Button_Finish"] = "Terminer",
+                ["Language_ru"] = "Russe",
+                ["Window_Title_Main"] = "Babel Player",
+                ["Button_RunPipeline"] = "Exécuter le pipeline",
+            },
+            ["hi"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Settings_Label_WorkersManual"] = "मैनुअल कर्मचारियों की संख्या:",
+            },
+            ["it"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Common_Save"] = "Salva",
+                ["Common_Clear"] = "Cancella",
+                ["Section_Pipeline"] = "PIPELINE",
+                ["Label_TargetSubDub"] = "Sottotitoli/Doppiaggio di destinazione",
+                ["Button_RunPipeline"] = "Esegui pipeline",
+                ["Button_CancelPipeline"] = "Annulla pipeline",
+                ["Wizard_Button_Play"] = "Riproduci",
+                ["Wizard_Button_Finish"] = "Completa",
+            },
+            ["ja"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Window_Title_Main"] = "Babel Player",
+                ["Settings_About_AppName"] = "Babel Player",
+                ["Label_ActiveAsr"] = "使用中のASR:",
+                ["Button_Export"] = "エクスポート",
+                ["Language_sv"] = "スウェーデン語",
+            },
+            ["ko"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Status_Stale"] = "오래됨",
+                ["Option_Stretch"] = "늘이기",
+                ["Common_Apply"] = "적용",
+                ["Section_Transcription"] = "전사",
+                ["Section_Diarization"] = "화자 분리 / 화자",
+            },
+            ["nl"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Common_Save"] = "Opslaan",
+                ["Common_Clear"] = "Wissen",
+                ["Section_Transcription"] = "TRANSCRIPTIE",
+                ["Status_NeedsDownload"] = "⬇ Download vereist",
+                ["Wizard_Toggle_NeedsAttention"] = "Vereist aandacht",
+            },
+            ["pl"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Menu_File_ForceClose"] = "Wymuś zamknięcie",
+                ["Label_TargetSubDub"] = "Docelowe napisy/dubbing",
+                ["Button_RunPipeline"] = "Uruchom pipeline",
+                ["Settings_Label_GpuRenderApi"] = "Interfejs renderowania GPU:",
+                ["Settings_Group_GpuNext"] = "Backend GPU-Next",
+            },
+            ["pt"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Section_Pipeline"] = "PIPELINE",
+                ["Status_NeedsDownload"] = "⬇ Download necessário",
+                ["Button_RunPipeline"] = "Executar pipeline",
+            },
+            ["ru"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Window_Title_Main"] = "Babel Player",
+                ["Window_Title_Settings"] = "Babel Player - Настройки",
+                ["Section_Translation"] = "ПЕРЕВОД",
+                ["Section_Dub"] = "ДУБЛЯЖ",
+                ["Option_Off"] = "Выкл.",
+                ["Settings_Group_Gpu"] = "Графический процессор (GPU)",
+                ["Settings_Group_DockerGpu"] = "Служба Docker GPU",
+                ["Language_nl"] = "Нидерландский",
+                ["Language_pl"] = "Польский",
+                ["Language_tr"] = "Турецкий",
+            },
+            ["sv"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Common_Close"] = "Stäng",
+                ["Menu_File_Close"] = "Stäng",
+                ["Crash_Button_Close"] = "Stäng",
+                ["Window_Title_Main"] = "Babel Player",
+                ["Settings_About_AppName"] = "Babel Player",
+                ["Section_Pipeline"] = "PIPELINE",
+                ["Section_Transcription"] = "TRANSKRIBERING",
+                ["Tooltip_RerunTranslation"] = "Kör översättningen igen (välj bara det här steget eller inkludera dubbning)",
+            },
+            ["tr"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Tooltip_OpenSettings"] = "Ayarları aç",
+                ["Language_de"] = "Almanca",
+                ["Language_it"] = "İtalyanca",
+                ["Language_sv"] = "İsveççe",
+                ["Common_Apply"] = "Uygula",
+                ["Section_Transcription"] = "TRANSKRİPSİYON",
+                ["Wizard_Button_Play"] = "Oynat",
+                ["Window_Title_Main"] = "Babel Player",
+            },
+            ["zh"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Common_Save"] = "保存",
+                ["Common_Clear"] = "清空",
+                ["Language_de"] = "德语",
+                ["Language_ru"] = "俄语",
+                ["Button_Export"] = "导出",
+                ["Window_Title_Main"] = "Babel Player",
+            },
+        };
 
     private static async Task<int> Main(string[] args)
     {
@@ -68,14 +205,14 @@ internal static class Program
             return 2;
         }
 
-        var sourcePath = ResolveSourcePath(options.SourcePath);
+        var sourcePath = ResolveRepoPath(options.SourcePath);
         if (!File.Exists(sourcePath))
         {
             Console.Error.WriteLine($"Source .resx not found: {sourcePath}");
             return 2;
         }
 
-        var outputDir = Path.GetFullPath(options.OutputDirectory);
+        var outputDir = ResolveRepoPath(options.OutputDirectory);
         Directory.CreateDirectory(outputDir);
 
         var entries = ReadResx(sourcePath);
@@ -166,10 +303,15 @@ internal static class Program
                 $"Expected {entries.Count} translations, got {translations.Count}.");
         }
 
-        var outputPath = Path.Combine(outputDir, $"Strings.{lang}.resx");
-        WriteResx(outputPath, entries.Select((kv, i) => new KeyValuePair<string, string>(
+        var localizedEntries = entries.Select((kv, i) => new KeyValuePair<string, string>(
             kv.Key,
-            string.IsNullOrEmpty(translations[i].Text) ? kv.Value : translations[i].Text)));
+            string.IsNullOrEmpty(translations[i].Text) ? kv.Value : translations[i].Text)).ToList();
+
+        ApplyProtectedOverrides(lang, localizedEntries);
+        ValidateLocalizedEntries(lang, localizedEntries);
+
+        var outputPath = Path.Combine(outputDir, $"Strings.{lang}.resx");
+        WriteResx(outputPath, localizedEntries);
 
         Console.WriteLine($"wrote {Path.GetFileName(outputPath)}");
     }
@@ -298,23 +440,104 @@ internal static class Program
         "    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>\n" +
         "  </resheader>\n";
 
-    private static string ResolveSourcePath(string configured)
+    private static void ApplyProtectedOverrides(string lang, List<KeyValuePair<string, string>> entries)
     {
-        if (File.Exists(configured))
-            return Path.GetFullPath(configured);
+        if (!ProtectedOverrides.TryGetValue(lang, out var overrides))
+            return;
 
-        // Walk up from the running binary to find the repo root that holds
-        // Resources/Strings.resx so the tool works from any working directory.
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
+        var indexByKey = entries
+            .Select((entry, index) => (entry.Key, index))
+            .ToDictionary(pair => pair.Key, pair => pair.index, StringComparer.Ordinal);
+
+        foreach (var pair in overrides)
         {
-            var candidate = Path.Combine(dir.FullName, configured);
-            if (File.Exists(candidate))
-                return candidate;
-            dir = dir.Parent;
+            if (!indexByKey.TryGetValue(pair.Key, out var index))
+                throw new InvalidOperationException($"Protected override key '{pair.Key}' is missing from the base Strings.resx.");
+
+            entries[index] = new KeyValuePair<string, string>(pair.Key, pair.Value);
+        }
+    }
+
+    private static void ValidateLocalizedEntries(string lang, IReadOnlyList<KeyValuePair<string, string>> entries)
+    {
+        var failures = new List<string>();
+
+        foreach (var entry in entries)
+        {
+            if (HasUnbalancedUiQuotes(entry.Value))
+                failures.Add($"{entry.Key}: unmatched UI quotes");
+            if (HasDuplicatedAdjacentWords(entry.Value))
+                failures.Add($"{entry.Key}: duplicated adjacent words");
         }
 
-        return Path.GetFullPath(configured);
+        if (ProtectedOverrides.TryGetValue(lang, out var overrides))
+        {
+            var entryMap = entries.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
+            foreach (var pair in overrides)
+            {
+                if (!entryMap.TryGetValue(pair.Key, out var actual) ||
+                    !string.Equals(actual, pair.Value, StringComparison.Ordinal))
+                {
+                    failures.Add($"{pair.Key}: expected protected override '{pair.Value}'");
+                }
+            }
+        }
+
+        if (failures.Count == 0)
+            return;
+
+        var preview = string.Join("; ", failures.Take(12));
+        if (failures.Count > 12)
+            preview += $"; ... ({failures.Count - 12} more)";
+
+        throw new InvalidOperationException($"[{lang}] generated .resx failed validation: {preview}");
+    }
+
+    private static bool HasUnbalancedUiQuotes(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        return Count(text, '"') % 2 != 0
+               || Count(text, '“') != Count(text, '”')
+               || Count(text, '«') != Count(text, '»');
+    }
+
+    private static int Count(string text, char ch) => text.Count(c => c == ch);
+
+    private static bool HasDuplicatedAdjacentWords(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        string? previous = null;
+        foreach (var token in Regex.Split(text, @"\s+"))
+        {
+            var normalized = NormalizeToken(token);
+            if (string.IsNullOrEmpty(normalized))
+                continue;
+
+            if (previous is not null && string.Equals(previous, normalized, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            previous = normalized;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeToken(string token) =>
+        token.Trim().Trim('"', '\'', '“', '”', '«', '»', '.', ',', ':', ';', '!', '?', '(', ')', '[', ']', '{', '}', '-', '–', '—');
+
+    private static string ResolveRepoPath(string configured)
+    {
+        if (Path.IsPathRooted(configured))
+            return Path.GetFullPath(configured);
+
+        var repoRoot = FindRepoRoot();
+        return repoRoot is null
+            ? Path.GetFullPath(configured)
+            : Path.GetFullPath(Path.Combine(repoRoot, configured));
     }
 
     private sealed record Options(
@@ -329,7 +552,7 @@ internal static class Program
         string? apiKey = null;
         string sourcePath = Path.Combine("Resources", "Strings.resx");
         string outputDirectory = "Resources";
-        string[] targets = DefaultTargets;
+        string[] targets = GetDefaultTargets();
         bool help = false;
 
         for (int i = 0; i < args.Length; i++)
@@ -349,7 +572,12 @@ internal static class Program
                     break;
                 case "--languages":
                     targets = RequireValue(args, ref i, arg)
-                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Select(CanonicalizeTargetLanguage)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    if (targets.Length == 0)
+                        throw new ArgumentException("No valid --languages values were provided.");
                     break;
                 case "-h":
                 case "--help":
@@ -369,6 +597,54 @@ internal static class Program
             throw new ArgumentException($"Missing value for {arg}.");
         index++;
         return args[index];
+    }
+
+    private static string[] GetDefaultTargets() =>
+        SupportedUiLanguageCatalog.IsoCodes
+            .Where(code => !string.Equals(code, "en", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(code => code, StringComparer.Ordinal)
+            .ToArray();
+
+    private static string CanonicalizeTargetLanguage(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            throw new ArgumentException("LocaleGenerator target languages cannot be blank.");
+
+        var trimmed = token.Trim().Replace('_', '-');
+        string canonical;
+        try
+        {
+            canonical = CultureInfo.GetCultureInfo(trimmed).TwoLetterISOLanguageName.ToLowerInvariant();
+        }
+        catch (CultureNotFoundException)
+        {
+            var separator = trimmed.IndexOf('-');
+            canonical = (separator > 0 ? trimmed[..separator] : trimmed).ToLowerInvariant();
+        }
+
+        if (string.Equals(canonical, "en", StringComparison.Ordinal))
+            throw new ArgumentException("English is the base resource. Omit 'en' from --languages.");
+
+        if (!SupportedUiLanguageCatalog.IsSupported(canonical))
+        {
+            throw new ArgumentException(
+                $"Unsupported UI language '{token}'. Supported values: {string.Join(", ", GetDefaultTargets())}");
+        }
+
+        return canonical;
+    }
+
+    private static string? FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Babel-Player.sln")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        return null;
     }
 
     private static void PrintUsage()

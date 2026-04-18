@@ -508,7 +508,7 @@
     <value>स्वचालित कर्मचारी गणना (CPU कोर और RAM से)</value>
   </data>
   <data name="Settings_Label_WorkersManual" xml:space="preserve">
-    <value>श्रमिक (शारीरिक):</value>
+    <value>मैनुअल कर्मचारियों की संख्या:</value>
   </data>
   <data name="Settings_Group_Hotkeys" xml:space="preserve">
     <value>कीबोर्ड शॉर्टकट</value>
@@ -943,3 +943,5 @@
     <value>चीनी (सरलीकृत)</value>
   </data>
 </root>
+
+

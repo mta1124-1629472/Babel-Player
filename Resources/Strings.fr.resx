@@ -70,10 +70,10 @@
     <value>Fermer</value>
   </data>
   <data name="Common_Save" xml:space="preserve">
-    <value>Économiser</value>
+    <value>Enregistrer</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Clair</value>
+    <value>Effacer</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
     <value>OK</value>
@@ -88,10 +88,10 @@
     <value>Télécharger</value>
   </data>
   <data name="Common_Restart" xml:space="preserve">
-    <value>Redémarrage</value>
+    <value>Redémarrer</value>
   </data>
   <data name="Window_Title_Main" xml:space="preserve">
-    <value>Joueur de Babel</value>
+    <value>Babel Player</value>
   </data>
   <data name="Window_Title_Settings" xml:space="preserve">
     <value>Babel Player - Paramètres</value>
@@ -154,7 +154,7 @@
     <value>Modèle</value>
   </data>
   <data name="Status_NeedsDownload" xml:space="preserve">
-    <value>⬇ Besoins Télécharger</value>
+    <value>⬇ Téléchargement requis</value>
   </data>
   <data name="Status_Ready" xml:space="preserve">
     <value>✓ Prêt</value>
@@ -259,7 +259,7 @@
     <value>Progression du pipeline</value>
   </data>
   <data name="Button_RunPipeline" xml:space="preserve">
-    <value>Pipeline en cours d'exécution</value>
+    <value>Exécuter le pipeline</value>
   </data>
   <data name="Button_CancelPipeline" xml:space="preserve">
     <value>Annuler le pipeline</value>
@@ -625,7 +625,7 @@
     <value>Gérer les modèles hébergés localement. Les fournisseurs de services en nuage n'exigent pas de téléchargements.</value>
   </data>
   <data name="Settings_About_AppName" xml:space="preserve">
-    <value>Joueur de Babel</value>
+    <value>Babel Player</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
     <value>Licence AGPL-3.0</value>
@@ -808,7 +808,7 @@
     <value>Rejeter toutes les modifications et fermer</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
-    <value>Finition</value>
+    <value>Terminer</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
     <value>Appliquer les changements de voix et de référence à la session</value>
@@ -931,7 +931,7 @@
     <value>Portugais</value>
   </data>
   <data name="Language_ru" xml:space="preserve">
-    <value>Russie</value>
+    <value>Russe</value>
   </data>
   <data name="Language_sv" xml:space="preserve">
     <value>Suédois</value>
@@ -943,3 +943,5 @@
     <value>Chinois (simplifié)</value>
   </data>
 </root>
+
+

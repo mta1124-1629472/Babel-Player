@@ -79,7 +79,7 @@
     <value>확인</value>
   </data>
   <data name="Common_Apply" xml:space="preserve">
-    <value>신청하기</value>
+    <value>적용</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
     <value>찾아보기</value>
@@ -139,7 +139,7 @@
     <value>전사 전 보컬 분리</value>
   </data>
   <data name="Section_Transcription" xml:space="preserve">
-    <value>번역</value>
+    <value>전사</value>
   </data>
   <data name="Tooltip_RerunTranscription" xml:space="preserve">
     <value>트랜스 크립 션 다시 실행 (이 단계만 선택하거나 다운스트림 포함)</value>
@@ -163,7 +163,7 @@
     <value>음성 언어(ASR 힌트)</value>
   </data>
   <data name="Section_Diarization" xml:space="preserve">
-    <value>일기 / 스피커</value>
+    <value>화자 분리 / 화자</value>
   </data>
   <data name="Tooltip_RerunDiarization" xml:space="preserve">
     <value>스피커 매핑 다시 실행(이 단계만 선택하거나 다운스트림 포함)</value>
@@ -253,7 +253,7 @@
     <value>공급자 진단</value>
   </data>
   <data name="Status_Stale" xml:space="preserve">
-    <value>stale</value>
+    <value>오래됨</value>
   </data>
   <data name="Automation_PipelineProgress" xml:space="preserve">
     <value>파이프라인 진행 상황</value>
@@ -316,7 +316,7 @@
     <value>렌더링된 더빙/내보내기에서 이 세그먼트의 TTS를 그대로 재생합니다.</value>
   </data>
   <data name="Option_Stretch" xml:space="preserve">
-    <value>Stretch</value>
+    <value>늘이기</value>
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>렌더링된 더빙/내보내기에서 이 세그먼트 창에 맞게 TTS 시간 늘이기</value>
@@ -943,3 +943,4 @@
     <value>중국어(간체)</value>
   </data>
 </root>
+

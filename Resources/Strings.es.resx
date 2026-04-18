@@ -73,16 +73,16 @@
     <value>Guardar</value>
   </data>
   <data name="Common_Clear" xml:space="preserve">
-    <value>Claro</value>
+    <value>Limpiar</value>
   </data>
   <data name="Common_Ok" xml:space="preserve">
-    <value>OK</value>
+    <value>Aceptar</value>
   </data>
   <data name="Common_Apply" xml:space="preserve">
-    <value>Solicitar</value>
+    <value>Aplicar</value>
   </data>
   <data name="Common_Browse" xml:space="preserve">
-    <value>Visite</value>
+    <value>Examinar</value>
   </data>
   <data name="Common_Download" xml:space="preserve">
     <value>Descargar</value>
@@ -943,3 +943,5 @@
     <value>Chino (simplificado)</value>
   </data>
 </root>
+
+

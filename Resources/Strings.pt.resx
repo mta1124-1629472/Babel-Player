@@ -121,7 +121,7 @@
     <value>Forçar o fecho</value>
   </data>
   <data name="Section_Pipeline" xml:space="preserve">
-    <value>Condutas</value>
+    <value>PIPELINE</value>
   </data>
   <data name="Tooltip_ClearPipeline" xml:space="preserve">
     <value>Limpar o pipeline e começar de novo</value>
@@ -154,7 +154,7 @@
     <value>Modelo</value>
   </data>
   <data name="Status_NeedsDownload" xml:space="preserve">
-    <value>⬇ Necessidades Descarregar</value>
+    <value>⬇ Download necessário</value>
   </data>
   <data name="Status_Ready" xml:space="preserve">
     <value>Pronto</value>
@@ -259,7 +259,7 @@
     <value>Progresso do gasoduto</value>
   </data>
   <data name="Button_RunPipeline" xml:space="preserve">
-    <value>Conduta de escoamento</value>
+    <value>Executar pipeline</value>
   </data>
   <data name="Button_CancelPipeline" xml:space="preserve">
     <value>Cancelar Pipeline</value>
@@ -943,3 +943,5 @@
     <value>Chinês (simplificado)</value>
   </data>
 </root>
+
+
