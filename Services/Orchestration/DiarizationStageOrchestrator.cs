@@ -64,7 +64,7 @@ internal sealed class DiarizationStageOrchestrator
         }
         finally
         {
-            _log.Info(
+            _log.Debug(
                 $"Stage telemetry stage=diarization success={(stageSucceeded ? "true" : "false")} " +
                 $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
                 $"elapsed_ms={stageTimer.ElapsedMilliseconds}");

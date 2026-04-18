@@ -47,12 +47,12 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
         var transcriptArtifact = await ArtifactJson.LoadTranscriptAsync(request.TranscriptJsonPath, cancellationToken);
         var inputArtifact = CreatePromptArtifact(transcriptArtifact, request.SourceLanguage, request.TargetLanguage);
 
-        _log.Info($"[GeminiTranslation] Translating {request.SourceLanguage} -> {request.TargetLanguage} with model '{request.ModelName}'.");
+        _log.Debug($"[GeminiTranslation] Translating {request.SourceLanguage} -> {request.TargetLanguage} with model '{request.ModelName}'.");
 
         var translatedArtifact = await RequestTranslatedArtifactAsync(inputArtifact, request.ModelName, cancellationToken);
         await WriteTranslationArtifactAsync(translatedArtifact, request.OutputJsonPath, cancellationToken);
 
-        _log.Info($"[GeminiTranslation] Complete: {translatedArtifact.Segments?.Count ?? 0} segments.");
+        _log.Debug($"[GeminiTranslation] Complete: {translatedArtifact.Segments?.Count ?? 0} segments.");
 
         return BuildTranslationResult(translatedArtifact);
     }
@@ -83,7 +83,7 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
             ],
         };
 
-        _log.Info($"[GeminiTranslation] Single-segment regen: {request.SegmentId}");
+        _log.Debug($"[GeminiTranslation] Single-segment regen: {request.SegmentId}");
 
         var translatedSingleSegment = await RequestTranslatedArtifactAsync(singleSegmentArtifact, request.ModelName, cancellationToken);
         var translatedText = translatedSingleSegment.Segments?[0].TranslatedText ?? string.Empty;
@@ -104,7 +104,7 @@ public sealed class GeminiTranslationProvider : ITranslationProvider
             throw new InvalidOperationException($"Segment '{request.SegmentId}' not found in translation JSON.");
 
         await WriteTranslationArtifactAsync(existing, request.OutputJsonPath, cancellationToken);
-        _log.Info($"[GeminiTranslation] Single-segment regen complete: {request.SegmentId}");
+        _log.Debug($"[GeminiTranslation] Single-segment regen complete: {request.SegmentId}");
 
         return BuildTranslationResult(existing);
     }

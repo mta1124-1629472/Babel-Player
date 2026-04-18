@@ -88,7 +88,7 @@ public sealed partial class SessionWorkflowCoordinator
         if (ambianceExpected)
         {
             mixedPath = BuildMixedDubPath(dubPath);
-            _log.Info(
+            _log.Debug(
                 $"Starting ambiance mix: dub='{dubPath}', ambiance='{ambiancePath}', output='{mixedPath}', " +
                 $"gainDb={ambianceMixDb:F1}");
 

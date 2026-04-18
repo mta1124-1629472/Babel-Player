@@ -50,7 +50,7 @@ public sealed class GoogleSttTranscriptionProvider : ITranscriptionProvider
             var audioBytes = await File.ReadAllBytesAsync(wavPath, cancellationToken);
             var languageCode = NormalizeLanguageCode(request.LanguageHint);
 
-            _log.Info($"[GoogleSTT] Transcribing: {wavPath} (lang={languageCode})");
+            _log.Debug($"[GoogleSTT] Transcribing: {wavPath} (lang={languageCode})");
 
             using var client = _clientFactory();
             var recognize = await client.RecognizeSpeechAsync(audioBytes, languageCode, cancellationToken);
@@ -86,7 +86,7 @@ public sealed class GoogleSttTranscriptionProvider : ITranscriptionProvider
 
             await File.WriteAllTextAsync(request.OutputJsonPath, ArtifactJson.SerializeTranscript(artifact), cancellationToken);
 
-            _log.Info($"[GoogleSTT] Complete: {segments.Count} segments.");
+            _log.Debug($"[GoogleSTT] Complete: {segments.Count} segments.");
 
             return new TranscriptionResult(true, segments, artifact.Language ?? "unknown", artifact.LanguageProbability, null);
         }
@@ -96,7 +96,7 @@ public sealed class GoogleSttTranscriptionProvider : ITranscriptionProvider
                 && File.Exists(wavPath))
             {
                 File.Delete(wavPath);
-                _log.Info($"[GoogleSTT] Deleted temporary wav: {wavPath}");
+                _log.Debug($"[GoogleSTT] Deleted temporary wav: {wavPath}");
             }
         }
     }

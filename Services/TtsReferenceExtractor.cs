@@ -44,8 +44,8 @@ public sealed class TtsReferenceExtractor : IAsyncDisposable
             Path.GetTempPath(),
             $"babel_tts_ref_{Guid.NewGuid():N}.wav");
 
-        _log.Info($"[TtsReferenceExtractor] Extracting reference audio from: {videoPath}");
-        _log.Info($"[TtsReferenceExtractor] Output path: {tempPath}");
+        _log.Debug($"[TtsReferenceExtractor] Extracting reference audio from: {videoPath}");
+        _log.Debug($"[TtsReferenceExtractor] Output path: {tempPath}");
 
         var psi = new ProcessStartInfo
         {
@@ -94,7 +94,7 @@ public sealed class TtsReferenceExtractor : IAsyncDisposable
         }
 
         _tempWavPath = tempPath;
-        _log.Info($"[TtsReferenceExtractor] Reference extraction complete: {tempPath}");
+        _log.Debug($"[TtsReferenceExtractor] Reference extraction complete: {tempPath}");
 
         return tempPath;
     }
@@ -129,7 +129,7 @@ public sealed class TtsReferenceExtractor : IAsyncDisposable
             if (File.Exists(_tempWavPath))
             {
                 File.Delete(_tempWavPath);
-                _log.Info($"[TtsReferenceExtractor] Cleaned up temp file: {_tempWavPath}");
+                _log.Debug($"[TtsReferenceExtractor] Cleaned up temp file: {_tempWavPath}");
             }
         }
         catch (Exception ex)

@@ -62,9 +62,12 @@ internal sealed class TranslationOrchestrator
                 ? "auto"
                 : PipelineStageReporter.NormalizePipelineLanguage(rawSourceLanguage, rawSourceLanguage);
 
+            var readinessMessage = BuildInfo.IsDevBuild
+                ? $"Checking translation runtime, provider readiness, language routing, and model availability for {_session.CurrentSettings.TranslationProvider} / {_session.CurrentSettings.TranslationModel}…"
+                : "Checking translation runtime and model availability…";
             PipelineStageReporter.ReportStage(
                 stageContext,
-                $"Checking translation runtime, provider readiness, language routing, and model availability for {_session.CurrentSettings.TranslationProvider} / {_session.CurrentSettings.TranslationModel}…",
+                readinessMessage,
                 progress01: 0,
                 isIndeterminate: true);
 
@@ -77,9 +80,12 @@ internal sealed class TranslationOrchestrator
 
             var translationService = _providers.TranslationService ??= _providers.CreateTranslationService();
 
+            var runMessage = BuildInfo.IsDevBuild
+                ? $"Running translation from {normalizedSourceLanguage} to {normalizedTargetLanguage} with {_session.CurrentSettings.TranslationProvider} / {_session.CurrentSettings.TranslationModel}. Segment text will be rewritten into the target language for dubbing."
+                : $"Running translation into {normalizedTargetLanguage}.";
             PipelineStageReporter.ReportStage(
                 stageContext,
-                $"Running translation from {normalizedSourceLanguage} to {normalizedTargetLanguage} with {_session.CurrentSettings.TranslationProvider} / {_session.CurrentSettings.TranslationModel}. Segment text will be rewritten into the target language for dubbing.",
+                runMessage,
                 progress01: 0,
                 isIndeterminate: true);
 
@@ -92,7 +98,7 @@ internal sealed class TranslationOrchestrator
                 translationDir,
                 $"{fileName}_{normalizedTargetLanguage}.json");
 
-            _log.Info(
+            _log.Debug(
                 $"Starting translation: {_session.CurrentSession.TranscriptPath} " +
                 $"({normalizedSourceLanguage} -> {normalizedTargetLanguage})");
 
@@ -124,15 +130,18 @@ internal sealed class TranslationOrchestrator
                 normalizedTargetLanguage).ConfigureAwait(false);
             stageSucceeded = true;
 
+            var completionMessage = BuildInfo.IsDevBuild
+                ? $"Translation complete. {result.Segments.Count} segments were translated from {normalizedSourceLanguage} to {normalizedTargetLanguage}."
+                : $"Translation complete. {result.Segments.Count} segments are ready for dubbing.";
             PipelineStageReporter.ReportStage(
                 stageContext,
-                $"Translation complete. {result.Segments.Count} segments were translated from {normalizedSourceLanguage} to {normalizedTargetLanguage}.",
+                completionMessage,
                 progress01: 1,
                 isIndeterminate: false);
         }
         finally
         {
-            _log.Info(
+            _log.Debug(
                 $"Stage telemetry stage=translation success={(stageSucceeded ? "true" : "false")} " +
                 $"provider={stagePlan.ProviderId} runtime={stagePlan.Runtime} role={stagePlan.Role} " +
                 $"elapsed_ms={stageTimer.ElapsedMilliseconds}");

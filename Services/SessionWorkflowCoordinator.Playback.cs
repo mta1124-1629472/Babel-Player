@@ -193,7 +193,7 @@ public sealed partial class SessionWorkflowCoordinator
                     "Cannot diarize video files without audio processing support (ffmpeg).");
 
             tempExtractedAudio = Path.Combine(Path.GetTempPath(), $"diar_{Guid.NewGuid():N}.wav");
-            _log.Info($"Extracting audio from video for diarization: {audioPath} → {tempExtractedAudio}");
+            _log.Debug($"Extracting audio from video for diarization: {audioPath} → {tempExtractedAudio}");
             await _audioProcessingService.ExtractFullAudioAsync(audioPath, tempExtractedAudio, ct)
                 .ConfigureAwait(false);
             effectiveAudioPath = tempExtractedAudio;
@@ -246,7 +246,7 @@ public sealed partial class SessionWorkflowCoordinator
                 MinSpeakers:      effectiveMinSpeakers,
                 MaxSpeakers:      effectiveMaxSpeakers);
 
-            _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={effectiveAudioPath}, " +
+            _log.Debug($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={effectiveAudioPath}, " +
                       $"minSpeakers={effectiveMinSpeakers?.ToString() ?? "auto"}, " +
                       $"maxSpeakers={effectiveMaxSpeakers?.ToString() ?? "auto"}");
             var providerCallStopwatch = Stopwatch.StartNew();
@@ -1234,7 +1234,7 @@ public sealed partial class SessionWorkflowCoordinator
         var player = GetOrCreateSourcePlayer();
         player.Load(CurrentSession.IngestedMediaPath);
         player.Seek((long)(target.StartSeconds * 1000));
-        _log.Info($"Playing source media at segment {segmentId} ({target.StartSeconds:F1}s)");
+        _log.Debug($"Playing source media at segment {segmentId} ({target.StartSeconds:F1}s)");
         _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play Source Media at segment {segmentId}");
     }
 

@@ -57,7 +57,7 @@ public sealed partial class SessionWorkflowCoordinator
                 }
                 catch (OperationCanceledException) when (_shutdownCts.IsCancellationRequested)
                 {
-                    _log.Info($"Background operation canceled during shutdown: {operationName}");
+                    _log.Debug($"Background operation canceled during shutdown: {operationName}");
                 }
                 catch (Exception ex)
                 {

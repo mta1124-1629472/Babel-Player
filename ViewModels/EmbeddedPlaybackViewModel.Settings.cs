@@ -892,7 +892,7 @@ public partial class EmbeddedPlaybackViewModel
         previous?.Cancel();
         previous?.Dispose();
 
-        _coordinator.Log.Info(
+        _coordinator.Log.Debug(
             $"Provider diagnostics refresh queued: v={version}, " +
             $"selection=({snapshot.TranscriptionRuntime}/{snapshot.TranscriptionProvider}/{snapshot.TranscriptionModel}, " +
             $"{snapshot.TranslationRuntime}/{snapshot.TranslationProvider}/{snapshot.TranslationModel}, " +
@@ -932,13 +932,13 @@ public partial class EmbeddedPlaybackViewModel
             }
 
             stopwatch.Stop();
-            _coordinator.Log.Info(
+            _coordinator.Log.Debug(
                 $"Provider diagnostics refresh complete: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
         }
         catch (OperationCanceledException)
         {
             stopwatch.Stop();
-            _coordinator.Log.Info(
+            _coordinator.Log.Debug(
                 $"Provider diagnostics refresh canceled: v={version}, elapsedMs={stopwatch.ElapsedMilliseconds}");
         }
         catch (Exception ex)

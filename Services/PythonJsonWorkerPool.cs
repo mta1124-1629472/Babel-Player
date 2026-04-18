@@ -212,7 +212,7 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {_poolName} worker process.");
-        _log.Info($"Started {_poolName} worker {workerIndex + 1} (pid={process.Id}).");
+        _log.Debug($"Started {_poolName} worker {workerIndex + 1} (pid={process.Id}).");
         return new WorkerState(workerIndex, process);
     }
 
@@ -376,7 +376,7 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Info($"Failed to kill {_poolName} worker {worker.Index + 1}: {ex.Message}");
+            _log.Debug($"Failed to kill {_poolName} worker {worker.Index + 1}: {ex.Message}");
         }
 
         try
@@ -385,9 +385,9 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
         }
         catch (Exception ex)
         {
-            _log.Info($"Failed to dispose {_poolName} worker {worker.Index + 1}: {ex.Message}");
+            _log.Debug($"Failed to dispose {_poolName} worker {worker.Index + 1}: {ex.Message}");
         }
 
-        _log.Info($"Disposed {_poolName} worker {worker.Index + 1}: {reason}.");
+        _log.Debug($"Disposed {_poolName} worker {worker.Index + 1}: {reason}.");
     }
 }

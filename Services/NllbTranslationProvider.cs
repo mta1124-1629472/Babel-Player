@@ -143,7 +143,7 @@ print(f'NLLB single segment translated: {seg_id}')
         if (!File.Exists(request.TranscriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {request.TranscriptJsonPath}");
 
-        Log.Info($"Starting NLLB translation: {request.TranscriptJsonPath}");
+        Log.Debug($"Starting NLLB translation: {request.TranscriptJsonPath}");
 
         var result = await RunPythonScriptAsync(
             NllbScript,
@@ -152,7 +152,7 @@ print(f'NLLB single segment translated: {seg_id}')
             cancellationToken: cancellationToken);
         ThrowIfFailed(result, "NLLB Translation");
 
-        Log.Info($"NLLB Translation completed: {request.OutputJsonPath}");
+        Log.Debug($"NLLB Translation completed: {request.OutputJsonPath}");
 
         var transcriptData = await ArtifactJson.LoadTranscriptAsync(request.TranscriptJsonPath, cancellationToken);
         var translationData = await ArtifactJson.LoadTranslationAsync(request.OutputJsonPath, cancellationToken);
@@ -183,7 +183,7 @@ print(f'NLLB single segment translated: {seg_id}')
         if (!File.Exists(request.TranslationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
 
-        Log.Info($"Starting NLLB single segment translation: {request.SourceText.Substring(0, Math.Min(30, request.SourceText.Length))}...");
+        Log.Debug($"Starting NLLB single segment translation: {request.SourceText.Substring(0, Math.Min(30, request.SourceText.Length))}...");
 
         var result = await RunPythonScriptAsync(
             NllbSegmentScript,
@@ -194,7 +194,7 @@ print(f'NLLB single segment translated: {seg_id}')
 
         ThrowIfFailed(result, "NLLB segment translation");
 
-        Log.Info($"NLLB single segment translation completed: {request.SegmentId}");
+        Log.Debug($"NLLB single segment translation completed: {request.SegmentId}");
 
         var translationData = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
 
@@ -223,7 +223,7 @@ print(f'NLLB single segment translated: {seg_id}')
     {
         if (!ModelDownloader.IsNllbDownloaded(_model))
         {
-            Log.Info($"Model {_model} requires download. Starting download...");
+            Log.Debug($"Model {_model} requires download. Starting download...");
             return await new ModelDownloader(Log).DownloadNllbAsync(_model, progress, ct);
         }
         return true;
