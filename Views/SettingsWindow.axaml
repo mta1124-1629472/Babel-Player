@@ -54,7 +54,7 @@
 
         <!-- Header -->
         <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" 
-                   Classes="text-display" Text="{local:Localize Automation_Settings}" 
+                   Classes="text-display" Text="{local:Localize Settings_Title}" 
                    Margin="0,0,0,16"/>
 
         <!-- Sidebar -->
