@@ -114,8 +114,13 @@ public partial class EmbeddedPlaybackViewModel
     [ObservableProperty]
     private SpokenLanguageOption? _selectedSpokenLanguageOption = SpokenLanguageOption.All[0];
 
-    public static IReadOnlyList<ComputeProfile> InferenceRuntimeOptions { get; } =
+    private static readonly IReadOnlyList<ComputeProfile> InferenceRuntimeOptionsWithGpu =
         [ComputeProfile.Cpu, ComputeProfile.Gpu, ComputeProfile.Cloud];
+
+    private static readonly IReadOnlyList<ComputeProfile> InferenceRuntimeOptionsWithoutGpu =
+        [ComputeProfile.Cpu, ComputeProfile.Cloud];
+
+    public IReadOnlyList<ComputeProfile> InferenceRuntimeOptions => GetAvailableInferenceRuntimeOptions();
 
     public string ActiveTranscriptionConfigLine => $"{TranscriptionRuntime} / {TranscriptionProvider} / {TranscriptionModel}";
 
@@ -671,31 +676,37 @@ public partial class EmbeddedPlaybackViewModel
 
     private void BuildProviderCaches()
     {
+        var availableRuntimes = GetAvailableInferenceRuntimeOptions();
+
         BuildProviderCache(
             _transcriptionProvidersByRuntime,
             _transcriptionProviderIdsByRuntime,
-            runtime => _coordinator.TranscriptionRegistry.GetAvailableProviders(runtime));
+            runtime => _coordinator.TranscriptionRegistry.GetAvailableProviders(runtime),
+            availableRuntimes);
 
         BuildProviderCache(
             _translationProvidersByRuntime,
             _translationProviderIdsByRuntime,
-            runtime => _coordinator.TranslationRegistry.GetAvailableProviders(runtime));
+            runtime => _coordinator.TranslationRegistry.GetAvailableProviders(runtime),
+            availableRuntimes);
 
         BuildProviderCache(
             _ttsProvidersByRuntime,
             _ttsProviderIdsByRuntime,
-            runtime => _coordinator.TtsRegistry.GetAvailableProviders(runtime));
+            runtime => _coordinator.TtsRegistry.GetAvailableProviders(runtime),
+            availableRuntimes);
     }
 
     private static void BuildProviderCache(
         Dictionary<ComputeProfile, IReadOnlyList<ProviderDescriptor>> descriptorCache,
         Dictionary<ComputeProfile, IReadOnlyList<string>> idCache,
-        Func<ComputeProfile, IReadOnlyList<ProviderDescriptor>> providerFactory)
+        Func<ComputeProfile, IReadOnlyList<ProviderDescriptor>> providerFactory,
+        IReadOnlyList<ComputeProfile> availableRuntimes)
     {
         descriptorCache.Clear();
         idCache.Clear();
 
-        foreach (var runtime in InferenceRuntimeOptions)
+        foreach (var runtime in availableRuntimes)
         {
             var providers = providerFactory(runtime)
                 .Where(provider => provider.IsImplemented)
@@ -703,6 +714,21 @@ public partial class EmbeddedPlaybackViewModel
             descriptorCache[runtime] = providers;
             idCache[runtime] = [.. providers.Select(provider => provider.Id)];
         }
+    }
+
+    private IReadOnlyList<ComputeProfile> GetAvailableInferenceRuntimeOptions()
+    {
+        var hardware = _coordinator.HardwareSnapshot;
+        return hardware.IsDetecting || hardware.HasCuda
+            ? InferenceRuntimeOptionsWithGpu
+            : InferenceRuntimeOptionsWithoutGpu;
+    }
+
+    private void RefreshRuntimeAvailabilityFromHardware()
+    {
+        BuildProviderCaches();
+        OnPropertyChanged(nameof(InferenceRuntimeOptions));
+        SyncProviderModelFieldsFromSettings();
     }
 
     private IReadOnlyList<string> GetTranscriptionProviderIds(ComputeProfile runtime) =>

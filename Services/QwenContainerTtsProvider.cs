@@ -22,6 +22,7 @@ public sealed class QwenContainerTtsProvider(
     TtsReferenceExtractor extractor,
     IAudioProcessingService? audioProcessingService = null) : ITtsProvider, IAsyncDisposable
 {
+    private static readonly TimeSpan TransientRetryDelay = TimeSpan.FromMilliseconds(100);
     private readonly ContainerizedInferenceClient _client = client;
     private readonly AppLog _log = log;
     private readonly TtsReferenceExtractor _extractor = extractor;
@@ -208,11 +209,30 @@ public sealed class QwenContainerTtsProvider(
 
         if (!result.Success && IsLikelyStaleReferenceError(result.ErrorMessage))
         {
-            _log.Warning($"[QwenContainerTts] Stale reference_id for speaker '{speakerId}', re-registering.");
-            _referenceIdCache.Remove($"{speakerId}|{referenceAudioPath}");
-            refId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, ct);
-            result = await _client.QwenSegmentAsync(
-                text, model, language, referenceId: refId, referenceText: referenceText, cancellationToken: ct);
+            result = await RetrySegmentWithFreshReferenceAsync(
+                text,
+                model,
+                language,
+                referenceAudioPath,
+                speakerId,
+                referenceText,
+                reason: "stale reference_id",
+                retryDelay: null,
+                ct).ConfigureAwait(false);
+        }
+        else if (!result.Success && IsLikelyTransientTransportError(result.ErrorMessage))
+        {
+            ct.ThrowIfCancellationRequested();
+            result = await RetrySegmentWithFreshReferenceAsync(
+                text,
+                model,
+                language,
+                referenceAudioPath,
+                speakerId,
+                referenceText,
+                reason: "transient containerized TTS request failure",
+                retryDelay: TransientRetryDelay,
+                ct).ConfigureAwait(false);
         }
 
         return result;
@@ -222,6 +242,50 @@ public sealed class QwenContainerTtsProvider(
         errorMessage is not null && (
             errorMessage.Contains("reference_id", StringComparison.OrdinalIgnoreCase) ||
             errorMessage.Contains("not found", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsLikelyTransientTransportError(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+            return false;
+
+        return errorMessage.Contains("operation was canceled", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("task was canceled", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("request was canceled", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("transport connection", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("i/o operation has been aborted", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("connection forcibly closed", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("actively refused", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<TtsResult> RetrySegmentWithFreshReferenceAsync(
+        string text,
+        string model,
+        string language,
+        string referenceAudioPath,
+        string speakerId,
+        string? referenceText,
+        string reason,
+        TimeSpan? retryDelay,
+        CancellationToken ct)
+    {
+        var cacheKey = $"{speakerId}|{referenceAudioPath}";
+        _log.Warning($"[QwenContainerTts] {reason} for speaker '{speakerId}', refreshing reference and retrying once.");
+        _referenceIdCache.Remove(cacheKey);
+
+        if (retryDelay is { } delay && delay > TimeSpan.Zero)
+            await Task.Delay(delay, ct).ConfigureAwait(false);
+
+        var refId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, ct).ConfigureAwait(false);
+        return await _client.QwenSegmentAsync(
+            text,
+            model,
+            language,
+            referenceId: refId,
+            referenceText: referenceText,
+            cancellationToken: ct).ConfigureAwait(false);
+    }
 
     private async Task<TtsResult> GenerateCombinedTtsAsync(
         TtsRequest request,

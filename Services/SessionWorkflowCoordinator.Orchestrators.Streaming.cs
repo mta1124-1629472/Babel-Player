@@ -158,6 +158,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 voice,
                 ttsLanguage,
                 segmentsDir,
+                ttsStageContext,
                 pipelineToken);
             var translationTask = RunStreamingTranslationStageAsync(
                 transcriptChannel.Reader,
@@ -365,6 +366,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 voice,
                 ttsLanguage,
                 segmentsDir,
+                ttsStageContext,
                 pipelineToken);
             var translationTask = RunStreamingTranslationStageAsync(
                 transcriptChannel.Reader,
@@ -541,6 +543,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         /// <param name="defaultVoice">Fallback voice to use when a segment has no resolved voice.</param>
         /// <param name="ttsLanguage">Language tag to pass to the TTS provider, or null to let the provider decide.</param>
         /// <param name="segmentsDir">Directory where per-segment audio files should be written.</param>
+        /// <param name="stageContext">Optional stage context used to report TTS heartbeat updates while a long synth is still running.</param>
         /// <param name="cancellationToken">Token to observe for cancellation of reading and task scheduling.</param>
         private async Task RunStreamingTtsStageAsync(
             ChannelReader<TranslationChannelItem> translationReader,
@@ -548,6 +551,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             string defaultVoice,
             string? ttsLanguage,
             string segmentsDir,
+            PipelineStageContext? stageContext,
             CancellationToken cancellationToken)
         {
             var parallelism = Math.Max(1, _c._ttsService?.MaxConcurrency ?? 1);
@@ -569,6 +573,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                                 ttsLanguage,
                                 segmentsDir,
                                 resultWriter,
+                                stageContext,
                                 cancellationToken).ConfigureAwait(false);
                         }
                         finally
@@ -644,6 +649,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         /// <param name="ttsLanguage">The language hint to use for TTS, or null to let the provider decide.</param>
         /// <param name="segmentsDir">Directory where per-segment MP3 files will be written.</param>
         /// <param name="resultWriter">Channel writer to publish successful TTS results (TtsChannelItem).</param>
+        /// <param name="stageContext">Optional stage context used to emit heartbeat updates for long-running TTS calls.</param>
         /// <param name="cancellationToken">Token used to observe cancellation for the inference call and channel write.</param>
         private async Task GenerateStreamingTtsSegmentAsync(
             TranslationChannelItem item,
@@ -651,6 +657,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             string? ttsLanguage,
             string segmentsDir,
             ChannelWriter<TtsChannelItem> resultWriter,
+            PipelineStageContext? stageContext,
             CancellationToken cancellationToken)
         {
             var id = item.SegmentId;
@@ -676,7 +683,16 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         SourceVideoPath: _c.CurrentSession.IngestedMediaPath ?? _c.CurrentSession.SourceMediaPath),
                     cancellationToken);
                 _c.TrackPendingTtsTask(task);
-                var result = await task.ConfigureAwait(false);
+                var result = _c._ttsService is QwenContainerTtsProvider
+                    ? await _c.AwaitWithTtsHeartbeatAsync(
+                        task,
+                        stageContext,
+                        elapsed => $"Still generating the current clip. {SessionWorkflowCoordinator.FormatTtsHeartbeatElapsed(elapsed)} elapsed.",
+                        progressFactory: null,
+                        isIndeterminate: true,
+                        cancellationToken,
+                        streamingStatusFactory: _ => "Dub generation is still running.").ConfigureAwait(false)
+                    : await task.ConfigureAwait(false);
                 if (result.Success && File.Exists(segmentAudioPath))
                 {
                     await resultWriter.WriteAsync(

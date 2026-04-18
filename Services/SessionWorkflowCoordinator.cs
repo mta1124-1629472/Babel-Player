@@ -686,33 +686,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     public PipelineSettingsApplyResult ApplyPipelineSettings(PipelineSettingsSelection selection)
     {
         var stopwatch = Stopwatch.StartNew();
-        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionProvider);
-        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranscriptionModel);
-        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranslationProvider);
-        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TranslationModel);
-        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsProvider);
-        ArgumentException.ThrowIfNullOrWhiteSpace(selection.TtsVoice);
-
-        var transcriptionProviderChanged =
-            CurrentSettings.TranscriptionProfile != selection.TranscriptionRuntime ||
-            !string.Equals(CurrentSettings.TranscriptionProvider, selection.TranscriptionProvider, StringComparison.Ordinal) ||
-            !string.Equals(CurrentSettings.TranscriptionModel, selection.TranscriptionModel, StringComparison.Ordinal) ||
-            !SessionSnapshotSemantics.TranscriptionLanguageHintsMatch(
-                CurrentSettings.TranscriptionLanguageHint,
-                selection.TranscriptionLanguageHint);
-        var translationProviderChanged =
-            CurrentSettings.TranslationProfile != selection.TranslationRuntime ||
-            !string.Equals(CurrentSettings.TranslationProvider, selection.TranslationProvider, StringComparison.Ordinal) ||
-            !string.Equals(CurrentSettings.TranslationModel, selection.TranslationModel, StringComparison.Ordinal) ||
-            (!string.IsNullOrWhiteSpace(selection.TargetLanguage) &&
-             !LanguageCode.TargetLanguagesMatch(CurrentSettings.TargetLanguage, selection.TargetLanguage));
-        var ttsProviderChanged =
-            CurrentSettings.TtsProfile != selection.TtsRuntime ||
-            !string.Equals(CurrentSettings.TtsProvider, selection.TtsProvider, StringComparison.Ordinal) ||
-            !string.Equals(CurrentSettings.TtsVoice, selection.TtsVoice, StringComparison.Ordinal);
-
-        var settingsChanged = transcriptionProviderChanged || translationProviderChanged || ttsProviderChanged;
-        if (!settingsChanged)
+        if (!ApplyPipelineSelectionSettings(selection))
         {
             _log.Info(
                 $"ApplyPipelineSettings: no-op at stage {CurrentSession.Stage}; selection matched current settings.");
@@ -723,39 +697,11 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 CurrentSession.StatusMessage);
         }
 
-        CurrentSettings.TranscriptionProfile = selection.TranscriptionRuntime;
-        CurrentSettings.TranscriptionProvider = selection.TranscriptionProvider;
-        CurrentSettings.TranscriptionModel = selection.TranscriptionModel;
-        CurrentSettings.TranslationProfile = selection.TranslationRuntime;
-        CurrentSettings.TranslationProvider = selection.TranslationProvider;
-        CurrentSettings.TranslationModel = selection.TranslationModel;
-        CurrentSettings.TtsProfile = selection.TtsRuntime;
-        CurrentSettings.TtsProvider = selection.TtsProvider;
-        CurrentSettings.TtsVoice = selection.TtsVoice;
-        if (!string.IsNullOrWhiteSpace(selection.TargetLanguage))
-        {
-            CurrentSettings.TargetLanguage = LanguageCode.NormalizeForPersistence(selection.TargetLanguage)
-                ?? selection.TargetLanguage.Trim();
-        }
-
-        CurrentSettings.TranscriptionLanguageHint =
-            SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(selection.TranscriptionLanguageHint);
-
-        if (transcriptionProviderChanged) _transcriptionService = null;
-        if (translationProviderChanged) _translationService = null;
-        if (ttsProviderChanged)
-        {
-            (_ttsService as IDisposable)?.Dispose();
-            _ttsService = null;
-        }
-        (_vocalSeparationProvider as IDisposable)?.Dispose();
-        _vocalSeparationProvider = null;
-
         var invalidation = CheckSettingsInvalidation();
         _log.Info(
             $"ApplyPipelineSettings: stage={CurrentSession.Stage}, invalidation={invalidation}, " +
-            $"selection=({selection.TranscriptionRuntime}/{selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
-            $"{selection.TranslationRuntime}/{selection.TranslationProvider}/{selection.TranslationModel}, " +
+                $"selection=({selection.TranscriptionRuntime}/{selection.TranscriptionProvider}/{selection.TranscriptionModel}, " +
+                $"{selection.TranslationRuntime}/{selection.TranslationProvider}/{selection.TranslationModel}, " +
             $"{selection.TtsRuntime}/{selection.TtsProvider}/{selection.TtsVoice}, target={selection.TargetLanguage ?? "<unchanged>"}, asrHint={selection.TranscriptionLanguageHint ?? "<auto>"}), " +
             $"provenance=({SessionSnapshotSemantics.DescribeSessionProvenance(CurrentSession)})");
         var statusMessage = invalidation switch
