@@ -280,6 +280,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// On success: restores CurrentSession to the persisted snapshot (possibly with its stage downgraded if artifacts are missing) or sets a newly created foundation session; updates persistence-related properties and recent-session list.
     /// Side effects: caches the session snapshot for the media key when applicable, enqueues a media reload request if the restored session is at or past MediaLoaded, and persists the current session to disk.
     /// Cancellation: this method is synchronous and does not support cancellation.
+    /// <summary>
+    /// Bootstraps coordinator state from persistent stores and prepares session-related caches and readiness signals.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: none required; can be called during startup to initialize coordinator internals.  
+    /// On success: sets <c>CurrentSession</c> to either a restored and validated snapshot or a new foundation session, updates <c>BootstrapDiagnostics</c>, <c>RecentSessions</c>, and <c>SessionSource</c>. If the restored snapshot contained media, the snapshot is cached and a media reload is queued.  
+    /// Persistence: always persists the chosen <c>CurrentSession</c> by calling <c>SaveCurrentSession()</c>.  
+    /// Side effects: may log artifact validation/downgrade warnings, update <c>PersistenceStatus</c>, and enqueue a media reload request when the session stage is at or beyond <c>SessionWorkflowStage.MediaLoaded</c>.  
+    /// Cancellation: synchronous and non-cancelable.
     /// </remarks>
     public void Initialize()
     {
@@ -381,6 +390,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
     }
 
+    /// <summary>
+    /// Determines the inference execution mode based on container availability and the configured GPU service URL.
+    /// </summary>
+    /// <param name="diagnostics">Bootstrap diagnostics indicating containerized service availability and its base URL.</param>
+    /// <returns>
+    /// `InferenceMode.ManagedVenv` if a containerized service is available and its URL equals the configured managed GPU service URL (case-insensitive);
+    /// `InferenceMode.Containerized` if a containerized service is available but the URL differs;
+    /// otherwise `InferenceMode.SubprocessCpu`.
+    /// </returns>
     private static InferenceMode ResolveInferenceMode(BootstrapDiagnostics diagnostics)
     {
         if (diagnostics.ContainerizedServiceAvailable)
@@ -406,6 +424,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Persistence: when switching media the existing session is stashed into the MRU/per-session store and the new/restored session is persisted (FlushPendingSave is invoked) so state survives restarts.
     /// Behavior: if a previously cached snapshot exists for the supplied media the method validates and restores that snapshot (copying the media into the snapshot's session directory) and retains restored artifact paths; otherwise it creates a new per-session directory, copies the media there, resets downstream artifacts, and sets a fresh SessionId when switching media.
     /// Cancellation: this method is synchronous and does not support cancellation.
+    /// </remarks>
+    /// <summary>
+    /// Loads and ingests a media file into the coordinator, creating a new per-session identity or restoring a cached session for that media and preparing the pipeline for media-loaded state.
+    /// </summary>
+    /// <param name="sourceMediaPath">Filesystem path of the source media file to ingest; the file must exist.</param>
+    /// <remarks>
+    /// Expected entry state: can be called at any time after coordinator initialization; if a current session already references media, that session will be stashed before switching. 
+    /// On success: the coordinator's CurrentSession will be set to either a restored snapshot (preserving its stage) or to Stage = MediaLoaded for a newly created session, and media artifacts will be copied into the session's storage directory. 
+    /// Persistence: the updated session state is enqueued and flushed to persistent storage before the method returns. 
+    /// Cancellation: this synchronous method does not support cancellation.
     /// </remarks>
     /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="sourceMediaPath"/> does not exist.</exception>
     public void LoadMedia(string sourceMediaPath)
@@ -544,6 +572,17 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             MediaSnapshotCacheLimit);
     }
 
+    /// <summary>
+    /// Injects a test transcript (and optional translation) into the current session, advancing the pipeline stage accordingly.
+    /// </summary>
+    /// <remarks>
+    /// Expected entry state: can be called at any pipeline stage; it will replace transcript/translation artifacts for the active session.
+    /// On success: the session's <c>Stage</c> is set to <c>Transcribed</c> when only a transcript is provided or <c>Translated</c> when a translation path is provided, and the session status message is updated.
+    /// Persistence: the updated session is saved to persistent storage.
+    /// Cancellation: this synchronous method does not support cancellation.
+    /// </remarks>
+    /// <param name="transcriptPath">Path to the transcript file to inject.</param>
+    /// <param name="translationPath">Optional path to the translation file; when provided the session stage becomes <c>Translated</c>.</param>
     public void InjectTestTranscript(string transcriptPath, string? translationPath = null)
     {
         lock (_sessionLock)
@@ -569,6 +608,14 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// Exit state on success: <c>CurrentSession.Stage</c> is set to <see cref="SessionWorkflowStage.MediaLoaded"/> and all transcription/translation/diarization/TTS-related fields are cleared or nulled, with <c>StatusMessage</c> set to "Ready.".
     /// Persistence: this method updates the in-memory <c>CurrentSession</c> only and does not persist the session to storage.
     /// Cancellation: not applicable.
+    /// <summary>
+    /// Reset the session pipeline to the MediaLoaded stage and clear all downstream artifacts and runtime/provider selections.
+    /// </summary>
+    /// <remarks>
+    /// Expected entry state: any stage. If the current session stage is already earlier than MediaLoaded, the call is a no-op.
+    /// On success: the session's Stage is set to MediaLoaded; transcript, translation, TTS, vocal separation artifacts, speaker/diarization metadata, and all runtime/provider/model selections are cleared; StatusMessage is set to "Ready.".
+    /// Persistence: this method updates the in-memory CurrentSession only and does not persist the session to storage.
+    /// Threading: updates are performed under an internal session lock to ensure thread safety.
     /// </remarks>
     public void ResetPipelineToMediaLoaded()
     {
@@ -728,6 +775,16 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <returns>
     /// A <see cref="PipelineSettingsApplyResult"/> describing which pipeline stage (if any) was invalidated, the resulting session stage, whether settings were applied, and a status message.
     /// </returns>
+    /// <summary>
+    /// Applies a new pipeline settings selection, updates in-memory settings, resets downstream pipeline stages when required, and persists the session state when the pipeline is invalidated.
+    /// </summary>
+    /// <param name="selection">The pipeline settings to apply (transcription, translation, and TTS runtimes, providers, models, and voice; may include an optional target language and transcription language hint).</param>
+    /// <returns>
+    /// A <see cref="PipelineSettingsApplyResult"/> describing which pipeline category (if any) was invalidated, the session stage after applying the settings, whether changes were applied, and a human-readable status message.
+    /// </returns>
+    /// <remarks>
+    /// Entry state: expects a loaded <c>CurrentSession</c> (foundation or any later stage). On success this method updates <c>CurrentSettings</c> and, when settings change causes pipeline invalidation, resets the affected downstream stage (to MediaLoaded, Transcribed/Diarized, or Translated as appropriate) and persists the session via <c>SaveCurrentSession()</c>. If no pipeline invalidation occurs the session is not persisted. This method does not observe cancellation tokens.
+    /// </remarks>
     /// <exception cref="ArgumentException">Thrown when any required field on <paramref name="selection"/> (transcription provider/model, translation provider/model, TTS provider/voice) is null, empty, or whitespace.</exception>
     public PipelineSettingsApplyResult ApplyPipelineSettings(PipelineSettingsSelection selection)
     {
@@ -863,12 +920,26 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// </summary>
     /// <param name="segmentId">The identifier of the translated segment to regenerate TTS for.</param>
     /// <remarks>
-    /// Preconditions: <see cref="CurrentSession.TranslationPath"/> must be set and the translation file must exist; otherwise this method throws (<see cref="InvalidOperationException"/> or <see cref="FileNotFoundException"/>). The method ensures any required containerized runtime is started and checks provider readiness before generation; if the configured TTS provider is not ready for execution and a model download is not required, a <see cref="PipelineProviderException"/> is thrown. On success the session's <c>TtsSegmentAudioPaths</c> and <c>StatusMessage</c> are updated and the session is persisted via <see cref="SaveCurrentSession"/>. The operation supports cooperative cancellation through <paramref name="cancellationToken"/>.
+    /// Preconditions: the session must have a translation artifact available (TranslationPath set and readable).
+    /// On success: updates CurrentSession.TtsSegmentAudioPaths with the regenerated segment audio path, sets a status message, and persists the session.
+    /// Readiness guard: ensures the configured TTS runtime/provider is ready; if the provider is not ready and no model download is required a <see cref="PipelineProviderException"/> is thrown.
+    /// Cancellation: this method does not accept or observe a cancellation token and cannot be cancelled.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when no translation is available or the specified segment text is missing.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session cannot be found.</exception>
+    /// <summary>
+    /// Regenerates the TTS audio for a single translated segment and updates the session with the new segment audio path.
+    /// </summary>
+    /// <remarks>
+    /// Entry requirements: the session must have a persisted translation file at <c>CurrentSession.TranslationPath</c> and the translation must contain the specified <paramref name="segmentId"/>. On success the method leaves the session at the same pipeline stage but updates <c>CurrentSession.TtsSegmentAudioPaths</c> for the regenerated segment and sets <c>StatusMessage</c>. The method persists the session before returning. 
+    /// Guard conditions: the configured TTS runtime/provider must be ready for execution; if a containerized runtime is configured the container probe readiness is checked. If readiness indicates the provider is not ready and a model download is not required, a <see cref="PipelineProviderException"/> is thrown. 
+    /// Cancellation: this method does not observe a cancellation token and will run to completion or failure.
+    /// </remarks>
+    /// <param name="segmentId">The identifier of the segment to regenerate (the id present in the translation segments).</param>
+    /// <exception cref="InvalidOperationException">Thrown when the session has no translation, when the specified segment text is missing, or when TTS generation fails.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session cannot be found on disk.</exception>
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
-    public async Task RegenerateSegmentTtsAsync(string segmentId, CancellationToken cancellationToken = default)
+    public async Task RegenerateSegmentTtsAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -880,38 +951,27 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var segmentText = await _artifactReader.GetTranslatedTextAsync(
-            CurrentSession.TranslationPath,
-            segmentId,
-            cancellationToken);
+        var segmentText = await _artifactReader.GetTranslatedTextAsync(CurrentSession.TranslationPath, segmentId);
 
         if (string.IsNullOrEmpty(segmentText))
         {
             throw new InvalidOperationException($"Segment not found: {segmentId}");
         }
 
-        var translation = await _artifactReader.LoadTranslationAsync(
-            CurrentSession.TranslationPath,
-            cancellationToken);
+        var translation = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath);
         var targetSegment = translation.Segments?.FirstOrDefault(s => s.Id == segmentId);
         var regenVoice = targetSegment is not null
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
             : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
-        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
+        await EnsureSingleSpeakerQwenReferenceClipAsync();
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(
-            CurrentSettings.TtsRuntime,
-            "TTS",
-            cancellationToken);
+        await EnsureContainerizedExecutionRuntimeStartedAsync(CurrentSettings.TtsRuntime, "TTS");
 
         var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(
-                CurrentSettings,
-                _containerizedProbe,
-                cancellationToken: cancellationToken)
+            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(CurrentSettings, _containerizedProbe)
             : TtsRegistry.CheckReadiness(
                 CurrentSettings.TtsProvider,
                 regenVoice,
@@ -941,8 +1001,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 regenVoice,
                 targetSegment?.SpeakerId,
                 referenceAudioPath,
-                Language: targetLanguage),
-            cancellationToken);
+                Language: targetLanguage));
         TrackPendingTtsTask(ttsTask);
         var result = await ttsTask;
 
@@ -979,11 +1038,29 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// </summary>
     /// <param name="segmentId">Identifier of the segment to regenerate (stable segment id produced by SegmentId).</param>
     /// <remarks>
-    /// Preconditions: the session must have a translation artifact path (CurrentSession.TranslationPath) and that file must exist; source and target languages must be set on the session. The method ensures the translation execution runtime is ready before invoking translation. On success the session's status message is updated and the session is persisted via SaveCurrentSession; the session pipeline stage is not advanced by this operation. The operation supports cooperative cancellation through <paramref name="cancellationToken"/>.
+    /// Preconditions: the session must have a translation artifact path (CurrentSession.TranslationPath) and that file must exist; source and target languages must be set on the session. The method ensures the translation execution runtime is ready before invoking translation. On success the session's status message is updated and the session is persisted via SaveCurrentSession; the session pipeline stage is not advanced by this operation. This method does not support cancellation.
     /// </remarks>
-    /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the source or target language is not set, when the segment source text is not found, or when the translation attempt fails.</exception>
-    public async Task RegenerateSegmentTranslationAsync(string segmentId, CancellationToken cancellationToken = default)
+    /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the segment source text is missing, when source or target language is not set, or when the translation attempt fails.</exception>
+    /// <summary>
+    /// Regenerates the translated text for a single segment and persists the updated session state.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment to regenerate (e.g., "segment_0.0").</param>
+    /// <remarks>
+    /// Entry requirements:
+    /// - The current session must have a translation artifact available (TranslationPath set and file exists).
+    /// - Source and target languages must be set on the current session (transcription and initial translation completed).
+    /// 
+    /// On success:
+    /// - The session remains at the translated stage (no stage downgrade) and the session's StatusMessage is updated.
+    /// - The coordinator persists the session via SaveCurrentSession().
+    /// 
+    /// Guard and readiness behavior:
+    /// - Ensures the translation execution runtime is ready before invoking the translation engine; if readiness cannot be obtained the method will fail.
+    /// - This method does not accept a cancellation token and does not support cooperative cancellation.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when translation is not available, source/target language is unset, or the segment's source text cannot be found.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by CurrentSession.TranslationPath does not exist.</exception>
+    public async Task RegenerateSegmentTranslationAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -995,17 +1072,14 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
-        var sourceText = await _artifactReader.GetSourceTextAsync(
-            CurrentSession.TranslationPath,
-            segmentId,
-            cancellationToken);
+        var sourceText = await _artifactReader.GetSourceTextAsync(CurrentSession.TranslationPath, segmentId);
 
         if (string.IsNullOrEmpty(sourceText))
         {
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
 
-        await EnsureTranslationExecutionReadyAsync(cancellationToken: cancellationToken);
+        await EnsureTranslationExecutionReadyAsync();
 
         _translationService ??= CreateTranslationService();
 
@@ -1029,8 +1103,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 CurrentSession.TranslationPath,
                 sourceLanguage,
                 targetLanguage,
-                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel),
-            cancellationToken);
+                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel));
 
         if (!result.Success)
         {
@@ -1108,7 +1181,17 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <summary>
     /// Restores a previously-opened session by ID, stashing the current one first.
     /// The coordinator queues a declarative media reload request for the view layer.
+    /// <summary>
+    /// Restores a persisted session by its identifier and switches the coordinator to that restored session.
     /// </summary>
+    /// <param name="sessionId">The GUID of the session to restore from in-memory cache or disk.</param>
+    /// <remarks>
+    /// Entry expectations: none beyond a valid <paramref name="sessionId"/>; if the coordinator currently has a loaded media session, that session will be stashed to the MRU/per-session caches before switching. 
+    /// On success: validates and applies the restored snapshot to <c>CurrentSession</c>, updates <c>LastUpdatedAtUtc</c> and a stage-appropriate <c>StatusMessage</c>, queues a media reload request, persists the updated session to storage, and refreshes the recent-sessions list. 
+    /// If artifact validation downgrades the snapshot's stage, a warning is logged and the downgraded snapshot is applied. 
+    /// If the session ID is not found, the method logs a warning and returns without modifying <c>CurrentSession</c> or persisting state. 
+    /// Cancellation: none (synchronous, non-cancellable). 
+    /// </remarks>
     public void RestoreSession(Guid sessionId)
     {
         // Try in-memory cache first, then fall back to disk.
@@ -1166,6 +1249,14 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <summary>
     /// Computes which pipeline stages must be invalidated based on the current session's artifacts and the active pipeline settings.
     /// </summary>
+    /// <summary>
+    /// Determines which pipeline stages must be reset based on the current session snapshot and active settings.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: reads <see cref="CurrentSession"/> and <see cref="CurrentSettings"/> to compute invalidation; no mutation of coordinator state is performed. 
+    /// Exit state: leaves session and settings unchanged and does not persist any data. 
+    /// This method is synchronous and does not support cancellation. 
+    /// </remarks>
     /// <returns>A <see cref="PipelineInvalidation"/> value that indicates which pipeline stages (if any) require reset.</returns>
     public PipelineInvalidation CheckSettingsInvalidation()
     {
@@ -1183,7 +1274,13 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <summary>
     /// Records a pending TTS generation task for later observation and removes any completed tasks from the internal tracking list.
     /// </summary>
+    /// <summary>
+    /// Records a TTS-related task for in-flight tracking, pruning any already-completed tasks before adding the new task.
+    /// </summary>
     /// <param name="task">The TTS-related <see cref="Task"/> to track; callers may await or monitor the snapshot returned by <see cref="SnapshotPendingTtsTasks"/>.</param>
+    /// <remarks>
+    /// Thread-safe: callers may invoke concurrently; the method acquires an internal lock while pruning completed tasks and adding the new task.
+    /// </remarks>
 
     internal void TrackPendingTtsTask(Task task)
     {
@@ -1201,7 +1298,14 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <remarks>
     /// This method is thread-safe: it prunes completed tasks and captures the remaining tasks while holding the internal pending-task lock.
     /// It does not await, start, cancel, or otherwise modify the returned tasks beyond removing completed entries from the internal tracker.
+    /// <summary>
+    /// Return a thread-safe snapshot of the currently pending TTS generation tasks.
+    /// </summary>
+    /// <remarks>
+    /// Prunes completed tasks from the internal pending list while holding a lock, then returns an array copy of the remaining tasks.
+    /// This method does not await, start, cancel, or modify the returned tasks and does not persist session state.
     /// </remarks>
+    /// <returns>An array of the remaining pending <see cref="Task"/> instances after pruning completed tasks.</returns>
     internal Task[] SnapshotPendingTtsTasks()
     {
         lock (_pendingTtsTasksLock)
@@ -1221,6 +1325,16 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// - May update <see cref="RuntimeWarmupStatusText"/> when the probe URL matches the coordinator's effective GPU service URL and a non-empty warmup description is available.
     /// - Updates <see cref="BootstrapDiagnostics"/> container-related fields and recalculates <see cref="InferenceMode"/> when those diagnostics change.
     /// - Emits a readiness signal of kind <see cref="ReadinessSignalKind.ProbeResultUpdated"/>; <c>forceRefresh</c> is true when the probe URL is new, the probe state changed, or the probe state is not <see cref="ContainerizedProbeState.Checking"/>.
+    /// <summary>
+    /// Handles an updated container probe result by recording its state, updating bootstrap diagnostics and inference mode, optionally updating runtime warmup text, and emitting a readiness signal.
+    /// </summary>
+    /// <param name="probeResult">The probe result containing the service URL, probe state, CUDA availability and version, and staleness flag.</param>
+    /// <remarks>
+    /// Side effects:
+    /// - Records the probe state in the coordinator's internal probe-state map.
+    /// - Updates <see cref="BootstrapDiagnostics"/> with the probe's availability, URL, and CUDA info; when diagnostics change, updates <see cref="InferenceMode"/>.
+    /// - If a containerized runtime is required and the probe's normalized URL matches <see cref="CurrentSettings.EffectiveGpuServiceUrl"/>, updates <see cref="RuntimeWarmupStatusText"/> when a non-empty warmup message is available.
+    /// - Emits a <see cref="ReadinessSignalKind.ProbeResultUpdated"/> readiness signal; the signal's <c>forceRefresh</c> is true when the probe is new, its state changed, or its state is not <c>Checking</c>.
     /// </remarks>
     private void OnProbeResultUpdated(ContainerizedProbeResult probeResult)
     {
@@ -1293,7 +1407,12 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         IReadOnlyList<WorkflowSessionSnapshot> Snapshots,
         InferenceMode ResolvedInferenceMode);
 
-    private static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
+    /// <summary>
+        /// Determines whether the provided session snapshot contains diarization markers (speaker segmentation information).
+        /// </summary>
+        /// <param name="snapshot">The session snapshot to inspect.</param>
+        /// <returns>`true` if the snapshot contains diarization markers, `false` otherwise.</returns>
+        private static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
         SessionSnapshotSemantics.HasDiarizationMarker(snapshot);
 
 }

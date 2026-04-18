@@ -521,7 +521,15 @@ public sealed partial class SessionWorkflowCoordinator
             /// </remarks>
             /// <returns>
             /// A read-only dictionary mapping segment IDs to their <see cref="SegmentTimingMode"/> override; empty if no overrides are set. The returned dictionary uses ordinal key comparison.
-            /// </returns>
+            /// <summary>
+            /// Get a snapshot of the session's segment timing mode overrides.
+            /// </summary>
+            /// <remarks>
+            /// Returns a new dictionary copy of <c>CurrentSession.SegmentTimingModeOverrides</c> using an ordinal key comparer.
+            /// The returned dictionary is independent of the session (mutating it does not affect <c>CurrentSession</c>).
+            /// If the session has no overrides, an empty dictionary is returned.
+            /// </remarks>
+            /// <returns>The dictionary of segment timing mode overrides keyed by segment ID; empty when no overrides exist.</returns>
             public IReadOnlyDictionary<string, SegmentTimingMode> GetSegmentTimingModeOverrides() =>
         CurrentSession.SegmentTimingModeOverrides is null
             ? new Dictionary<string, SegmentTimingMode>()
@@ -535,6 +543,16 @@ public sealed partial class SessionWorkflowCoordinator
     /// <remarks>
     /// Operation is thread-safe and will persist the updated session when a change is made via SaveCurrentSession(); if the new value is identical to the existing one no persistence occurs. This method validates <paramref name="segmentId"/> and throws <see cref="ArgumentException"/> for null, empty, or whitespace values.
     /// </remarks>
+    /// <summary>
+    /// Sets, updates, or clears a per-segment timing-mode override for the current session.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: requires a loaded session snapshot (accesses <c>CurrentSession</c>). On success the session is updated in-memory and persisted by <c>SaveCurrentSession()</c>.
+    /// If <paramref name="mode"/> has a value the override for <paramref name="segmentId"/> is set or updated; if <paramref name="mode"/> is <c>null</c> the override is removed. No change is persisted when the effective dictionary is unchanged.
+    /// This method synchronizes access to session state using the internal session lock; it completes synchronously and does not accept cancellation.
+    /// </remarks>
+    /// <param name="segmentId">The identifier of the segment to set or clear the timing-mode override for. Must be non-null and non-whitespace.</param>
+    /// <param name="mode">The timing mode to apply, or <c>null</c> to remove any existing override.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="segmentId"/> is null, empty, or whitespace.</exception>
     public void SetSegmentTimingOverride(string segmentId, SegmentTimingMode? mode)
     {
@@ -568,6 +586,19 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Set or update the voice or model assigned to a speaker for the current session.
+    /// </summary>
+    /// <param name="speakerId">The identifier of the speaker to assign; must be non-empty.</param>
+    /// <param name="voiceOrModel">The voice or model name to assign to the speaker; must be non-empty.</param>
+    /// <remarks>
+    /// - Expected state on entry: a current session snapshot must be available.
+    /// - State on success: the session's SpeakerVoiceAssignments is updated and persisted to storage.
+    /// - Thread-safety: the update is performed under the coordinator's session lock to prevent concurrent mutations.
+    /// - Persistence: this method calls SaveCurrentSession() after making the change.
+    /// - Cancellation: this synchronous method does not accept cancellation and completes before returning.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="speakerId"/> or <paramref name="voiceOrModel"/> is null, empty, or whitespace.</exception>
     public void SetSpeakerVoiceAssignment(string speakerId, string voiceOrModel)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
@@ -596,7 +627,17 @@ public sealed partial class SessionWorkflowCoordinator
     /// - If no assignment exists for the specified speaker, the method returns without persisting.
     /// - When removal results in an empty assignments dictionary, the session value is set to <c>null</c>.
     /// - On a successful change the method calls <c>SaveCurrentSession()</c> to persist the session.
+    /// <summary>
+    /// Removes the voice assignment for the specified speaker from the current session and persists the session when a change occurs.
+    /// </summary>
+    /// <param name="speakerId">The identifier of the speaker whose voice assignment should be removed.</param>
+    /// <remarks>
+    /// - Validates <paramref name="speakerId"/> is not null, empty, or whitespace; this method throws <see cref="ArgumentException"/> when validation fails.
+    /// - Acquires the session lock while modifying an in-memory copy of the speaker assignments; if no assignments exist or the speaker key is not present, the method returns without persisting.
+    /// - When a mapping is removed and the assignments dictionary becomes empty, the session's <c>SpeakerVoiceAssignments</c> is set to <c>null</c>; otherwise the updated dictionary is stored on the session.
+    /// - Persists the updated session by calling <c>SaveCurrentSession()</c> only when an effective change was made.
     /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="speakerId"/> is null, empty, or consists only of whitespace.</exception>
     public void RemoveSpeakerVoiceAssignment(string speakerId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
@@ -659,6 +700,17 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Sets or replaces the stored reference audio path for the given speaker and persists the session.
+    /// </summary>
+    /// <param name="speakerId">The speaker identifier to assign the reference audio to (trimmed, non-blank).</param>
+    /// <param name="clipPath">The filesystem path to the speaker's reference audio clip (trimmed, non-blank).</param>
+    /// <remarks>
+    /// The update is performed under the coordinator's session lock and replaces or creates the
+    /// <see cref="CurrentSession.SpeakerReferenceAudioPaths"/> dictionary using an ordinal comparer.
+    /// The method calls <see cref="SaveCurrentSession"/> after releasing the lock to persist changes.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="speakerId"/> or <paramref name="clipPath"/> is null, empty, or whitespace.</exception>
     public void SetSpeakerReferenceAudioPath(string speakerId, string clipPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(speakerId);
@@ -686,6 +738,13 @@ public sealed partial class SessionWorkflowCoordinator
     /// State on success: the session's <c>SpeakerReferenceAudioPaths</c> mapping will have the entry for <paramref name="speakerId"/> removed; if the mapping becomes empty the session field is set to <c>null</c>. 
     /// Persistence: the method calls <c>SaveCurrentSession()</c> only when a removal actually occurs. 
     /// Guard behavior: if the session has no speaker reference mappings or the given <paramref name="speakerId"/> is not present, the method performs no change and does not persist the session.
+    /// </remarks>
+    /// <summary>
+    /// Remove the reference audio path mapped to a speaker from the current session.
+    /// </summary>
+    /// <param name="speakerId">The speaker identifier whose reference audio path should be removed; must not be null, empty, or whitespace.</param>
+    /// <remarks>
+    /// If a mapping for <paramref name="speakerId"/> exists the mapping is removed, <c>CurrentSession</c> is updated and the session is persisted by calling <c>SaveCurrentSession()</c>. If no mapping exists or the session's reference-path dictionary is null, the method returns without persisting. The method acquires the session lock to make the update safely.
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when <paramref name="speakerId"/> is null, empty, or consists only of whitespace.</exception>
     public void RemoveSpeakerReferenceAudioPath(string speakerId)
@@ -957,7 +1016,10 @@ public sealed partial class SessionWorkflowCoordinator
     /// <summary>
     /// Retrieves the segment player used for TTS playback, creating one if necessary.
     /// </summary>
-    /// <returns>The segment player instance; its <c>PlaybackRate</c> is set to the coordinator's TTS playback rate and segment lifecycle event handlers are subscribed (only once).</returns>
+    /// <summary>
+    /// Get or create the segment transport player configured for coordinator TTS playback.
+    /// </summary>
+    /// <returns>The segment player instance whose <c>PlaybackRate</c> and <c>Volume</c> are set from the coordinator and whose segment lifecycle event handlers are subscribed exactly once.</returns>
     private IMediaTransport GetOrCreateSegmentPlayer()
     {
         var player = _transportManager.GetOrCreateSegmentPlayer();
@@ -985,6 +1047,10 @@ public sealed partial class SessionWorkflowCoordinator
             player.PlaybackRate = value;
     }
 
+    /// <summary>
+    /// Updates the segment player's volume when a segment player exists.
+    /// </summary>
+    /// <param name="value">The new volume level, typically in the range 0.0 (muted) to 1.0 (maximum).</param>
     partial void OnTtsVolumeChanged(double value)
     {
         if (_transportManager.SegmentPlayer is { } player)
@@ -1001,7 +1067,19 @@ public sealed partial class SessionWorkflowCoordinator
     /// Persistence: does not persist the session to disk.
     /// Cancellation/guards: there is no cancellation token for this call; playback is started/scheduled and runs independently. If the required audio file is not present on disk, a <see cref="FileNotFoundException"/> is thrown.
     /// </remarks>
-    /// <exception cref="FileNotFoundException">Thrown if the resolved TTS audio file does not exist on disk.</exception>
+    /// <summary>
+        /// Starts playback of the TTS audio for the specified segment and schedules background playback using the coordinator's default timing mode.
+        /// </summary>
+        /// <param name="segmentId">The identifier of the segment whose TTS audio should be played.</param>
+        /// <returns>A task that completes once playback has been scheduled.</returns>
+        /// <remarks>
+        /// Expected state on entry: <see cref="CurrentSession"/> must exist and contain a mapping for the segment's TTS audio path in <c>TtsSegmentAudioPaths</c>. 
+        /// State on success: in-memory playback state is set to indicate a single-segment TTS playback is active; no session persistence is performed by this method. 
+        /// Cancellation: this overload does not accept a cancellation token and does not observe external cancellation; playback runs in background once scheduled. 
+        /// Guard behavior: if <see cref="CurrentSession"/> is missing or the segment id is not found in <c>TtsSegmentAudioPaths</c>, an <see cref="InvalidOperationException"/> is thrown; if the resolved audio file does not exist on disk, a <see cref="FileNotFoundException"/> is thrown.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Thrown if the coordinator has no current session or the segment id has no associated TTS audio path.</exception>
+        /// <exception cref="FileNotFoundException">Thrown if the resolved TTS audio file does not exist on disk.</exception>
     public Task PlayTtsForSegmentAsync(string segmentId)
         => PlayTtsForSegmentAsync(segmentId, null, SegmentTimingMode.Off);
 
@@ -1016,6 +1094,21 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="timingMode">Effective timing mode — resolves per-segment override then session default.</param>
     /// <returns>A Task that completes once the playback request has been queued.</returns>
     /// <exception cref="InvalidOperationException">Thrown when there is no active session or when no TTS audio path exists for <paramref name="segmentId"/>.</exception>
+    /// <summary>
+    /// Schedules playback of the TTS audio for a single segment and returns immediately after starting the background playback task.
+    /// </summary>
+    /// <remarks>
+    /// Entry/state requirements: an active session ( <c>CurrentSession</c> ) must exist and contain a TTS audio path for <paramref name="segmentId"/> whose file exists on disk.
+    /// Exit/state on success: <see cref="PlaybackState"/> is set to <see cref="PlaybackState.PlayingSingleSegment"/> and <see cref="ActiveTtsSegmentId"/> is set to <paramref name="segmentId"/>; playback is performed on a background task and the session is not persisted by this method.
+    /// Cancellation: this method does not accept a cancellation token; any cancellation or timeouts are handled by the background playback task.
+    /// </remarks>
+    /// <param name="segmentId">The identifier of the segment whose TTS audio should be played.</param>
+    /// <param name="segment">Optional workflow segment state used by timing modes that depend on segment timing (may be <c>null</c>).</param>
+    /// <param name="timingMode">Controls how the TTS playback is synchronized with source media (e.g., stretch, pause, or off).</param>
+    /// <returns>A completed <see cref="Task"/> after playback has been scheduled.</returns>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown when there is no active session, or when the active session does not contain a TTS audio path for <paramref name="segmentId"/>.
+    /// </exception>
     /// <exception cref="System.IO.FileNotFoundException">Thrown when the resolved TTS audio file does not exist on disk.</exception>
     public Task PlayTtsForSegmentAsync(string segmentId, WorkflowSegmentState? segment, SegmentTimingMode timingMode)
     {
@@ -1169,6 +1262,10 @@ public sealed partial class SessionWorkflowCoordinator
         /// Determines whether the provided segment identifier matches the currently active TTS segment.
         /// </summary>
         /// <param name="segmentId">The segment identifier to compare with the active TTS segment.</param>
+        /// <summary>
+        /// Determines whether the specified segment identifier matches the current <c>ActiveTtsSegmentId</c> using ordinal comparison.
+        /// </summary>
+        /// <param name="segmentId">The segment identifier to check.</param>
         /// <returns>`true` if <paramref name="segmentId"/> is equal to the current <c>ActiveTtsSegmentId</c> using ordinal comparison; `false` otherwise.</returns>
         private bool IsStillActiveTtsSegment(string segmentId) =>
         string.Equals(ActiveTtsSegmentId, segmentId, StringComparison.Ordinal);
@@ -1180,6 +1277,13 @@ public sealed partial class SessionWorkflowCoordinator
     /// If a segment player is present, an attempt is made to pause it; an <see cref="ObjectDisposedException"/> from the pause call is swallowed (shutdown/race condition).
     /// Completes and clears any outstanding pause-mode completion, clears the active TTS segment identifier, and sets the coordinator's playback state to <see cref="PlaybackState.Idle"/>.
     /// This method does not persist session state and has no cancellation semantics. If no segment player exists, the method is a no-op.
+    /// <summary>
+    /// Stops any in-progress TTS segment playback and resets related in-memory playback state.
+    /// </summary>
+    /// <remarks>
+    /// Attempts to pause the segment transport and ignores ObjectDisposedException if the transport has already been disposed.
+    /// Completes any pending pause-mode completion with `false`, clears the active TTS segment id, and sets the playback state to Idle.
+    /// This method is safe to call when no TTS playback is active.
     /// </remarks>
     public void StopTtsPlayback()
     {
@@ -1199,7 +1303,12 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>
     /// Stops any active TTS playback and pauses the source media player.
+    /// <summary>
+    /// Stops any ongoing TTS playback and pauses source media playback.
     /// </summary>
+    /// <remarks>
+    /// This method is synchronous and safe to call in any session stage; it clears the active TTS segment and sets the in-memory playback state to idle, then pauses the source media player. It does not persist the session state or throw on normal operation.
+    /// </remarks>
     public void StopPlayback()
     {
         StopTtsPlayback();
@@ -1213,6 +1322,16 @@ public sealed partial class SessionWorkflowCoordinator
     /// <returns>A task that completes after playback has been scheduled.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when there is no active session, no media is loaded, or the specified segment cannot be found.
+    /// </exception>
+    /// <summary>
+    /// Starts playback of the session's ingested media at the start time of the specified segment.
+    /// </summary>
+    /// <remarks>
+    /// Expected preconditions: an active session (CurrentSession != null) with a non-blank, existing IngestedMediaPath and an existing segment matching <paramref name="segmentId"/>. On success the method schedules playback in the background and does not modify or persist session state. This method does not observe cancellation.
+    /// </remarks>
+    /// <param name="segmentId">The identifier of the segment at whose start time playback should begin.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when there is no active session, when no ingested media path is recorded, or when no segment with the given <paramref name="segmentId"/> exists.
     /// </exception>
     /// <exception cref="FileNotFoundException">Thrown when the ingested media file does not exist at the recorded path.</exception>
     public async Task PlaySourceMediaAtSegmentAsync(string segmentId)
@@ -1266,6 +1385,11 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     /// <remarks>
     /// Attempts to complete any pending save and in-flight TTS operations before disposing internal services and transport resources. Exceptions thrown during disposal or while waiting for pending tasks are caught and ignored to allow shutdown to continue.
+    /// <summary>
+    /// Performs orderly shutdown and resource cleanup for the coordinator.
+    /// </summary>
+    /// <remarks>
+    /// Expects the coordinator to be running or idle; on success it requests shutdown, stops background activity, unsubscribes event handlers, and disposes owned resources. It attempts to wait briefly (up to a small timeout) for in-flight TTS tasks to complete; if that wait times out it schedules safe background disposal of the TTS service, still disposes transport and inference resources, and returns early. The method flushes any pending session save before disposing storage and cancellation resources. This method does not throw for internal disposal failures and has no cancellation token; callers should not rely on synchronous completion of long-running background disposals scheduled by this method.
     /// </remarks>
     public void Dispose()
     {
@@ -1357,6 +1481,13 @@ public sealed partial class SessionWorkflowCoordinator
     /// <remarks>
     /// If no disposable TTS service is present, the method returns immediately. Disposal is performed asynchronously and any exception
     /// thrown during disposal is caught and logged as a warning; exceptions are not propagated to the caller.
+    /// <summary>
+    /// Schedules a non-blocking background disposal of the TTS service if it implements <see cref="IDisposable"/>.
+    /// </summary>
+    /// <remarks>
+    /// If the coordinator's TTS service does not implement <see cref="IDisposable"/>, this method returns immediately with no effect.
+    /// When the service is disposable, disposal is performed on a background task so callers are not blocked; any exceptions thrown by disposal are caught and logged rather than propagated.
+    /// This method does not modify session state, does not persist anything, and does not support cancellation.
     /// </remarks>
     private void ScheduleSafeTtsDisposal()
     {

@@ -21,7 +21,14 @@ public sealed class AvaloniaDialogService : IDialogService
     /// - Threading: Ensures the dialog is created and shown on the UI thread; if already on the UI thread it calls the UI routine directly, otherwise it invokes the UI routine via the UI dispatcher.
     /// - Persistence: The returned value indicates the user's choice but this method does not persist that choice to any storage or session state.
     /// - Cancellation: The provided <paramref name="cancellationToken"/> is not used; callers should not expect cancellation to abort the dialog display.
+    /// <summary>
+    /// Displays a modal warmup notice dialog on the Avalonia UI thread and returns whether the user selected the "Don't show again" option.
+    /// </summary>
+    /// <remarks>
+    /// Expects the Avalonia application to be running; if <c>Application.Current</c> is <c>null</c> the method returns <c>false</c> immediately and does not attempt UI dispatch. If called off the UI thread, the dialog is invoked on the UI thread before being shown. The method does not persist the user's choice; it only reports the selection. Cancellation is accepted for API compatibility but is not observed by this method.
     /// </remarks>
+    /// <param name="cancellationToken">Provided for API compatibility; this method does not observe or use the token.</param>
+    /// <returns><c>true</c> if the user selected "Don't show again", <c>false</c> otherwise.</returns>
     public async Task<bool> ShowWarmupNoticeAsync(CancellationToken cancellationToken = default)
     {
         if (Application.Current is null)

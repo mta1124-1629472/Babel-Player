@@ -22,6 +22,18 @@ public sealed partial class SessionWorkflowCoordinator
     /// If <c>fromSpeakerId</c> and <c>toSpeakerId</c> are equal after trimming, the method performs no work and returns 0.
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when <paramref name="fromSpeakerId"/> or <paramref name="toSpeakerId"/> is null, empty, or whitespace.</exception>
+    /// <summary>
+    /// Relabels diarized transcript segments (and translation segments, if present) from one speaker ID to another and updates the session's speaker mappings.
+    /// </summary>
+    /// <remarks>
+    /// Entry state: requires CurrentSession.TranscriptPath to reference an existing saved transcript file. 
+    /// Exit state on success: the transcript and optional translation are updated on disk, and CurrentSession is persisted with updated SpeakerVoiceAssignments and SpeakerReferenceAudioPaths.
+    /// </remarks>
+    /// <param name="fromSpeakerId">The speaker ID to replace. Leading/trailing whitespace is ignored.</param>
+    /// <param name="toSpeakerId">The target speaker ID. Leading/trailing whitespace is ignored.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation during I/O and artifact loading operations.</param>
+    /// <returns>The number of transcript segments that were relabeled.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="fromSpeakerId"/> or <paramref name="toSpeakerId"/> is null, empty, or consists only of whitespace.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no saved transcript file is available on the current session.</exception>
     public async Task<int> MergeDiarizedSpeakersAsync(
         string fromSpeakerId,
