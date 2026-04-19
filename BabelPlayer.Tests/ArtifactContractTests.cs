@@ -29,6 +29,7 @@ public sealed class ArtifactContractTests : IDisposable
     {
         var artifact = new TranslationArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             SourceLanguage = "es",
             TargetLanguage = "en",
             Segments =
