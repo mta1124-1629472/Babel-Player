@@ -460,13 +460,3 @@ command = "dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --f
 name = "Dev"
 icon = "debug"
 command = "dotnet run -c Dev --project BabelPlayer.csproj"
-
-[[actions]]
-name = "Cleanup Preview"
-icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -WhatIf"
-
-[[actions]]
-name = "Cleanup"
-icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches -DeleteMergedLocalBranches -DeleteMergedRemoteBranches"
