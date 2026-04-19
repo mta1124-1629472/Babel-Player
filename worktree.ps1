@@ -62,7 +62,16 @@ function Invoke-Git {
         [switch]$AllowFailure
     )
 
-    $output = & git -C $WorkingDirectory @Args 2>&1
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & git -C $WorkingDirectory @Args 2>&1
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $output = @($output | ForEach-Object { $_.ToString() })
     $exitCode = $LASTEXITCODE
 
     if (-not $AllowFailure -and $exitCode -ne 0) {

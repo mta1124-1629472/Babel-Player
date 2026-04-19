@@ -13,6 +13,19 @@ Read these before non-trivial work:
 
 Use `docs/PLAN.md` as the document map. Dated plan and milestone files are historical unless that file says otherwise.
 
+### Worktrees
+
+Use the root helper from the repo checkout when you want an isolated branch workspace:
+
+```powershell
+.\worktree.ps1 new codex/feature-name
+.\worktree.ps1 sync codex/feature-name
+.\worktree.ps1 remove codex/feature-name -DeleteBranch
+.\worktree.ps1 list
+```
+
+The helper keeps feature work in the sibling `Babel-Player.wt` folder and rebases feature branches onto `origin/main`.
+
 ### Project Posture
 
 The repo is built around one real user outcome:
