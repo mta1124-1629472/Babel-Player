@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import suppress
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -149,6 +150,28 @@ def _resolve_stem_path(raw: str | Path, output_dir: Path) -> Path:
     )
 
 
+def _create_isolated_separator_work_dir(output_dir: Path) -> Path:
+    """
+    Create a per-request scratch directory under output_dir for separator I/O.
+    """
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="sep_run_", dir=str(output_dir)))
+
+
+def _publish_stem_to_output_dir(stem_path: Path, output_dir: Path) -> Path:
+    """
+    Move a selected stem from the scratch directory into output_dir root.
+    """
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    destination = output_dir / stem_path.name
+    if destination != stem_path:
+        destination.unlink(missing_ok=True)
+        shutil.move(str(stem_path), str(destination))
+    return destination.resolve()
+
+
 def run_vocal_separation(
     audio_path: Path,
     output_dir: Path,
@@ -180,7 +203,7 @@ def run_vocal_separation(
     def make_separator(model_name: str) -> Separator:
         sep = Separator(
             model_file_dir=str(SEPARATOR_MODEL_DIR),
-            output_dir=str(output_dir),
+            output_dir=str(separator_work_dir),
             output_format=output_format,
             use_autocast=use_gpu,
             mdx_params=mdx_params,
@@ -200,13 +223,17 @@ def run_vocal_separation(
 
     effective_instrumental_model = instrumental_model or vocals_model
 
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    separator_work_dir = _create_isolated_separator_work_dir(output_dir)
     temp_input: Optional[Path] = None
     try:
-        work_audio, temp_input = _normalize_input_for_separator(audio_path, output_dir)
+        work_audio, temp_input = _normalize_input_for_separator(audio_path, separator_work_dir)
         if vocals_model == effective_instrumental_model:
             # Single pass — both stems come from the same model run
             stems = [
-                _resolve_stem_path(p, output_dir)
+                _resolve_stem_path(p, separator_work_dir)
                 for p in make_separator(vocals_model).separate(str(work_audio))
             ]
             if len(stems) < 2:
@@ -218,11 +245,11 @@ def run_vocal_separation(
         else:
             # Two-pass — optimise each stem independently
             vocals_stems = [
-                _resolve_stem_path(p, output_dir)
+                _resolve_stem_path(p, separator_work_dir)
                 for p in make_separator(vocals_model).separate(str(work_audio))
             ]
             instrumental_stems = [
-                _resolve_stem_path(p, output_dir)
+                _resolve_stem_path(p, separator_work_dir)
                 for p in make_separator(effective_instrumental_model).separate(str(work_audio))
             ]
             if len(vocals_stems) < 2 or len(instrumental_stems) < 2:
@@ -239,6 +266,9 @@ def run_vocal_separation(
             for rejected in instrumental_stems:
                 if rejected != instrumental_path:
                     rejected.unlink(missing_ok=True)
+
+        vocals_path = _publish_stem_to_output_dir(vocals_path, output_dir)
+        instrumental_path = _publish_stem_to_output_dir(instrumental_path, output_dir)
 
         logger.info(
             "Vocal separation complete — vocals=%s (%d bytes), instrumental=%s (%d bytes)",
@@ -258,3 +288,5 @@ def run_vocal_separation(
                     temp_input,
                     exc,
                 )
+        with suppress(OSError):
+            shutil.rmtree(separator_work_dir, ignore_errors=True)

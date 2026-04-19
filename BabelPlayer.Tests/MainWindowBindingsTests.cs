@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Resources;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Babel.Player.Resources;
 using Xunit;
 
@@ -141,6 +143,23 @@ public sealed class MainWindowBindingsTests
         Assert.DoesNotContain("StringFormat='{}{0} items'", axaml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MainWindow_RightPaneElements_AreSiblingsOfPlayerChromeHost()
+    {
+        var axamlPath = FindRepoFile("Views", "MainWindow.axaml");
+        var axaml = File.ReadAllText(axamlPath);
+        var document = XDocument.Parse(axaml);
+
+        var paneLayoutHost = FindElementByName(document, "PaneLayoutHost");
+        var playerChromeHost = FindElementByName(document, "PlayerChromeHost");
+        var rightSplitter = FindElementByName(document, "RightPaneSplitter");
+        var segmentsPaneHost = FindElementByName(document, "SegmentsPaneHost");
+
+        Assert.Same(paneLayoutHost, playerChromeHost.Parent);
+        Assert.Same(paneLayoutHost, rightSplitter.Parent);
+        Assert.Same(paneLayoutHost, segmentsPaneHost.Parent);
+    }
+
     private static string FindRepoFile(params string[] relativePathParts)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -264,5 +283,16 @@ public sealed class MainWindowBindingsTests
             RegexOptions.Singleline);
 
         return match.Success ? match.Groups[1].Value : null;
+    }
+
+    private static XElement FindElementByName(XDocument document, string controlName)
+    {
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+        var element = document
+            .Descendants()
+            .FirstOrDefault(node => string.Equals(node.Attribute(xNamespace + "Name")?.Value, controlName, StringComparison.Ordinal));
+
+        Assert.NotNull(element);
+        return element!;
     }
 }

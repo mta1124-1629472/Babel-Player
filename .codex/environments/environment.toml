@@ -460,3 +460,24 @@ command = "dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --f
 name = "Dev"
 icon = "debug"
 command = "dotnet run -c Dev --project BabelPlayer.csproj"
+
+[[actions]]
+name = "Clean App Folder"
+icon = "tool"
+command = "if (Test-Path \"$env:LOCALAPPDATA\\BabelPlayer\") { Get-ChildItem -LiteralPath \"$env:LOCALAPPDATA\\BabelPlayer\" -Force | Remove-Item -Recurse -Force }"
+
+[[actions]]
+name = "Debug"
+icon = "debug"
+command = "dotnet run --project .\\BabelPlayer.csproj -c Debug"
+
+[[actions]]
+name = "Fetch Natives"
+icon = "tool"
+command = "pwsh .\\scripts\\fetch-win-native-deps.ps1"
+platform = "win32"
+
+[[actions]]
+name = "Kill"
+icon = "tool"
+command = "Get-Process BabelPlayer -ErrorAction SilentlyContinue | Stop-Process -Force; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'dotnet.exe' -and $_.CommandLine -match 'BabelPlayer' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"

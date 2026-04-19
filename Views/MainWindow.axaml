@@ -1383,6 +1383,7 @@
                     </StackPanel>
                 </Grid>
             </Border>
+        </Grid>
 
             <Border Grid.Row="1"
                     Grid.Column="3"
@@ -1400,6 +1401,7 @@
             </Border>
 
             <Border Grid.Row="1"
+                    x:Name="SegmentsPaneHost"
                     Grid.Column="{Binding Playback.Preview.SegmentsPaneColumn}"
                     Width="{Binding Playback.Preview.SegmentsPaneWidth}"
                     IsVisible="{Binding Playback.Preview.IsSegmentsPaneShown}"
@@ -1637,10 +1639,8 @@
                     </Border>
                 </Grid>
             </Border>
-
         </Grid>
 
-    </Grid>
     </Grid>
 
 </Window>
