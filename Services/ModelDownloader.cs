@@ -42,20 +42,53 @@ public sealed partial class ModelDownloader
         string outputDir = GetCTranslate2TranslationModelDir(model);
         Directory.CreateDirectory(Path.GetDirectoryName(outputDir)!);
 
-        string script = @"
+        string script = BuildCTranslate2TranslationModelPrepScript();
+
+        return await RunPythonModelPrepScriptAsync(
+            pythonPath,
+            script,
+            [repoId, outputDir, "int8"],
+            progress,
+            token,
+            $"CTranslate2 translation model {repoId}");
+    }
+
+    internal static string BuildCTranslate2TranslationModelPrepScript() => """
 import json
 import os
 import shutil
+import subprocess
 import sys
 
-try:
-    from huggingface_hub import snapshot_download
-    from ctranslate2.converters import TransformersConverter
-except ImportError:
-    print('[progress] 5', flush=True)
-    os.system(f'""{sys.executable}"" -m pip install huggingface_hub ctranslate2 transformers sentencepiece')
-    from huggingface_hub import snapshot_download
-    from ctranslate2.converters import TransformersConverter
+def ensure_dependencies():
+    try:
+        from huggingface_hub import snapshot_download
+        import transformers
+        import sentencepiece
+        from ctranslate2.converters import TransformersConverter
+        return snapshot_download, TransformersConverter
+    except ImportError:
+        # ctranslate2 swallows some optional import failures, so verify converter dependencies explicitly.
+        print('[progress] 5', flush=True)
+        subprocess.check_call(
+            [
+                sys.executable,
+                '-m',
+                'pip',
+                'install',
+                'huggingface_hub',
+                'ctranslate2',
+                'transformers',
+                'sentencepiece',
+            ]
+        )
+        from huggingface_hub import snapshot_download
+        import transformers
+        import sentencepiece
+        from ctranslate2.converters import TransformersConverter
+        return snapshot_download, TransformersConverter
+
+snapshot_download, TransformersConverter = ensure_dependencies()
 
 repo_id = sys.argv[1]
 output_dir = sys.argv[2]
@@ -80,16 +113,7 @@ if os.path.isdir(output_dir):
     shutil.rmtree(output_dir)
 shutil.move(tmp_output_dir, output_dir)
 print('[progress] 100', flush=True)
-";
-
-        return await RunPythonModelPrepScriptAsync(
-            pythonPath,
-            script,
-            [repoId, outputDir, "int8"],
-            progress,
-            token,
-            $"CTranslate2 translation model {repoId}");
-    }
+""";
 
 
     private async Task<bool> DownloadHuggingFaceModelAsync(string repoId, IProgress<double>? progress = null, CancellationToken token = default)
