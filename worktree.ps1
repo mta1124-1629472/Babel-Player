@@ -76,8 +76,8 @@ function Invoke-Git {
         # Get-Command validates the executable. $? reflects whether the call operator reported an error;
         # $LASTEXITCODE is the process exit code. If the process never starts, $? can be $false while
         # $LASTEXITCODE stays 0 (stale). If both succeed, trust $LASTEXITCODE (including non-zero).
-        # Note: on Windows PowerShell 5.1, stderr merged via 2>&1 can clear $? even when git exits 0;
-        # use PowerShell 7+ (pwsh) for this helper if you hit spurious failures.
+        # #Requires -Version 7.0 avoids Windows PowerShell 5.1 cases where stderr merged via 2>&1 clears
+        # $? even when git exits 0.
         $output = & $gitCommand.Source -C $WorkingDirectory @Args 2>&1
         $invocationSucceeded = $?
     }
