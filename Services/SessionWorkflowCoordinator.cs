@@ -38,11 +38,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
     private IVocalSeparationProvider? _vocalSeparationProvider;
+    private readonly ProviderLeaseManager<ITranslationProvider> _translationProviderLeases;
+    private readonly ProviderLeaseManager<ITtsProvider> _ttsProviderLeases;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly List<Task> _pendingTtsTasks = [];
     private readonly object _pendingTtsTasksLock = new();
     private readonly IAudioProcessingService? _audioProcessingService;
     private readonly object _sessionLock = new();
+    private long _settingsRevision;
+    private long _sessionRevision;
 
 
     private readonly IInferenceExecutionEngine _inferenceEngine;
@@ -179,6 +183,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _inferenceEngine = options.InferenceExecutionEngine ?? DefaultInferenceExecutionEngine.Instance;
         _executionPlanner = options.ExecutionPlanner ?? DefaultExecutionPlanner.Instance;
         _requestLeaseTracker = options.RequestLeaseTracker;
+        _translationProviderLeases = new ProviderLeaseManager<ITranslationProvider>(_log, "translation");
+        _ttsProviderLeases = new ProviderLeaseManager<ITtsProvider>(_log, "tts");
         _transcriptionOrchestrator = new TranscriptionOrchestrator(this, this, this, this, _inferenceEngine, _log);
         _translationOrchestrator = new TranslationOrchestrator(this, this, this, this, _inferenceEngine, _log);
         _diarizationStageOrchestrator = new DiarizationStageOrchestrator(this, this, this, _log);
@@ -562,6 +568,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         {
             CurrentSession = ResetToMediaLoadedSession(CurrentSession);
         }
+        MarkSessionInputsChanged("pipeline reset to media-loaded");
     }
 
     public void ResetPipelineToTranscribed()
@@ -599,6 +606,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 StatusMessage = "Reset to transcription."
             };
         }
+        MarkSessionInputsChanged("pipeline reset to transcribed");
     }
 
     public void ResetPipelineToDiarized()
@@ -632,6 +640,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 StatusMessage = "Reset to speaker analysis."
             };
         }
+        MarkSessionInputsChanged("pipeline reset to diarized");
     }
 
     public void ResetPipelineToTranslated()
@@ -658,6 +667,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 StatusMessage = "Reset to translation."
             };
         }
+        MarkSessionInputsChanged("pipeline reset to translated");
     }
 
     /// <summary>
@@ -779,78 +789,57 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
     public async Task RegenerateSegmentTtsAsync(string segmentId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
+        var translationPath = CurrentSession.TranslationPath;
+        if (string.IsNullOrEmpty(translationPath))
         {
             throw new InvalidOperationException("No translation available. Please translate first.");
         }
 
-        if (!File.Exists(CurrentSession.TranslationPath))
+        if (!File.Exists(translationPath))
         {
-            throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
-        }
-
-        var segmentText = await _artifactReader.GetTranslatedTextAsync(
-            CurrentSession.TranslationPath,
-            segmentId,
-            cancellationToken);
-
-        if (string.IsNullOrEmpty(segmentText))
-        {
-            throw new InvalidOperationException($"Segment not found: {segmentId}");
+            throw new FileNotFoundException($"Translation file not found: {translationPath}");
         }
 
         var translation = await _artifactReader.LoadTranslationAsync(
-            CurrentSession.TranslationPath,
+            translationPath,
             cancellationToken);
         var targetSegment = translation.Segments?.FirstOrDefault(s => s.Id == segmentId);
-        var regenVoice = targetSegment is not null
-            ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
-            : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
-        await EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
-        var referenceAudioPath = targetSegment is not null
-            ? ResolveReferenceAudioForSegment(targetSegment)
-            : null;
+        var segmentText = targetSegment?.TranslatedText;
+        if (string.IsNullOrWhiteSpace(segmentText) || targetSegment is null)
+            throw new InvalidOperationException($"Segment not found: {segmentId}");
 
-        await EnsureContainerizedExecutionRuntimeStartedAsync(
-            CurrentSettings.TtsRuntime,
-            "TTS",
-            cancellationToken);
+        var defaultVoice = (CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)?.Trim();
+        if (string.IsNullOrWhiteSpace(defaultVoice))
+            throw new InvalidOperationException("No TTS voice configured. Please configure a voice in Settings before regenerating TTS.");
 
-        var readiness = CurrentSettings.TtsRuntime == InferenceRuntime.Containerized && _containerizedProbe is not null
-            ? await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(
-                CurrentSettings,
-                _containerizedProbe,
-                cancellationToken: cancellationToken)
-            : TtsRegistry.CheckReadiness(
-                CurrentSettings.TtsProvider,
-                regenVoice,
-                CurrentSettings,
-                KeyStore,
-                CurrentSettings.TtsProfile);
-        if (!readiness.IsReady && !readiness.RequiresModelDownload)
-            throw new PipelineProviderException(readiness.BlockingReason!);
-
-        _ttsService ??= CreateTtsService();
-
-        var sessionDir = GetSessionDirectory();
-        var mediaName = Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath!);
-        var segmentsDir = Path.Combine(sessionDir, "tts", "segments", mediaName);
-        Directory.CreateDirectory(segmentsDir);
-
-        var segmentAudioPath = Path.Combine(segmentsDir, $"{segmentId}.mp3");
+        var targetLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
+        var stagePlan = ResolveAndApplyExecutionPlan(Planning.InferenceStage.Tts);
+        var snapshot = await PrepareTtsExecutionSnapshotAsync(
+                stagePlan,
+                translationPath,
+                defaultVoice,
+                targetLanguage,
+                progress: null,
+                stageContext: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await using var ttsProviderLease = snapshot.ProviderLease;
+        var segmentAudioPath = Path.Combine(snapshot.SegmentsDir, $"{segmentId}.mp3");
+        var resolvedVoice = snapshot.ResolveVoiceForSegment(targetSegment);
+        var referenceAudioPath = snapshot.ResolveReferenceAudioForSegment(targetSegment);
 
         _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText[..Math.Min(30, segmentText.Length)]}...");
 
-        var targetLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
         var ttsTask = _inferenceEngine.GenerateSegmentTtsAsync(
-            _ttsService,
+            snapshot.Provider,
             new SingleSegmentTtsRequest(
                 segmentText,
                 segmentAudioPath,
-                regenVoice,
+                resolvedVoice,
                 targetSegment?.SpeakerId,
                 referenceAudioPath,
-                Language: targetLanguage),
+                Language: snapshot.Language,
+                SourceVideoPath: snapshot.SourceVideoPath),
             cancellationToken);
         TrackPendingTtsTask(ttsTask);
         var result = await ttsTask;
@@ -860,6 +849,24 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             var errorMsg = result.ErrorMessage ?? "Unknown TTS error";
             _log.Error($"Segment TTS regeneration failed: {errorMsg}", new Exception(errorMsg));
             throw new InvalidOperationException($"Segment TTS regeneration failed: {errorMsg}");
+        }
+
+        if (!snapshot.TranslationIdentity.Matches(CurrentSession.TranslationPath))
+        {
+            _log.Warning(
+                $"Discarding segment TTS regeneration for {segmentId} from run {snapshot.RunId} because translation inputs changed.");
+            return;
+        }
+
+        var currentTranslatedText = await _artifactReader.GetTranslatedTextAsync(
+            CurrentSession.TranslationPath!,
+            segmentId,
+            cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(currentTranslatedText, segmentText, StringComparison.Ordinal))
+        {
+            _log.Warning(
+                $"Discarding segment TTS regeneration for {segmentId} from run {snapshot.RunId} because the translated text changed.");
+            return;
         }
 
         var updatedSegmentPaths = CurrentSession.TtsSegmentAudioPaths is null
@@ -882,15 +889,19 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             CurrentSession = SessionSnapshotSemantics.ClearTtsOutputs(CurrentSession) with
             {
                 Stage = SessionWorkflowStage.Translated,
-                TtsSegmentsPath = segmentsDir,
+                TtsSegmentsPath = snapshot.SegmentsDir,
                 TtsSegmentAudioPaths = updatedSegmentPaths,
                 TtsSegmentDurations = updatedDurations.Count == 0 ? null : updatedDurations,
-                TtsVoice = regenVoice,
-                TtsRuntime = CurrentSettings.TtsRuntime,
-                TtsProvider = CurrentSettings.TtsProvider,
-                DubTimingMode = CurrentSettings.DubTimingMode,
-                AmbianceMixDb = CurrentSettings.AmbianceMixDb,
-                StatusMessage = $"Regenerated TTS for segment {segmentId}. Re-render the dub to finalize it.",
+                TtsVoice = resolvedVoice,
+                TtsRuntime = snapshot.Plan.Runtime,
+                TtsProvider = snapshot.Plan.ProviderId,
+                TtsSettingsDriftedSinceArtifact = TtsSettingsDrifted(snapshot),
+                TtsRunId = snapshot.RunId,
+                DubTimingMode = snapshot.DefaultTimingMode,
+                AmbianceMixDb = snapshot.AmbianceMixDb,
+                StatusMessage = TtsSettingsDrifted(snapshot)
+                    ? $"Regenerated TTS for segment {segmentId} using previous settings. Re-render the dub to apply current settings."
+                    : $"Regenerated TTS for segment {segmentId}. Re-render the dub to finalize it.",
             };
         }
 
@@ -909,18 +920,19 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// <exception cref="InvalidOperationException">Thrown when the session lacks a translation path, when the source or target language is not set, when the segment source text is not found, or when the translation attempt fails.</exception>
     public async Task RegenerateSegmentTranslationAsync(string segmentId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
+        var translationPath = CurrentSession.TranslationPath;
+        if (string.IsNullOrEmpty(translationPath))
         {
             throw new InvalidOperationException("No translation available. Please translate first.");
         }
 
-        if (!File.Exists(CurrentSession.TranslationPath))
+        if (!File.Exists(translationPath))
         {
-            throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
+            throw new FileNotFoundException($"Translation file not found: {translationPath}");
         }
 
         var sourceText = await _artifactReader.GetSourceTextAsync(
-            CurrentSession.TranslationPath,
+            translationPath,
             segmentId,
             cancellationToken);
 
@@ -928,10 +940,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         {
             throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
         }
-
-        await EnsureTranslationExecutionReadyAsync(cancellationToken: cancellationToken);
-
-        _translationService ??= CreateTranslationService();
 
         if (string.IsNullOrEmpty(CurrentSession.SourceLanguage))
             throw new InvalidOperationException("Source language is not set in the current session. Transcription must be completed first.");
@@ -941,17 +949,30 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
         var sourceLanguage = CurrentSession.SourceLanguage;
         var targetLanguage = CurrentSession.TargetLanguage;
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath) || !File.Exists(CurrentSession.TranscriptPath))
+            throw new InvalidOperationException("Transcript is unavailable for translation regeneration.");
+        var translationIdentity = ArtifactIdentity.Capture(translationPath);
+        var stagePlan = ResolveAndApplyExecutionPlan(Planning.InferenceStage.Translation);
+        var snapshot = await PrepareTranslationExecutionSnapshotAsync(
+                stagePlan,
+                CurrentSession.TranscriptPath,
+                sourceLanguage,
+                targetLanguage,
+                progress: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await using var translationProviderLease = snapshot.ProviderLease;
 
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText[..Math.Min(30, sourceText.Length)]}...");
 
         var result = await _inferenceEngine.TranslateSingleSegmentTextAsync(
-            _translationService,
+            snapshot.Provider,
             new SingleSegmentTranslationTextRequest(
                 sourceText,
                 segmentId,
                 sourceLanguage,
                 targetLanguage,
-                CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel),
+                snapshot.Model),
             cancellationToken);
 
         if (!result.Success)
@@ -961,7 +982,24 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             throw new InvalidOperationException($"Segment translation regeneration failed: {errorMsg}");
         }
 
-        var translationPath = CurrentSession.TranslationPath;
+        if (!translationIdentity.Matches(CurrentSession.TranslationPath))
+        {
+            _log.Warning(
+                $"Discarding segment translation regeneration for {segmentId} from run {snapshot.RunId} because translation inputs changed.");
+            return;
+        }
+
+        var currentSourceText = await _artifactReader.GetSourceTextAsync(
+            CurrentSession.TranslationPath!,
+            segmentId,
+            cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(currentSourceText, sourceText, StringComparison.Ordinal))
+        {
+            _log.Warning(
+                $"Discarding segment translation regeneration for {segmentId} from run {snapshot.RunId} because the source text changed.");
+            return;
+        }
+
         var artifact = await _artifactReader.LoadTranslationAsync(translationPath, cancellationToken).ConfigureAwait(false);
         var matchedSegment = artifact.Segments?.FirstOrDefault(segment => string.Equals(segment.Id, segmentId, StringComparison.Ordinal));
         if (matchedSegment is null)
@@ -989,11 +1027,15 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             TranslationPath = translationPath,
             SourceLanguage = result.SourceLanguage,
             TargetLanguage = result.TargetLanguage,
-            TranslationRuntime = CurrentSettings.TranslationRuntime,
-            TranslationProvider = CurrentSettings.TranslationProvider,
-            TranslationModel = CurrentSession.TranslationModel ?? CurrentSettings.TranslationModel,
+            TranslationRuntime = snapshot.Plan.Runtime,
+            TranslationProvider = snapshot.Plan.ProviderId,
+            TranslationModel = snapshot.Model,
+            TranslationSettingsDriftedSinceArtifact = TranslationSettingsDrifted(snapshot),
+            TranslationRunId = snapshot.RunId,
             TranslatedAtUtc = DateTimeOffset.UtcNow,
-            StatusMessage = $"Regenerated translation for segment {segmentId}. Re-render the dub to finalize it.",
+            StatusMessage = TranslationSettingsDrifted(snapshot)
+                ? $"Regenerated translation for segment {segmentId} using previous settings. Re-render the dub to apply current settings."
+                : $"Regenerated translation for segment {segmentId}. Re-render the dub to finalize it.",
         };
         if (!ArtifactIntegrityValidator.ValidateTranslation(candidate, out var integrityError))
             throw new InvalidOperationException($"Translation integrity validation failed after segment regeneration: {integrityError}");
@@ -1113,6 +1155,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
             };
         }
 
+        MarkSessionInputsChanged("session restored");
         _log.Info($"Restored session {sessionId} (stage: {CurrentSession.Stage}).");
         QueueMediaReloadRequest(autoPlay: false, "session-restore");
         SaveCurrentSession();

@@ -12,9 +12,14 @@ namespace Babel.Player.Services;
 public sealed partial class SessionWorkflowCoordinator
 {
 
-    private async Task EnsureSingleSpeakerQwenReferenceClipAsync(CancellationToken cancellationToken = default)
+    private Task EnsureSingleSpeakerQwenReferenceClipAsync(CancellationToken cancellationToken = default) =>
+        EnsureSingleSpeakerQwenReferenceClipAsync(CurrentSettings.TtsProvider, cancellationToken);
+
+    private async Task EnsureSingleSpeakerQwenReferenceClipAsync(
+        string providerId,
+        CancellationToken cancellationToken = default)
     {
-        if (!string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal))
+        if (!string.Equals(providerId, ProviderNames.Qwen, StringComparison.Ordinal))
             return;
 
         var references = CurrentSession.SpeakerReferenceAudioPaths;
@@ -66,9 +71,14 @@ public sealed partial class SessionWorkflowCoordinator
         _log.Debug($"Prepared Qwen single-speaker reference clip: {outputPath}");
     }
 
-    private async Task EnsureMultiSpeakerReferenceClipsAsync(CancellationToken cancellationToken = default)
+    private Task EnsureMultiSpeakerReferenceClipsAsync(CancellationToken cancellationToken = default) =>
+        EnsureMultiSpeakerReferenceClipsAsync(CurrentSettings.TtsProvider, cancellationToken);
+
+    private async Task EnsureMultiSpeakerReferenceClipsAsync(
+        string providerId,
+        CancellationToken cancellationToken = default)
     {
-        var isQwen = string.Equals(CurrentSettings.TtsProvider, ProviderNames.Qwen, StringComparison.Ordinal);
+        var isQwen = string.Equals(providerId, ProviderNames.Qwen, StringComparison.Ordinal);
         if (!isQwen)
             return;
         if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))

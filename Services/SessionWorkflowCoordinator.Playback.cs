@@ -579,6 +579,7 @@ public sealed partial class SessionWorkflowCoordinator
                 SegmentTimingModeOverrides = current.Count == 0 ? null : current,
             };
         }
+        MarkSessionInputsChanged("segment timing override updated");
         SaveCurrentSession();
     }
 
@@ -597,6 +598,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
         }
+        MarkSessionInputsChanged("speaker voice assignment updated");
         SaveCurrentSession();
     }
 
@@ -624,6 +626,7 @@ public sealed partial class SessionWorkflowCoordinator
                 return;
             CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
         }
+        MarkSessionInputsChanged("speaker voice assignment removed");
         SaveCurrentSession();
     }
 
@@ -670,6 +673,7 @@ public sealed partial class SessionWorkflowCoordinator
                 SpeakerVoiceAssignments = current.Count == 0 ? null : current,
             };
         }
+        MarkSessionInputsChanged("speaker voice assignments updated");
         SaveCurrentSession();
     }
 
@@ -688,6 +692,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
         }
+        MarkSessionInputsChanged("speaker reference path updated");
         SaveCurrentSession();
     }
 
@@ -715,6 +720,7 @@ public sealed partial class SessionWorkflowCoordinator
                 return;
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
         }
+        MarkSessionInputsChanged("speaker reference path removed");
         SaveCurrentSession();
     }
 
@@ -761,6 +767,7 @@ public sealed partial class SessionWorkflowCoordinator
                 SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
             };
         }
+        MarkSessionInputsChanged("speaker reference paths updated");
         SaveCurrentSession();
     }
 
@@ -1389,7 +1396,8 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
-        (_ttsService as IDisposable)?.Dispose();
+        RetireTranslationProviderCache("coordinator dispose");
+        RetireTtsProviderCache("coordinator dispose");
         _transportManager.Dispose();
         _perSessionStore?.Dispose();
         _shutdownCts.Dispose();
@@ -1404,12 +1412,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// </remarks>
     private void ScheduleSafeTtsDisposal()
     {
-        if (_ttsService is not IDisposable disposable) return;
-
-        Task.Run(() =>
-        {
-            try { disposable.Dispose(); }
-            catch (Exception ex) { _log.Warning($"Background TTS service disposal failed: {ex.Message}"); }
-        }).FireAndForgetAsync(_log, "TTS background disposal");
+        Task.Run(() => RetireTtsProviderCache("background tts disposal"))
+            .FireAndForgetAsync(_log, "TTS background disposal");
     }
 }

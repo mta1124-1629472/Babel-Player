@@ -58,16 +58,15 @@ public sealed partial class SessionWorkflowCoordinator
         if (transcriptionProviderChanged)
             _transcriptionService = null;
         if (translationProviderChanged)
-            _translationService = null;
+            RetireTranslationProviderCache("pipeline selection changed translation provider");
         if (ttsProviderChanged)
         {
-            // Match UpdateSettings: invalidate the cached provider here without disposing it
-            // because in-flight segment generation may still be holding the old instance.
-            _ttsService = null;
+            RetireTtsProviderCache("pipeline selection changed tts provider");
         }
 
         // Pipeline selections do not change the vocal-separation service endpoint, so keep
         // the cached provider until UpdateSettings changes the backing container URL.
+        MarkSettingsInputsChanged("pipeline selection updated");
         return true;
     }
 
@@ -87,6 +86,8 @@ public sealed partial class SessionWorkflowCoordinator
             || (settings.TranslationProfile == ComputeProfile.Gpu
                 && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
                     || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
+        bool translationExecutionChanged = translationProviderChanged
+            || !LanguageCode.TargetLanguagesMatch(settings.TargetLanguage, CurrentSettings.TargetLanguage);
         bool ttsProviderChanged = settings.TtsProfile != CurrentSettings.TtsProfile
             || settings.TtsProvider != CurrentSettings.TtsProvider
             || settings.TtsVoice != CurrentSettings.TtsVoice
@@ -94,6 +95,9 @@ public sealed partial class SessionWorkflowCoordinator
             || (settings.TtsProfile == ComputeProfile.Gpu
                 && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
                     || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));
+        bool ttsExecutionChanged = ttsProviderChanged
+            || settings.DubTimingMode != CurrentSettings.DubTimingMode
+            || settings.AmbianceMixDb != CurrentSettings.AmbianceMixDb;
         bool vocalSeparationProviderChanged = !string.Equals(
             settings.EffectiveContainerizedServiceUrl,
             CurrentSettings.EffectiveContainerizedServiceUrl,
@@ -102,13 +106,16 @@ public sealed partial class SessionWorkflowCoordinator
         CurrentSettings = settings;
 
         if (transcriptionProviderChanged) _transcriptionService = null;
-        if (translationProviderChanged) _translationService = null;
-        if (ttsProviderChanged) _ttsService = null;
+        if (translationProviderChanged) RetireTranslationProviderCache("settings updated translation provider");
+        if (ttsProviderChanged) RetireTtsProviderCache("settings updated tts provider");
         if (vocalSeparationProviderChanged)
         {
             (_vocalSeparationProvider as IDisposable)?.Dispose();
             _vocalSeparationProvider = null;
         }
+
+        if (transcriptionProviderChanged || translationExecutionChanged || ttsExecutionChanged)
+            MarkSettingsInputsChanged("settings object replaced");
 
         RefreshVideoEnhancementDiagnostics();
     }
@@ -128,8 +135,8 @@ public sealed partial class SessionWorkflowCoordinator
     public void InvalidateAllProviderCaches()
     {
         _transcriptionService = null;
-        _translationService = null;
-        _ttsService = null;
+        RetireTranslationProviderCache("all provider caches invalidated");
+        RetireTtsProviderCache("all provider caches invalidated");
         (_vocalSeparationProvider as IDisposable)?.Dispose();
         _vocalSeparationProvider = null;
     }

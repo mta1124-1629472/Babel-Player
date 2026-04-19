@@ -361,13 +361,21 @@ public sealed partial class SessionWorkflowCoordinator
     }
 
     private async Task CommitTranslationSessionStateAsync(
-        TranslationResult result,
-        string translationPath,
-        string sourceLanguage,
-        string targetLanguage)
+        TranslationExecutionSnapshot snapshot,
+        TranslationResult result)
     {
-        translationPath = await ArtifactIntegrity.FinalizeWorkingArtifactAsync(translationPath).ConfigureAwait(false);
+        if (!TranslationInputsStillMatch(snapshot))
+        {
+            _log.Warning(
+                $"Discarding translation run {snapshot.RunId} because session inputs changed. Keeping orphaned artifact at {snapshot.WorkingTranslationPath}.");
+            return;
+        }
+
+        var settingsDrifted = TranslationSettingsDrifted(snapshot);
+        var translationPath = await ArtifactIntegrity.FinalizeWorkingArtifactAsync(snapshot.WorkingTranslationPath).ConfigureAwait(false);
         var translationArtifact = await ArtifactJson.LoadTranslationAsync(translationPath).ConfigureAwait(false);
+        var sourceLanguage = string.IsNullOrWhiteSpace(result.SourceLanguage) ? snapshot.SourceLanguage : result.SourceLanguage;
+        var targetLanguage = string.IsNullOrWhiteSpace(result.TargetLanguage) ? snapshot.TargetLanguage : result.TargetLanguage;
         await WriteTranslationManifestAsync(
                 translationPath,
                 translationArtifact,
@@ -384,10 +392,14 @@ public sealed partial class SessionWorkflowCoordinator
             SourceLanguage = sourceLanguage,
             TargetLanguage = targetLanguage,
             TranslatedAtUtc = nowUtc,
-            TranslationRuntime = CurrentSettings.TranslationRuntime,
-            TranslationProvider = CurrentSettings.TranslationProvider,
-            TranslationModel = CurrentSettings.TranslationModel,
-            StatusMessage = "Translation complete. Ready for dubbing.",
+            TranslationRuntime = snapshot.Plan.Runtime,
+            TranslationProvider = snapshot.Plan.ProviderId,
+            TranslationModel = snapshot.Model,
+            TranslationSettingsDriftedSinceArtifact = settingsDrifted,
+            TranslationRunId = snapshot.RunId,
+            StatusMessage = settingsDrifted
+                ? "Translation complete using previous settings. Re-run translation to apply current settings."
+                : "Translation complete. Ready for dubbing.",
         };
         if (!ArtifactIntegrityValidator.ValidateTranslation(candidate, out var integrityError))
             throw new InvalidOperationException($"Translation integrity validation failed after commit: {integrityError}");
@@ -397,7 +409,8 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSession = candidate;
         }
 
-        _log.Debug($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
+        _log.Debug(
+            $"Translation complete run={snapshot.RunId}: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}, settings_drifted={(settingsDrifted ? "true" : "false")}");
         await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
@@ -482,9 +495,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// - `OrderedSegments`: the ordered list of translation segments that were processed.
     /// </returns>
     private async Task<(ConcurrentDictionary<string, string> SegmentAudioPaths, ConcurrentDictionary<string, double> SegmentDurations, int TotalSegments, IReadOnlyList<TranslationSegmentArtifact> OrderedSegments)> GenerateSegmentClipsAsync(
-        string voice,
-        string? ttsLanguage,
-        string segmentsDir,
+        TtsExecutionSnapshot snapshot,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken)
     {
@@ -497,7 +508,7 @@ public sealed partial class SessionWorkflowCoordinator
             progress01: 0,
             isIndeterminate: true);
 
-        var translationData = await _artifactReader.LoadTranslationAsync(CurrentSession.TranslationPath!, cancellationToken);
+        var translationData = await _artifactReader.LoadTranslationAsync(snapshot.TranslationPath, cancellationToken);
         var candidateSegments = translationData.Segments?
             .Where(seg => !string.IsNullOrWhiteSpace(seg.Id) && !string.IsNullOrWhiteSpace(seg.TranslatedText))
             .ToList()
@@ -512,14 +523,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         try
         {
-            if (_ttsService is QwenContainerTtsProvider qwenProvider)
+            if (snapshot.Provider is QwenContainerTtsProvider qwenProvider)
             {
                 await GenerateQwenBatchSegmentAudioAsync(
+                    snapshot,
                     qwenProvider,
                     candidateSegments,
-                    segmentsDir,
-                    voice,
-                    ttsLanguage,
                     stageContext,
                     segmentAudioPaths,
                     segmentDurations,
@@ -528,7 +537,7 @@ public sealed partial class SessionWorkflowCoordinator
             else
             {
                 int completed = 0;
-                var parallelism = Math.Max(1, _ttsService?.MaxConcurrency ?? 1);
+                var parallelism = snapshot.MaxConcurrency;
                 await Parallel.ForEachAsync(
                     candidateSegments,
                     new ParallelOptions
@@ -539,10 +548,8 @@ public sealed partial class SessionWorkflowCoordinator
                     async (seg, ct) =>
                     {
                         await GenerateSingleSegmentAsync(
+                            snapshot,
                             seg,
-                            voice,
-                            ttsLanguage,
-                            segmentsDir,
                             segmentAudioPaths,
                             segmentDurations,
                             totalSegments,
@@ -601,10 +608,8 @@ public sealed partial class SessionWorkflowCoordinator
     /// Entry state: any pipeline stage that has a valid translation artifact containing this segment. On success this method updates <paramref name="segmentAudioPaths"/> and optionally <paramref name="segmentDurations"/>, invokes <paramref name="onSucceeded"/>, and reports stage progress; it does not persist session state. Failures from the TTS provider are logged and suppressed (do not propagate), while cancellation is honored via <paramref name="cancellationToken"/>. If the segment has empty text or id the method returns without performing work.
     /// </remarks>
     private async Task GenerateSingleSegmentAsync(
+        TtsExecutionSnapshot snapshot,
         TranslationSegmentArtifact seg,
-        string defaultVoice,
-        string? ttsLanguage,
-        string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         ConcurrentDictionary<string, double> segmentDurations,
         int totalSegments,
@@ -621,24 +626,24 @@ public sealed partial class SessionWorkflowCoordinator
             return;
         }
 
-        var segmentAudioPath = Path.Combine(segmentsDir, $"{id}.mp3");
-        var resolvedVoice = ResolveVoiceForSegment(seg, defaultVoice);
-        var referenceAudioPath = ResolveReferenceAudioForSegment(seg);
+        var segmentAudioPath = Path.Combine(snapshot.SegmentsDir, $"{id}.mp3");
+        var resolvedVoice = snapshot.ResolveVoiceForSegment(seg);
+        var referenceAudioPath = snapshot.ResolveReferenceAudioForSegment(seg);
 
         _log.Info($"Generating TTS for segment {id} (voice={resolvedVoice}, speaker={seg.SpeakerId ?? "<none>"}): {text[..Math.Min(30, text.Length)]}...");
 
         try
         {
             var segTask = _inferenceEngine.GenerateSegmentTtsAsync(
-                _ttsService!,
+                snapshot.Provider,
                 new SingleSegmentTtsRequest(
                     text,
                     segmentAudioPath,
                     resolvedVoice,
                     seg.SpeakerId,
                     referenceAudioPath,
-                    Language: ttsLanguage,
-                    SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath),
+                    Language: snapshot.Language,
+                    SourceVideoPath: snapshot.SourceVideoPath),
                 cancellationToken);
             TrackPendingTtsTask(segTask);
             var segResult = await segTask;
@@ -674,6 +679,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// a redundant disk read of the translation artifact.
     /// </summary>
     private async Task<DubRenderResult> StitchSegmentClipsAsync(
+        TtsExecutionSnapshot snapshot,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         string ttsPath,
@@ -689,8 +695,8 @@ public sealed partial class SessionWorkflowCoordinator
                 orderedSegments,
                 segmentAudioPaths,
                 ttsPath,
-                CurrentSession.AmbianceAudioPath,
-                CurrentSettings.AmbianceMixDb,
+                snapshot.AmbianceAudioPath,
+                snapshot.AmbianceMixDb,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -709,17 +715,23 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="stageContext">Optional pipeline stage context used for final reporting.</param>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="totalSegments"/> &gt; 0 but no segments were successfully generated.</exception>
     private async Task CommitTtsSessionStateAsync(
-        string voice,
-        string ttsPath,
+        TtsExecutionSnapshot snapshot,
         DubRenderResult renderResult,
-        string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         ConcurrentDictionary<string, double>? segmentDurations,
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         PipelineStageContext? stageContext)
     {
+        if (!TtsInputsStillMatch(snapshot))
+        {
+            _log.Warning(
+                $"Discarding TTS run {snapshot.RunId} because session inputs changed. Keeping orphaned artifacts under {snapshot.SegmentsDir}.");
+            return;
+        }
+
         int totalSegments = orderedSegments.Count;
         int succeeded = segmentAudioPaths.Count;
+        var settingsDrifted = TtsSettingsDrifted(snapshot);
 
         if (totalSegments > 0 && succeeded == 0)
         {
@@ -738,16 +750,18 @@ public sealed partial class SessionWorkflowCoordinator
                     TtsPath = null,
                     MixedDubAudioPath = null,
                     TtsGeneratedAtUtc = null,
-                    TtsSegmentsPath = segmentsDir,
+                    TtsSegmentsPath = snapshot.SegmentsDir,
                     TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
                     TtsSegmentDurations = segmentDurations is { Count: > 0 }
                         ? new Dictionary<string, double>(segmentDurations)
                         : null,
-                    TtsVoice = voice,
-                    TtsRuntime = CurrentSettings.TtsRuntime,
-                    TtsProvider = CurrentSettings.TtsProvider,
-                    DubTimingMode = CurrentSettings.DubTimingMode,
-                    AmbianceMixDb = CurrentSettings.AmbianceMixDb,
+                    TtsVoice = snapshot.Voice,
+                    TtsRuntime = snapshot.Plan.Runtime,
+                    TtsProvider = snapshot.Plan.ProviderId,
+                    TtsSettingsDriftedSinceArtifact = settingsDrifted,
+                    TtsRunId = snapshot.RunId,
+                    DubTimingMode = snapshot.DefaultTimingMode,
+                    AmbianceMixDb = snapshot.AmbianceMixDb,
                     StatusMessage = $"Dub incomplete. {succeeded}/{totalSegments} segment clips are ready; regenerate the failed clips before finalizing the dub.",
                 };
             }
@@ -762,26 +776,30 @@ public sealed partial class SessionWorkflowCoordinator
             Stage = SessionWorkflowStage.TtsGenerated,
             TtsPath = renderResult.DubTimelinePath,
             MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
-            TtsVoice = voice,
+            TtsVoice = snapshot.Voice,
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
-            TtsSegmentsPath = segmentsDir,
+            TtsSegmentsPath = snapshot.SegmentsDir,
             TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
             TtsSegmentDurations = segmentDurations is { Count: > 0 }
                 ? new Dictionary<string, double>(segmentDurations)
                 : null,
-            TtsRuntime = CurrentSettings.TtsRuntime,
-            TtsProvider = CurrentSettings.TtsProvider,
-            DubTimingMode = CurrentSettings.DubTimingMode,
-            AmbianceMixDb = CurrentSettings.AmbianceMixDb,
+            TtsRuntime = snapshot.Plan.Runtime,
+            TtsProvider = snapshot.Plan.ProviderId,
+            TtsSettingsDriftedSinceArtifact = settingsDrifted,
+            TtsRunId = snapshot.RunId,
+            DubTimingMode = snapshot.DefaultTimingMode,
+            AmbianceMixDb = snapshot.AmbianceMixDb,
             StatusMessage = renderResult.AmbianceExpected && !renderResult.AmbianceMixed
-                ? $"Dub complete ({voice}). Ambiance mix is unavailable; using the dry dub only."
-                : $"TTS generated ({voice}). Dubbing complete.",
+                ? $"Dub complete ({snapshot.Voice}). Ambiance mix is unavailable; using the dry dub only."
+                : settingsDrifted
+                    ? $"Dub complete using previous TTS settings. Re-run dub to apply current settings."
+                    : $"TTS generated ({snapshot.Voice}). Dubbing complete.",
         };
         await WriteTtsIntegrityArtifactsAsync(
                 candidate,
                 renderResult.DubTimelinePath,
                 renderResult,
-                segmentsDir,
+                snapshot.SegmentsDir,
                 segmentAudioPaths,
                 orderedSegments,
                 CancellationToken.None)
@@ -797,14 +815,39 @@ public sealed partial class SessionWorkflowCoordinator
 
         ReportStage(
             stageContext,
-            $"Dub complete. {succeeded}/{totalSegments} segment clips are ready with voice {voice}.",
+            $"Dub complete. {succeeded}/{totalSegments} segment clips are ready with voice {snapshot.Voice}.",
             progress01: 1,
             isIndeterminate: false);
     }
 
+    private Task<List<TimelineDubSegment>> BuildTimelineDubSegmentsAsync(
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
+        IReadOnlyDictionary<string, string> segmentAudioPaths,
+        CancellationToken cancellationToken) =>
+        BuildTimelineDubSegmentsAsync(
+            orderedSegments,
+            segmentAudioPaths,
+            CurrentSession.SegmentTimingModeOverrides,
+            CurrentSettings.DubTimingMode,
+            cancellationToken);
+
+    private Task<List<TimelineDubSegment>> BuildTimelineDubSegmentsAsync(
+        TtsExecutionSnapshot snapshot,
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
+        IReadOnlyDictionary<string, string> segmentAudioPaths,
+        CancellationToken cancellationToken) =>
+        BuildTimelineDubSegmentsAsync(
+            orderedSegments,
+            segmentAudioPaths,
+            snapshot.SegmentTimingOverrides,
+            snapshot.DefaultTimingMode,
+            cancellationToken);
+
     private async Task<List<TimelineDubSegment>> BuildTimelineDubSegmentsAsync(
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         IReadOnlyDictionary<string, string> segmentAudioPaths,
+        IReadOnlyDictionary<string, SegmentTimingMode>? timingOverrides,
+        SegmentTimingMode defaultTimingMode,
         CancellationToken cancellationToken)
     {
         var timelineSegments = new List<TimelineDubSegment>(orderedSegments.Count);
@@ -819,7 +862,7 @@ public sealed partial class SessionWorkflowCoordinator
                 continue;
 
             var segmentDuration = Math.Max(0.05, segment.End - segment.Start);
-            var timingMode = ResolveRenderTimingMode(segment.Id);
+            var timingMode = ResolveRenderTimingMode(timingOverrides, defaultTimingMode, segment.Id);
             var effectivePath = sourcePath;
 
             if (timingMode == SegmentTimingMode.Stretch && _audioProcessingService is not null)
@@ -853,20 +896,29 @@ public sealed partial class SessionWorkflowCoordinator
 
     private SegmentTimingMode ResolveRenderTimingMode(string segmentId)
     {
-        if (CurrentSession.SegmentTimingModeOverrides is not null
-            && CurrentSession.SegmentTimingModeOverrides.TryGetValue(segmentId, out var overrideMode))
+        return ResolveRenderTimingMode(
+            CurrentSession.SegmentTimingModeOverrides,
+            CurrentSettings.DubTimingMode,
+            segmentId);
+    }
+
+    private static SegmentTimingMode ResolveRenderTimingMode(
+        IReadOnlyDictionary<string, SegmentTimingMode>? timingOverrides,
+        SegmentTimingMode defaultTimingMode,
+        string segmentId)
+    {
+        if (timingOverrides is not null
+            && timingOverrides.TryGetValue(segmentId, out var overrideMode))
         {
             if (overrideMode == SegmentTimingMode.Pause)
             {
-                _log.Debug(
-                    $"Ignoring preview-only Pause timing override for render on segment '{segmentId}'; using session default timing mode.");
-                return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
+                return DubTimingDefaults.NormalizeRenderTimingMode(defaultTimingMode);
             }
 
             return DubTimingDefaults.NormalizeRenderTimingMode(overrideMode);
         }
 
-        return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
+        return DubTimingDefaults.NormalizeRenderTimingMode(defaultTimingMode);
     }
 
     /// <summary>
@@ -906,11 +958,9 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="segmentDurations">Concurrent map accepted for durations but not populated by this method.</param>
     /// <param name="cancellationToken">Cancellation token to observe while performing the batch operation.</param>
     private async Task GenerateQwenBatchSegmentAudioAsync(
+        TtsExecutionSnapshot snapshot,
         QwenContainerTtsProvider qwenProvider,
         IReadOnlyList<TranslationSegmentArtifact> candidateSegments,
-        string segmentsDir,
-        string defaultVoice,
-        string? ttsLanguage,
         PipelineStageContext? stageContext,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         ConcurrentDictionary<string, double> segmentDurations,
@@ -924,9 +974,9 @@ public sealed partial class SessionWorkflowCoordinator
             if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(text))
                 continue;
 
-            var outputPath = Path.Combine(segmentsDir, $"{id}.mp3");
-            var resolvedVoice = ResolveVoiceForSegment(segment, defaultVoice);
-            var referenceAudioPath = ResolveReferenceAudioForSegment(segment);
+            var outputPath = Path.Combine(snapshot.SegmentsDir, $"{id}.mp3");
+            var resolvedVoice = snapshot.ResolveVoiceForSegment(segment);
+            var referenceAudioPath = snapshot.ResolveReferenceAudioForSegment(segment);
 
             batchRequests.Add(new QwenBatchSegmentRequest(
                 id,
@@ -935,8 +985,8 @@ public sealed partial class SessionWorkflowCoordinator
                 resolvedVoice,
                 segment.SpeakerId,
                 referenceAudioPath,
-                ttsLanguage,
-                CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath));
+                snapshot.Language,
+                snapshot.SourceVideoPath));
         }
 
         if (batchRequests.Count == 0)

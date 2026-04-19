@@ -228,6 +228,8 @@ public static class SessionSnapshotSemantics
             TtsSegmentDurations = null,
             TtsRuntime = null,
             TtsProvider = null,
+            TtsSettingsDriftedSinceArtifact = false,
+            TtsRunId = null,
             DubTimingMode = null,
             AmbianceMixDb = null,
         };
@@ -241,6 +243,8 @@ public static class SessionSnapshotSemantics
             TranslationRuntime = null,
             TranslationProvider = null,
             TranslationModel = null,
+            TranslationSettingsDriftedSinceArtifact = false,
+            TranslationRunId = null,
         };
 
     public static WorkflowSessionSnapshot ClearDiarizationOutputs(WorkflowSessionSnapshot snapshot) =>
