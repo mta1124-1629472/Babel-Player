@@ -22,6 +22,7 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         catch { }
     }
 
+    [Trait("Category", "Smoke")]
     [Fact]
     public async Task ValidateTranscript_CorruptedJson_ReturnsFalseAndError()
     {
@@ -48,6 +49,7 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         Assert.Contains("Transcript artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Trait("Category", "Smoke")]
     [Fact]
     public async Task ValidateTranslation_CorruptedJson_ReturnsFalseAndError()
     {
@@ -80,6 +82,7 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         Assert.Contains("Translation artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Trait("Category", "Smoke")]
     [Fact]
     public async Task ValidateTranslation_CorruptedTranscriptJson_ReturnsFalseAndError()
     {
@@ -112,6 +115,7 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         Assert.Contains("Transcript artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Trait("Category", "Smoke")]
     [Fact]
     public async Task ValidateTts_CorruptedTranslationJson_ReturnsFalseAndError()
     {
