@@ -472,6 +472,62 @@ class TestRunVocalSeparationCleanup:
             f"Expected safe copy path in separate() call, got {separated_paths[0]!r}"
         )
 
+    def test_selected_stems_are_published_from_isolated_work_dir(self, worker, tmp_path):
+        """
+        Regression: separator I/O should stay inside a per-request scratch directory,
+        but the returned stems must be moved back to the caller's output_dir root so
+        /tts/audio/{filename} can still serve them by basename.
+        """
+        src = _make_file(tmp_path, "source.wav")
+        output_dir = tmp_path / "published"
+        output_dir.mkdir()
+
+        safe_copy = _make_file(tmp_path, "sep_in_safe.wav")
+        separator_output_dirs = []
+        separated_paths = []
+
+        class _PublishingSeparator:
+            def __init__(self, **kwargs):
+                self.output_dir = Path(kwargs["output_dir"])
+                separator_output_dirs.append(self.output_dir)
+
+            def load_model(self, model_filename):
+                pass
+
+            def separate(self, audio_path):
+                separated_paths.append(audio_path)
+                vocals_stem = _make_file(
+                    self.output_dir,
+                    "scratch_(Vocals)_UVR-MDX-NET-Voc_FT.wav",
+                )
+                instrumental_stem = _make_file(
+                    self.output_dir,
+                    "scratch_(Instrumental)_UVR-MDX-NET-Voc_FT.wav",
+                )
+                return [str(vocals_stem), str(instrumental_stem)]
+
+        def _fake_normalize(s, w):
+            assert w != output_dir
+            assert w.parent == output_dir
+            return safe_copy, safe_copy
+
+        fake_sep_mod = types.ModuleType("audio_separator.separator")
+        fake_sep_mod.Separator = _PublishingSeparator  # type: ignore[attr-defined]
+
+        with patch.object(worker, "_normalize_input_for_separator", side_effect=_fake_normalize):
+            with patch.dict(sys.modules, {"audio_separator.separator": fake_sep_mod}):
+                vocals, instrumental = worker.run_vocal_separation(src, output_dir)
+
+        assert separator_output_dirs, "Separator was not constructed"
+        assert separator_output_dirs[0] != output_dir
+        assert separator_output_dirs[0].parent == output_dir
+        assert not separator_output_dirs[0].exists(), "Scratch separator directory should be removed"
+        assert vocals.parent == output_dir.resolve()
+        assert instrumental.parent == output_dir.resolve()
+        assert vocals.exists()
+        assert instrumental.exists()
+        assert separated_paths == [str(safe_copy)]
+
 
 # ---------------------------------------------------------------------------
 # _resolve_stem_path — regression coverage for #233 (vocal stem path handling)

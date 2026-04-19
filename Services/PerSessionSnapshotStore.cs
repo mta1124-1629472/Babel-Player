@@ -48,7 +48,7 @@ public sealed class PerSessionSnapshotStore : IDisposable
             var dir = SessionDir(snapshot.SessionId);
             Directory.CreateDirectory(dir);
             var path = SnapshotPath(snapshot.SessionId);
-            File.WriteAllText(path, json);
+            JsonStorePersistence.AtomicWriteText(path, json);
         }
         catch (Exception ex)
         {
@@ -73,7 +73,7 @@ public sealed class PerSessionSnapshotStore : IDisposable
             var dir = SessionDir(snapshot.SessionId);
             Directory.CreateDirectory(dir);
             var path = SnapshotPath(snapshot.SessionId);
-            await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
+            await JsonStorePersistence.AtomicWriteTextAsync(path, json).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -96,7 +96,19 @@ public sealed class PerSessionSnapshotStore : IDisposable
         try
         {
             var json = File.ReadAllText(path);
-            return SessionSnapshotJsonCompat.Deserialize(json, SerializerOptions);
+            var snapshot = SessionSnapshotJsonCompat.Deserialize(json, SerializerOptions);
+            if (snapshot is null)
+            {
+                RecoverUnreadableSnapshot(path, $"PerSessionSnapshotStore: session {sessionId} snapshot file was empty or unreadable JSON.");
+                return null;
+            }
+
+            return snapshot;
+        }
+        catch (JsonException ex)
+        {
+            RecoverUnreadableSnapshot(path, $"PerSessionSnapshotStore: failed to load session {sessionId}.", ex);
+            return null;
         }
         catch (Exception ex)
         {
@@ -124,8 +136,17 @@ public sealed class PerSessionSnapshotStore : IDisposable
             {
                 var json = File.ReadAllText(path);
                 var snapshot = SessionSnapshotJsonCompat.Deserialize(json, SerializerOptions);
-                if (snapshot is not null)
-                    results.Add(snapshot);
+                if (snapshot is null)
+                {
+                    RecoverUnreadableSnapshot(path, $"PerSessionSnapshotStore: snapshot at {path} was empty or unreadable JSON.");
+                    continue;
+                }
+
+                results.Add(snapshot);
+            }
+            catch (JsonException ex)
+            {
+                RecoverUnreadableSnapshot(path, $"PerSessionSnapshotStore: skipped unreadable snapshot at {path}.", ex);
             }
             catch (Exception ex)
             {
@@ -141,6 +162,28 @@ public sealed class PerSessionSnapshotStore : IDisposable
 
     private string SnapshotPath(Guid sessionId) =>
         Path.Combine(SessionDir(sessionId), "snapshot.json");
+
+    private void RecoverUnreadableSnapshot(string path, string statusMessage, Exception? ex = null)
+    {
+        if (ex is not null)
+        {
+            _log.Warning($"{statusMessage} {ex.Message}");
+        }
+        else
+        {
+            _log.Warning(statusMessage);
+        }
+
+        try
+        {
+            var backupPath = JsonStorePersistence.MoveUnreadableFileToBackup(path);
+            _log.Warning($"PerSessionSnapshotStore: unreadable snapshot was moved to {backupPath}.");
+        }
+        catch (Exception moveEx)
+        {
+            _log.Error($"PerSessionSnapshotStore: failed to quarantine unreadable snapshot '{path}'.", moveEx);
+        }
+    }
 
     public void Dispose()
     {

@@ -447,10 +447,8 @@ dotnet run --project BabelPlayer.csproj --no-build
 '''
 
 [[actions]]
-name = "Full Test"
+name = "Test (Excluding Quarantined)"
 icon = "test"
-# Matches the maintained CI strategy: scope to BabelPlayer.Tests and skip the
-# Quarantined bucket (long-running / environment-sensitive suites).
 command = "dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter \"Category!=Quarantined\""
 
 [[actions]]
@@ -464,21 +462,22 @@ icon = "debug"
 command = "dotnet run -c Dev --project BabelPlayer.csproj"
 
 [[actions]]
-name = "Cleanup Preview"
+name = "Clean App Folder"
 icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -WhatIf"
+command = "if (Test-Path \"$env:LOCALAPPDATA\\BabelPlayer\") { Get-ChildItem -LiteralPath \"$env:LOCALAPPDATA\\BabelPlayer\" -Force | Remove-Item -Recurse -Force }"
 
 [[actions]]
-name = "Cleanup stale local worktrees and branches"
-icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches"
+name = "Debug"
+icon = "debug"
+command = "dotnet run --project .\\BabelPlayer.csproj -c Debug"
 
 [[actions]]
-name = "Cleanup branches already merged to origin/main"
+name = "Fetch Natives"
 icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches -DeleteMergedLocalBranches"
+command = "pwsh .\\scripts\\fetch-win-native-deps.ps1 -IncludeFfmpeg"
+platform = "win32"
 
 [[actions]]
-name = "Cleanup merged remote agent branches"
+name = "Kill"
 icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches -DeleteMergedLocalBranches -DeleteMergedRemoteBranches"
+command = "$root = Join-Path $env:LOCALAPPDATA 'BabelPlayer'; Get-Process BabelPlayer -ErrorAction SilentlyContinue | Stop-Process -Force; Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -match 'BabelPlayer') -or ($_.Name -eq 'python.exe' -and ($_.ExecutablePath -like \"$root*\" -or $_.CommandLine -like \"*$root*\")) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500; if (Test-Path $root) { Get-ChildItem -LiteralPath $root -Force | Remove-Item -Recurse -Force }"

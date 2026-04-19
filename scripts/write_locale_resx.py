@@ -50,8 +50,8 @@ GERMAN_VERIFICATION: Dict[str, str] = {
     "Window_Title_Main": "Babel Player",
     "Window_Title_Settings": "Babel Player - Einstellungen",
     "Window_Title_ApiKeys": "API-Schl\u00fcssel",
-    "Window_Title_Crash": "Babel Player \u2014 Unbehandelter Fehler",
-    "Window_Title_Wizard": "Sprecher-Referenz-Assistent",
+    "Window_Title_Crash": "Babel Player - Unbehandelter Fehler",
+    "Window_Title_Wizard": "Lautsprecher-Referenz-Assistent",
     "Section_Translation": "\u00dcBERSETZUNG",
     "Section_Transcription": "TRANSKRIPTION",
     "Automation_RerunTranscription": "Transkription erneut ausf\u00fchren",
@@ -64,9 +64,9 @@ GERMAN_VERIFICATION: Dict[str, str] = {
     "Automation_RefreshSegments": "Segmente aktualisieren",
     "Settings_Group_AppLanguage": "App-Sprache",
     "Settings_Hint_AppLanguage":
-        "\u00c4ndert die Sprache der Babel Player-Oberfl\u00e4che. "
-        "Auto (System) folgt bei jedem Start der Sprache Ihres Betriebssystems.",
-    "Settings_Option_AutoSystem": "Automatisch (System)",
+        "\u00c4ndert die Sprache der Benutzeroberfl\u00e4che des Babel Players. "
+        "Auto (System) folgt bei jedem Start dem Gebietsschema Ihres Betriebssystems.",
+    "Settings_Option_AutoSystem": "Auto (System)",
     "Settings_Button_SaveClose": "Speichern und schlie\u00dfen",
     "Crash_Header": "Ein unbehandelter Fehler ist aufgetreten",
     "Crash_Button_Copy": "In die Zwischenablage kopieren",

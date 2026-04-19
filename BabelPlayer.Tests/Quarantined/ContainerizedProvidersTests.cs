@@ -75,14 +75,8 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public async Task ContainerizedTranslationProvider_TranslateSingleSegmentAsync_UpdatesTargetSegment()
+    public async Task ContainerizedTranslationProvider_TranslateSingleSegmentTextAsync_ReturnsTranslatedText()
     {
-        var translationPath = Path.Combine(_ctx.Dir, "translation.json");
-        var outputPath = Path.Combine(_ctx.Dir, "translation-updated.json");
-
-        await File.WriteAllTextAsync(translationPath,
-            "{\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\",\"segments\":[{\"id\":\"segment_0.0\",\"start\":0.0,\"end\":1.0,\"text\":\"hola\",\"translatedText\":\"hello\"},{\"id\":\"segment_1.0\",\"start\":1.0,\"end\":2.0,\"text\":\"adios\",\"translatedText\":\"bye\"}]}");
-
         var client = CreateClient((request, _) =>
         {
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/translate")
@@ -96,23 +90,17 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
         var provider = new ContainerizedTranslationProvider(client, _ctx.Log, "nllb-200-distilled-1.3B");
 
-        var result = await provider.TranslateSingleSegmentAsync(new SingleSegmentTranslationRequest(
+        var result = await provider.TranslateSingleSegmentTextAsync(new SingleSegmentTranslationTextRequest(
             "hola",
             "segment_0.0",
-            translationPath,
-            outputPath,
             "es",
             "en",
             "default"));
 
         Assert.True(result.Success);
-
-        var artifact = await ArtifactJson.LoadTranslationAsync(outputPath, CancellationToken.None);
-        Assert.NotNull(artifact.Segments);
-        var first = Assert.Single(artifact.Segments!, s => s.Id == "segment_0.0");
-        Assert.Equal("greetings", first.TranslatedText);
-        var second = Assert.Single(artifact.Segments!, s => s.Id == "segment_1.0");
-        Assert.Equal("bye", second.TranslatedText);
+        Assert.Equal("greetings", result.TranslatedText);
+        Assert.Equal("es", result.SourceLanguage);
+        Assert.Equal("en", result.TargetLanguage);
     }
 
     [Fact]

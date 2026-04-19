@@ -6,7 +6,8 @@
 .DESCRIPTION
   - libmpv-2.dll: pinned zhongfly/mpv-winbuild libmpv dev archive (GitHub Releases)
   - uv.exe: astral-sh/uv Windows zip (x86_64 or aarch64)
-  - ffmpeg.exe / ffprobe.exe: optional — same archives as below (essentials/LGPL zips ship both); see IncludeFfmpeg block
+  - ffmpeg.exe / ffprobe.exe: fetched by default from the same archives as below
+    (essentials/LGPL zips ship both). Use -SkipFfmpeg to opt out.
 
   On ARM64 Windows, artifacts go under native/win-arm64 and tools/win-arm64.
   On x64 Windows, under native/win-x64 and tools/win-x64.
@@ -18,12 +19,27 @@
 param(
     [ValidateSet("Auto", "X64", "Arm64")]
     [string] $Architecture = "Auto",
+    [switch] $SkipFfmpeg,
     [switch] $IncludeFfmpeg,
     [string] $FfmpegVersion = $env:FFMPEG_VERSION
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ($SkipFfmpeg -and $IncludeFfmpeg) {
+    throw "Use either -SkipFfmpeg or -IncludeFfmpeg, not both."
+}
+
+if ($IncludeFfmpeg) {
+    Write-Warning "-IncludeFfmpeg is deprecated. FFmpeg and ffprobe are fetched by default; use -SkipFfmpeg to opt out."
+}
+
+if (-not $SkipFfmpeg -and [string]::IsNullOrWhiteSpace($FfmpegVersion)) {
+    # Keep local build/runtime bootstrap aligned with the currently validated x64
+    # codexffmpeg release when CI does not override FFMPEG_VERSION explicitly.
+    $FfmpegVersion = "2026-04-09-git-d3d0b7a5ee"
+}
 
 function Invoke-FileDownload {
     param(
@@ -155,15 +171,12 @@ try {
     Move-Item -Path $uvExe.FullName -Destination (Join-Path $ToolsDir "uv.exe") -Force
     Write-Host "Wrote $(Join-Path $ToolsDir 'uv.exe')"
 
-    if ($IncludeFfmpeg) {
+    if (-not $SkipFfmpeg) {
         if ($targetArch -eq "Arm64") {
             # GyanD essentials zips are x64-only; BtbN publishes winarm64 LGPL builds (moving "latest" — pin if CI must be byte-stable).
             $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-lgpl.zip"
             Write-Host "Downloading FFmpeg (winarm64 LGPL) from $ffmpegUrl"
         } else {
-            if ([string]::IsNullOrWhiteSpace($FfmpegVersion)) {
-                throw "IncludeFfmpeg was set but FfmpegVersion / env:FFMPEG_VERSION is empty."
-            }
             $ffmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/$FfmpegVersion/ffmpeg-$FfmpegVersion-essentials_build.zip"
             Write-Host "Downloading FFmpeg $FfmpegVersion from $ffmpegUrl"
         }

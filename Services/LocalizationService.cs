@@ -44,6 +44,9 @@ public sealed class LocalizationService : INotifyPropertyChanged
     /// <summary>Current resolved UI culture.</summary>
     public CultureInfo CurrentCulture => _currentCulture;
 
+    /// <summary>Canonical UI language codes backed by localized resources.</summary>
+    public static IReadOnlyList<string> SupportedUiLanguages => SupportedUiLanguageCatalog.IsoCodes;
+
     /// <summary>Raised when the culture changes so XAML bindings refresh via <c>"Item[]"</c>.</summary>
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -62,7 +65,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(culture);
 
-        if (Equals(_currentCulture, culture))
+        if (string.Equals(_currentCulture.Name, culture.Name, StringComparison.Ordinal))
             return;
 
         _currentCulture = culture;
@@ -73,11 +76,9 @@ public sealed class LocalizationService : INotifyPropertyChanged
 
         void Apply()
         {
-            // Set thread cultures inside Apply() so they always target the UI
-            // thread.  DefaultThreadCurrentUICulture (set above) only affects
-            // *new* threads — it does not change an already-running thread.
             if (applyVersion != Volatile.Read(ref _applyVersion) || !Equals(_currentCulture, culture))
                 return;
+
             Thread.CurrentThread.CurrentCulture = culture;
             Thread.CurrentThread.CurrentUICulture = culture;
             ApplyFlowDirection(culture);
@@ -85,26 +86,24 @@ public sealed class LocalizationService : INotifyPropertyChanged
             CultureChanged?.Invoke(this, culture);
         }
 
-        if (Dispatcher.UIThread.CheckAccess())
+        if (Dispatcher.UIThread.CheckAccess() || Application.Current is null)
+        {
             Apply();
+        }
         else
+        {
             Dispatcher.UIThread.Post(Apply);
+        }
     }
 
-    /// <summary>Resolves the effective app UI language from a saved setting.</summary>
+    /// <summary>Resolves the effective app language from a saved setting.</summary>
     /// <remarks>
     /// <para>
     /// <paramref name="configuredLanguage"/> is either <c>"auto"</c> (track OS locale on
     /// each launch, matching the <c>Theme = "System"</c> sentinel pattern) or an
-    /// ISO 639-1 code that appears in <see cref="SupportedUiLanguageCatalog.IsoCodes"/>.
+    /// ISO 639-1 code in <see cref="SupportedUiLanguageCatalog.IsoCodes"/>.
     /// </para>
-    /// <para>
-    /// Validation is against <see cref="SupportedUiLanguageCatalog"/> — languages that
-    /// actually ship a translated <c>Strings.*.resx</c> — not the larger pipeline
-    /// translation catalog.  If a persisted setting or OS locale is a pipeline-only
-    /// language (for example <c>"fr"</c> or <c>"ja"</c>), it falls back to <c>"en"</c>
-    /// so the UI doesn't silently mix an unsupported locale's formatting with English strings.
-    /// </para>
+    /// <para>When auto-detection doesn't land on a supported code, falls back to <c>"en"</c>.</para>
     /// </remarks>
     public static string ResolveAppLanguage(string? configuredLanguage)
     {

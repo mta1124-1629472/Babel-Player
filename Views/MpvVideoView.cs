@@ -12,11 +12,15 @@ namespace Babel.Player.Views;
 public partial class MpvVideoView : NativeControlHost
 {
     private const int GwlWndProc = -4;
+    private const uint SsBlackRect = 0x0004;
     private const uint WmMouseMove = 0x0200;
     private const uint WmLButtonDown = 0x0201;
     private const uint WmRButtonDown = 0x0204;
     private const uint WmMButtonDown = 0x0207;
     private const uint WmMouseWheel = 0x020A;
+    private const uint WsChild = 0x40000000;
+    private const uint WsVisible = 0x10000000;
+    private const uint WsClipSiblings = 0x04000000;
 
     private IntPtr _childHwnd = IntPtr.Zero;
     private IntPtr _previousWndProc = IntPtr.Zero;
@@ -44,11 +48,13 @@ public partial class MpvVideoView : NativeControlHost
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
+            // Keep the native host black before libmpv starts rendering so the
+            // player surface does not flash white on first launch or after unload.
             _childHwnd = CreateWindowExW(
                 0x00000000,     // dwExStyle: 0
                 "STATIC",       // lpClassName
                 "",             // lpWindowName
-                0x40000000 | 0x10000000 | 0x04000000, // WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS
+                WsChild | WsVisible | WsClipSiblings | SsBlackRect,
                 0, 0,
                 (int)Bounds.Width,
                 (int)Bounds.Height,

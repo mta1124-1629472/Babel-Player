@@ -37,17 +37,8 @@ public sealed partial class SessionWorkflowCoordinator :
         set => _transcriptionService = value;
     }
 
-    ITranslationProvider? IProviderLifecycleManager.TranslationService
-    {
-        get => _translationService;
-        set => _translationService = value;
-    }
-
     ITranscriptionProvider IProviderLifecycleManager.CreateTranscriptionService() =>
         CreateTranscriptionService();
-
-    ITranslationProvider IProviderLifecycleManager.CreateTranslationService() =>
-        CreateTranslationService();
 
     Task IProviderLifecycleManager.EnsureTranscriptionProviderReadyAsync(
         IProgress<double>? progress,
@@ -58,10 +49,20 @@ public sealed partial class SessionWorkflowCoordinator :
             PipelineStageContext.FromShared(stageContext),
             cancellationToken);
 
-    Task IProviderLifecycleManager.EnsureTranslationExecutionReadyAsync(
+    Task<TranslationExecutionSnapshot> IProviderLifecycleManager.PrepareTranslationExecutionSnapshotAsync(
+        StageExecutionPlan stagePlan,
+        string transcriptPath,
+        string normalizedSourceLanguage,
+        string normalizedTargetLanguage,
         IProgress<double>? progress,
         CancellationToken cancellationToken) =>
-        EnsureTranslationExecutionReadyAsync(progress, cancellationToken);
+        PrepareTranslationExecutionSnapshotAsync(
+            stagePlan,
+            transcriptPath,
+            normalizedSourceLanguage,
+            normalizedTargetLanguage,
+            progress,
+            cancellationToken);
 
     Task<string> IProviderLifecycleManager.SeparateVocalsAsync(
         IProgress<double>? progress,
@@ -78,11 +79,9 @@ public sealed partial class SessionWorkflowCoordinator :
         CommitTranscriptionSessionStateAsync(result, transcriptPath);
 
     Task ISessionCommitter.CommitTranslationSessionStateAsync(
-        TranslationResult result,
-        string translationPath,
-        string sourceLanguage,
-        string targetLanguage) =>
-        CommitTranslationSessionStateAsync(result, translationPath, sourceLanguage, targetLanguage);
+        TranslationExecutionSnapshot snapshot,
+        TranslationResult result) =>
+        CommitTranslationSessionStateAsync(snapshot, result);
 
     async Task<(bool SpeakerAssignmentsChanged, int SpeakerCount, int SegmentCount)>
         IDiarizationExecutor.ExecuteDiarizationAsync(

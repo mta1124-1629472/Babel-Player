@@ -10,7 +10,8 @@ internal enum MainWindowShortcutAction
     None = 0,
     PlayPause,
     ToggleSubtitles,
-    ToggleSegmentPane,
+    ToggleLeftPane,
+    ToggleRightPane,
     ToggleDubMode,
     ToggleFullscreen,
     ExitFullscreen,
@@ -37,7 +38,15 @@ internal static class MainWindowShortcutRouter
         if (modifiers != KeyModifiers.None)
             return false;
 
-        if (key == Key.F11)
+        // Panes are not visible in fullscreen; do not map shortcuts that would still persist layout.
+        if (isFullscreen
+            && (key == MainWindowShortcutDefaults.ToggleLeftPaneKey
+                || key == MainWindowShortcutDefaults.ToggleRightPaneKey))
+        {
+            return false;
+        }
+
+        if (key == MainWindowShortcutDefaults.ToggleFullscreenKey)
         {
             action = MainWindowShortcutAction.ToggleFullscreen;
             return true;
@@ -48,10 +57,11 @@ internal static class MainWindowShortcutRouter
 
         action = key switch
         {
-            Key.Space => MainWindowShortcutAction.PlayPause,
-            Key.C => MainWindowShortcutAction.ToggleSubtitles,
-            Key.S => MainWindowShortcutAction.ToggleSegmentPane,
-            Key.D => MainWindowShortcutAction.ToggleDubMode,
+            MainWindowShortcutDefaults.PlayPauseKey => MainWindowShortcutAction.PlayPause,
+            MainWindowShortcutDefaults.ToggleSubtitlesKey => MainWindowShortcutAction.ToggleSubtitles,
+            MainWindowShortcutDefaults.ToggleLeftPaneKey => MainWindowShortcutAction.ToggleLeftPane,
+            MainWindowShortcutDefaults.ToggleRightPaneKey => MainWindowShortcutAction.ToggleRightPane,
+            MainWindowShortcutDefaults.ToggleDubModeKey => MainWindowShortcutAction.ToggleDubMode,
             _ => MainWindowShortcutAction.None,
         };
 

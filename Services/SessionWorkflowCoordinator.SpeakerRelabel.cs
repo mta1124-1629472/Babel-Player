@@ -57,9 +57,14 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (transcriptChanged > 0)
         {
-            await File.WriteAllTextAsync(
+            await ArtifactPersistence.AtomicWriteTextAsync(
                     CurrentSession.TranscriptPath,
                     ArtifactJson.SerializeTranscript(transcript),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await WriteTranscriptManifestAsync(
+                    CurrentSession.TranscriptPath,
+                    transcript,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -83,9 +88,16 @@ public sealed partial class SessionWorkflowCoordinator
 
                 if (any)
                 {
-                    await File.WriteAllTextAsync(
+                    await ArtifactPersistence.AtomicWriteTextAsync(
                             CurrentSession.TranslationPath,
                             ArtifactJson.SerializeTranslation(translation),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    await WriteTranslationManifestAsync(
+                            CurrentSession.TranslationPath,
+                            translation,
+                            translation.SourceLanguage ?? CurrentSession.SourceLanguage ?? string.Empty,
+                            translation.TargetLanguage ?? CurrentSession.TargetLanguage ?? string.Empty,
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -115,6 +127,7 @@ public sealed partial class SessionWorkflowCoordinator
             };
         }
 
+        MarkSessionInputsChanged("speaker relabel merged diarized speakers");
         SaveCurrentSession();
         return transcriptChanged;
     }

@@ -5,6 +5,9 @@ namespace Babel.Player.Models;
 
 public sealed class TranslationArtifact
 {
+    [JsonPropertyName("schema_version")]
+    public string? SchemaVersion { get; set; }
+
     [JsonPropertyName("sourceLanguage")]
     public string? SourceLanguage { get; set; }
 

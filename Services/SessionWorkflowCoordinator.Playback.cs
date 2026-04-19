@@ -328,7 +328,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="diarizedSegments">List of diarized speaker segments used to assign speaker IDs to transcript segments.</param>
     /// <param name="ct">Cancellation token to observe during I/O operations.</param>
     /// <returns>`true` if the transcript file was modified and written back to disk, `false` if no speaker assignments changed or the transcript had no segments.</returns>
-    private static async Task<bool> MergeDiarizationIntoTranscriptAsync(
+    private async Task<bool> MergeDiarizationIntoTranscriptAsync(
         string transcriptPath,
         IReadOnlyList<DiarizedSegment> diarizedSegments,
         CancellationToken ct)
@@ -349,8 +349,12 @@ public sealed partial class SessionWorkflowCoordinator
         artifact.Segments.Clear();
         artifact.Segments.AddRange(result);
 
-        var json = ArtifactJson.SerializeTranscript(artifact);
-        await File.WriteAllTextAsync(transcriptPath, json, ct);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                transcriptPath,
+                ArtifactJson.SerializeTranscript(artifact),
+                ct)
+            .ConfigureAwait(false);
+        await WriteTranscriptManifestAsync(transcriptPath, artifact, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -418,7 +422,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="translationPath">Filesystem path to the translation JSON artifact to update.</param>
     /// <param name="ct">Cancellation token for the asynchronous file and I/O operations.</param>
     /// <returns>`true` if one or more translation segments had their `SpeakerId` changed and the translation file was written; `false` if no changes were made or either artifact had no segments.</returns>
-    private static async Task<bool> MergeSpeakerIdsIntoTranslationAsync(
+    private async Task<bool> MergeSpeakerIdsIntoTranslationAsync(
         string transcriptPath,
         string translationPath,
         CancellationToken ct)
@@ -450,8 +454,18 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (!anyChanged) return false;
 
-        var json = ArtifactJson.SerializeTranslation(translation);
-        await File.WriteAllTextAsync(translationPath, json, ct);
+        await ArtifactPersistence.AtomicWriteTextAsync(
+                translationPath,
+                ArtifactJson.SerializeTranslation(translation),
+                ct)
+            .ConfigureAwait(false);
+        await WriteTranslationManifestAsync(
+                translationPath,
+                translation,
+                translation.SourceLanguage ?? CurrentSession.SourceLanguage ?? string.Empty,
+                translation.TargetLanguage ?? CurrentSession.TargetLanguage ?? string.Empty,
+                ct)
+            .ConfigureAwait(false);
         return true;
     }
 
@@ -565,6 +579,7 @@ public sealed partial class SessionWorkflowCoordinator
                 SegmentTimingModeOverrides = current.Count == 0 ? null : current,
             };
         }
+        MarkSessionInputsChanged("segment timing override updated");
         SaveCurrentSession();
     }
 
@@ -583,6 +598,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated };
         }
+        MarkSessionInputsChanged("speaker voice assignment updated");
         SaveCurrentSession();
     }
 
@@ -610,6 +626,7 @@ public sealed partial class SessionWorkflowCoordinator
                 return;
             CurrentSession = CurrentSession with { SpeakerVoiceAssignments = updated.Count == 0 ? null : updated };
         }
+        MarkSessionInputsChanged("speaker voice assignment removed");
         SaveCurrentSession();
     }
 
@@ -656,6 +673,7 @@ public sealed partial class SessionWorkflowCoordinator
                 SpeakerVoiceAssignments = current.Count == 0 ? null : current,
             };
         }
+        MarkSessionInputsChanged("speaker voice assignments updated");
         SaveCurrentSession();
     }
 
@@ -674,6 +692,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated };
         }
+        MarkSessionInputsChanged("speaker reference path updated");
         SaveCurrentSession();
     }
 
@@ -701,6 +720,7 @@ public sealed partial class SessionWorkflowCoordinator
                 return;
             CurrentSession = CurrentSession with { SpeakerReferenceAudioPaths = updated.Count == 0 ? null : updated };
         }
+        MarkSessionInputsChanged("speaker reference path removed");
         SaveCurrentSession();
     }
 
@@ -747,6 +767,7 @@ public sealed partial class SessionWorkflowCoordinator
                 SpeakerReferenceAudioPaths = current.Count == 0 ? null : current,
             };
         }
+        MarkSessionInputsChanged("speaker reference paths updated");
         SaveCurrentSession();
     }
 
@@ -1203,6 +1224,7 @@ public sealed partial class SessionWorkflowCoordinator
     public void StopPlayback()
     {
         StopTtsPlayback();
+        StopAmbiancePlayback();
         StopSourceMedia();
     }
 
@@ -1243,7 +1265,30 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     public void StopSourceMedia()
     {
-        _transportManager.SourceMediaPlayer?.Pause();
+        StopAmbiancePlayback();
+        try
+        {
+            _transportManager.SourceMediaPlayer?.Pause();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown/race path: source transport was disposed during pause.
+        }
+    }
+
+    /// <summary>
+    /// Pauses separated ambiance preview playback if an ambiance player exists.
+    /// </summary>
+    public void StopAmbiancePlayback()
+    {
+        try
+        {
+            _transportManager.AmbiancePlayer?.Pause();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown/race path: ambiance transport was disposed during pause.
+        }
     }
 
     public IMediaTransport GetOrCreateSourcePlayer() =>
@@ -1260,6 +1305,12 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>The TTS segment player, if it has been created. Null until first TTS playback.</summary>
     public IMediaTransport? SegmentPlayer => _transportManager.SegmentPlayer;
+
+    /// <summary>The ambiance preview player, if it has been created. Null until first separated-ambiance preview.</summary>
+    public IMediaTransport? AmbiancePlayer => _transportManager.AmbiancePlayer;
+
+    public IMediaTransport GetOrCreateAmbiancePlayer() =>
+        _transportManager.GetOrCreateAmbiancePlayer();
 
     /// <summary>
     /// Performs an orderly shutdown by flushing pending state, unsubscribing event handlers, waiting for in-flight TTS tasks, and disposing managed resources.
@@ -1345,7 +1396,8 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
-        (_ttsService as IDisposable)?.Dispose();
+        RetireTranslationProviderCache("coordinator dispose");
+        RetireTtsProviderCache("coordinator dispose");
         _transportManager.Dispose();
         _perSessionStore?.Dispose();
         _shutdownCts.Dispose();
@@ -1360,12 +1412,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// </remarks>
     private void ScheduleSafeTtsDisposal()
     {
-        if (_ttsService is not IDisposable disposable) return;
-
-        Task.Run(() =>
-        {
-            try { disposable.Dispose(); }
-            catch (Exception ex) { _log.Warning($"Background TTS service disposal failed: {ex.Message}"); }
-        }).FireAndForgetAsync(_log, "TTS background disposal");
+        Task.Run(() => RetireTtsProviderCache("background tts disposal"))
+            .FireAndForgetAsync(_log, "TTS background disposal");
     }
 }

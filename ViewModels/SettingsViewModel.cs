@@ -17,6 +17,7 @@ using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using Babel.Player.Services.Transcription;
+using Babel.Player.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SettingsService = Babel.Player.Services.Settings.SettingsService;
@@ -51,6 +52,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     /// closes via Cancel, the OS X button, or Alt+F4.
     /// </summary>
     private bool _languageChangeCommitted;
+    private bool _suppressAppLanguageSelectionPreview;
     private IDisposable? _readinessSignalSubscription;
 
     /// <summary>
@@ -93,6 +95,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             ?? AppLanguageOptions[0];
         MaxRecentSessions      = current.MaxRecentSessions;
         AutoSaveEnabled        = current.AutoSaveEnabled;
+        ShowPipelinePane       = current.IsPipelinePaneVisible;
+        ShowSegmentsPane       = current.IsSegmentsPaneVisible;
+        SwapPaneSides          = current.SwapPaneSides;
         BilingualSubtitlesEnabled = current.BilingualSubtitlesEnabled;
         PreferredLocalGpuBackend = current.PreferredLocalGpuBackend;
         AdvancedGpuServiceUrl  = current.AdvancedGpuServiceUrl;
@@ -124,12 +129,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
+        LocalizationService.Instance.CultureChanged += OnCultureChanged;
 
         // Hotkeys (default values)
-        PlayPauseHotkey             = "Space";
-        ToggleSegmentPanelHotkey    = "S";
-        ToggleDubModeHotkey         = "D";
-        ToggleFullscreenHotkey      = "F11";
+        PlayPauseHotkey         = MainWindowShortcutDefaults.PlayPauseLabel;
+        ToggleLeftPaneHotkey    = MainWindowShortcutDefaults.ToggleLeftPaneLabel;
+        ToggleRightPaneHotkey   = MainWindowShortcutDefaults.ToggleRightPaneLabel;
+        ToggleDubModeHotkey     = MainWindowShortcutDefaults.ToggleDubModeLabel;
+        ToggleFullscreenHotkey  = MainWindowShortcutDefaults.ToggleFullscreenLabel;
 
         _healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _healthTimer.Tick += (_, _) =>
@@ -353,7 +360,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         public override string ToString() => DisplayName;
     }
 
-    public AppLanguageOption[] AppLanguageOptions { get; }
+    public AppLanguageOption[] AppLanguageOptions { get; private set; }
 
     [ObservableProperty]
     private AppLanguageOption _selectedAppLanguage = null!;
@@ -361,6 +368,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     partial void OnSelectedAppLanguageChanged(AppLanguageOption value)
     {
         if (value is null) return;
+        if (_suppressAppLanguageSelectionPreview) return;
         var effective = LocalizationService.ResolveAppLanguage(value.Code);
         try
         {
@@ -372,23 +380,18 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// Builds the app-language dropdown from <see cref="SupportedUiLanguageCatalog"/>
-    /// (languages with a shipping <c>Strings.*.resx</c>), not from the pipeline
-    /// translation catalog.  Listing pipeline-only codes would silently fall back
-    /// to English UI strings with no user feedback.
-    /// </summary>
     private static AppLanguageOption[] BuildAppLanguageOptions()
     {
+        var currentCulture = LocalizationService.Instance.CurrentCulture;
         var options = new System.Collections.Generic.List<AppLanguageOption>
         {
             new("auto", Babel.Player.Resources.Strings.ResourceManager
-                .GetString("Settings_Option_AutoSystem", LocalizationService.Instance.CurrentCulture)
+                .GetString("Settings_Option_AutoSystem", currentCulture)
                 ?? "Auto (system)"),
         };
-        foreach (var code in SupportedUiLanguageCatalog.IsoCodes)
+        foreach (var code in LocalizationService.SupportedUiLanguages.OrderBy(c => c, StringComparer.Ordinal))
         {
-            options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code)));
+            options.Add(new AppLanguageOption(code, LanguageDisplayNames.ForIso639(code, currentCulture)));
         }
         return options.ToArray();
     }
@@ -444,6 +447,15 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private bool _autoSaveEnabled;
+
+    [ObservableProperty]
+    private bool _showPipelinePane;
+
+    [ObservableProperty]
+    private bool _showSegmentsPane;
+
+    [ObservableProperty]
+    private bool _swapPaneSides;
 
     /// <summary>When true, exported/embedded subtitles include both source and translated lines (see Settings ▸ Video).</summary>
     [ObservableProperty]
@@ -728,7 +740,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private string _playPauseHotkey;
 
     [ObservableProperty]
-    private string _toggleSegmentPanelHotkey;
+    private string _toggleLeftPaneHotkey;
+
+    [ObservableProperty]
+    private string _toggleRightPaneHotkey;
 
     [ObservableProperty]
     private string _toggleDubModeHotkey;
@@ -760,6 +775,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _languageChangeCommitted = true;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
+        settings.IsPipelinePaneVisible = ShowPipelinePane;
+        settings.IsSegmentsPaneVisible = ShowSegmentsPane;
+        settings.SwapPaneSides     = SwapPaneSides;
         settings.BilingualSubtitlesEnabled = BilingualSubtitlesEnabled;
         settings.PreferredLocalGpuBackend = PreferredLocalGpuBackend;
         settings.AdvancedGpuServiceUrl = string.IsNullOrWhiteSpace(AdvancedGpuServiceUrl)
@@ -834,7 +852,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            const string kofiUrl = "https://ko-fi.com/R5R01WOOYW";
+            const string kofiUrl = "https://ko-fi.com/babel_player";
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = kofiUrl,
@@ -852,7 +870,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            const string sponsorsUrl = "https://github.com/sponsors/mta1124-1629472";
+            const string sponsorsUrl = "https://github.com/sponsors/mta-babel";
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = sponsorsUrl,
@@ -879,6 +897,25 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _readinessSignalSubscription?.Dispose();
         _readinessSignalSubscription = null;
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
+        LocalizationService.Instance.CultureChanged -= OnCultureChanged;
+    }
+
+    private void OnCultureChanged(object? sender, CultureInfo newCulture)
+    {
+        var previousCode = SelectedAppLanguage?.Code;
+        _suppressAppLanguageSelectionPreview = true;
+        try
+        {
+            AppLanguageOptions = BuildAppLanguageOptions();
+            SelectedAppLanguage = AppLanguageOptions.FirstOrDefault(o =>
+                string.Equals(o.Code, previousCode, StringComparison.OrdinalIgnoreCase))
+                ?? AppLanguageOptions[0];
+            OnPropertyChanged(nameof(AppLanguageOptions));
+        }
+        finally
+        {
+            _suppressAppLanguageSelectionPreview = false;
+        }
     }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)

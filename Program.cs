@@ -33,6 +33,7 @@ sealed class Program
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            .WithDeveloperTools()
 #if DEBUG
             .LogToTrace();
 #else
