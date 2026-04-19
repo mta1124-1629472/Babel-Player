@@ -146,7 +146,9 @@ internal sealed class ProviderLeaseManager<TProvider> where TProvider : class
                     disposable.Dispose();
                     break;
                 case IAsyncDisposable asyncDisposable:
-                    asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                    Task.Run(() => asyncDisposable.DisposeAsync().AsTask())
+                        .GetAwaiter()
+                        .GetResult();
                     break;
             }
         }

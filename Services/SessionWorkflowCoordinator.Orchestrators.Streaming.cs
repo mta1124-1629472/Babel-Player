@@ -102,11 +102,10 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 SingleWriter = true,
                 FullMode = BoundedChannelFullMode.Wait,
             });
-            var translationChannel = Channel.CreateBounded<TranslationChannelItem>(new BoundedChannelOptions(8)
+            var translationChannel = Channel.CreateUnbounded<TranslationChannelItem>(new UnboundedChannelOptions
             {
                 SingleReader = true,
                 SingleWriter = true,
-                FullMode = BoundedChannelFullMode.Wait,
             });
             var translationWriter = new TranslationArtifactStreamingWriter(
                 translationPartialPath,
@@ -364,11 +363,10 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 isIndeterminate: true,
                 streamingStatus: "Segment clips are generated as translation continues.");
 
-            var translationChannel = Channel.CreateBounded<TranslationChannelItem>(new BoundedChannelOptions(8)
+            var translationChannel = Channel.CreateUnbounded<TranslationChannelItem>(new UnboundedChannelOptions
             {
                 SingleReader = true,
                 SingleWriter = true,
-                FullMode = BoundedChannelFullMode.Wait,
             });
             var ttsResultChannel = Channel.CreateBounded<TtsChannelItem>(new BoundedChannelOptions(Math.Max(4, ttsSnapshot.MaxConcurrency))
             {
@@ -607,16 +605,23 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         {
             var segmentAudioPaths = new ConcurrentDictionary<string, string>();
             var completed = 0;
+            var failed = 0;
 
             await foreach (var item in resultReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
                 completed++;
                 if (item.Result.Success && !string.IsNullOrWhiteSpace(item.Result.AudioPath) && File.Exists(item.Result.AudioPath))
                     segmentAudioPaths[item.SegmentId] = item.Result.AudioPath;
+                else
+                    failed++;
+
+                var statusMsg = failed > 0
+                    ? $"Generated {completed} segment clips ({failed} failed)…"
+                    : $"Generated segment clip {completed}…";
 
                 ReportStage(
                     stageContext,
-                    $"Generated segment clip {completed}…",
+                    statusMsg,
                     progress01: 0,
                     isIndeterminate: true,
                     streamingStatus: "Translation is still feeding new segments downstream.");
@@ -659,6 +664,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             var resolvedVoice = snapshot.ResolveVoiceForSegment(item.Segment);
             var referenceAudioPath = snapshot.ResolveReferenceAudioForSegment(item.Segment);
 
+            TtsResult result;
             try
             {
                 var task = _c._inferenceEngine.GenerateSegmentTtsAsync(
@@ -673,20 +679,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         SourceVideoPath: snapshot.SourceVideoPath),
                     cancellationToken);
                 _c.TrackPendingTtsTask(task);
-                var result = await task.ConfigureAwait(false);
-                if (result.Success && File.Exists(segmentAudioPath))
-                {
-                    await resultWriter.WriteAsync(
-                        new TtsChannelItem(
-                            id,
-                            CloneTranslationSegment(item.Segment),
-                            result with { AudioPath = segmentAudioPath }),
-                        cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    _c.Log.Warning($"Streaming TTS failed or file missing for segment {id}.");
-                }
+                result = await task.ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -695,7 +688,19 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             catch (Exception ex)
             {
                 _c.Log.Error($"Streaming TTS generation failed for {id}: {ex.Message}", ex);
+                result = new TtsResult(false, string.Empty, resolvedVoice ?? string.Empty, 0, ex.Message);
             }
+
+            var audioPathForResult = result.Success && File.Exists(segmentAudioPath) ? segmentAudioPath : string.Empty;
+            if (!result.Success || string.IsNullOrEmpty(audioPathForResult))
+                _c.Log.Warning($"Streaming TTS failed or file missing for segment {id}: {result.ErrorMessage}");
+
+            await resultWriter.WriteAsync(
+                new TtsChannelItem(
+                    id,
+                    CloneTranslationSegment(item.Segment),
+                    result with { AudioPath = audioPathForResult }),
+                cancellationToken).ConfigureAwait(false);
         }
 
         private async Task<ExceptionDispatchInfo?> ObserveStreamingTaskCompletionAsync(

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -29,12 +30,12 @@ public sealed class QwenContainerTtsProvider(
     private readonly IAudioProcessingService? _audioProcessingService = audioProcessingService;
 
     private string? _autoExtractedReferencePath;
-    private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _autoExtractLock = new(1, 1);
+    private readonly ConcurrentDictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _referenceRegisterLock = new(1, 1);
     private bool _disposed;
 
-    // MaxConcurrency is kept at 1 because _referenceIdCache and _autoExtractedReferencePath
-    // are not thread-safe. Increase only after adding proper synchronization.
-    public int MaxConcurrency => 1;
+    public int MaxConcurrency => 2;
 
     /// <summary>
         /// Determines whether the containerized TTS provider is ready based on the given application settings.
@@ -102,40 +103,45 @@ public sealed class QwenContainerTtsProvider(
         if (requests.Count == 0)
             return new Dictionary<string, string>(StringComparer.Ordinal);
 
-        var outputPaths = new Dictionary<string, string>(StringComparer.Ordinal);
+        var outputPaths = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         var completed = 0;
 
-        foreach (var group in requests.GroupBy(request => ResolveModel(request.VoiceName), StringComparer.Ordinal))
-        {
-            foreach (var request in group)
+        await Parallel.ForEachAsync(
+            requests,
+            new ParallelOptions
             {
-                var referenceAudioPath = await ResolveBatchReferenceAudioAsync(request, cancellationToken);
+                MaxDegreeOfParallelism = MaxConcurrency,
+                CancellationToken = cancellationToken,
+            },
+            async (request, ct) =>
+            {
+                var referenceAudioPath = await ResolveBatchReferenceAudioAsync(request, ct);
                 if (string.IsNullOrWhiteSpace(referenceAudioPath))
-                {
                     throw new InvalidOperationException(
                         $"Qwen3-TTS requires reference audio for segment '{request.SegmentId}'.");
-                }
 
                 var speakerId = request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault;
-                _log.Debug($"[QwenContainerTts] Segment synth start ({completed + 1}/{requests.Count}): {request.SegmentId}");
+                var model = ResolveModel(request.VoiceName);
+                _log.Debug($"[QwenContainerTts] Segment synth start ({Interlocked.Increment(ref completed)}/{requests.Count}): {request.SegmentId}");
+
                 var result = await QwenSegmentWithRetryAsync(
                     request.Text,
-                    group.Key,
+                    model,
                     ResolveLanguage(request.Language),
                     referenceAudioPath,
                     speakerId,
                     referenceText: null,
-                    cancellationToken);
+                    ct);
 
                 if (!result.Success)
-                    throw new InvalidOperationException($"Qwen synthesis failed for segment '{request.SegmentId}': {result.ErrorMessage}");
+                    throw new InvalidOperationException(
+                        $"Qwen synthesis failed for segment '{request.SegmentId}': {result.ErrorMessage}");
 
-                await DownloadToOutputPathAsync(result.AudioPath, request.OutputAudioPath, cancellationToken);
+                await DownloadToOutputPathAsync(result.AudioPath, request.OutputAudioPath, ct);
                 outputPaths[request.SegmentId] = request.OutputAudioPath;
                 _log.Debug($"[QwenContainerTts] Segment synth saved: {request.OutputAudioPath}");
-                progress?.Report((++completed, requests.Count));
-            }
-        }
+                progress?.Report((outputPaths.Count, requests.Count));
+            }).ConfigureAwait(false);
 
         if (outputPaths.Count != requests.Count)
             throw new InvalidOperationException("Qwen batch synthesis did not return every requested segment.");
@@ -167,6 +173,8 @@ public sealed class QwenContainerTtsProvider(
             return;
         await ResetSessionAsync();
         await _extractor.DisposeAsync();
+        _referenceRegisterLock.Dispose();
+        _autoExtractLock.Dispose();
         _disposed = true;
     }
 
@@ -183,10 +191,21 @@ public sealed class QwenContainerTtsProvider(
         if (_referenceIdCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        var refId = await _client.RegisterQwenReferenceAsync(speakerId, referenceAudioPath, ct);
-        _referenceIdCache[cacheKey] = refId;
-        _log.Debug($"[QwenContainerTts] Registered reference for speaker '{speakerId}': {refId}");
-        return refId;
+        await _referenceRegisterLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_referenceIdCache.TryGetValue(cacheKey, out cached))
+                return cached;
+
+            var refId = await _client.RegisterQwenReferenceAsync(speakerId, referenceAudioPath, ct);
+            _referenceIdCache[cacheKey] = refId;
+            _log.Debug($"[QwenContainerTts] Registered reference for speaker '{speakerId}': {refId}");
+            return refId;
+        }
+        finally
+        {
+            _referenceRegisterLock.Release();
+        }
     }
 
     /// <summary>
@@ -272,7 +291,7 @@ public sealed class QwenContainerTtsProvider(
     {
         var cacheKey = $"{speakerId}|{referenceAudioPath}";
         _log.Warning($"[QwenContainerTts] {reason} for speaker '{speakerId}', refreshing reference and retrying once.");
-        _referenceIdCache.Remove(cacheKey);
+        _referenceIdCache.TryRemove(cacheKey, out _);
 
         if (retryDelay is { } delay && delay > TimeSpan.Zero)
             await Task.Delay(delay, ct).ConfigureAwait(false);
@@ -363,9 +382,20 @@ public sealed class QwenContainerTtsProvider(
         if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
             return _autoExtractedReferencePath;
 
-        _log.Debug($"[QwenContainerTts] Auto-extracting reference audio from: {sourceVideoPath}");
-        _autoExtractedReferencePath = await _extractor.ExtractReferenceAsync(sourceVideoPath, ct);
-        return _autoExtractedReferencePath;
+        await _autoExtractLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
+                return _autoExtractedReferencePath;
+
+            _log.Debug($"[QwenContainerTts] Auto-extracting reference audio from: {sourceVideoPath}");
+            _autoExtractedReferencePath = await _extractor.ExtractReferenceAsync(sourceVideoPath, ct);
+            return _autoExtractedReferencePath;
+        }
+        finally
+        {
+            _autoExtractLock.Release();
+        }
     }
 
     private async Task DownloadToOutputPathAsync(string serverAudioPath, string localOutputPath, CancellationToken ct)

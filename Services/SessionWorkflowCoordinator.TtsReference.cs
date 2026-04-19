@@ -52,8 +52,9 @@ public sealed partial class SessionWorkflowCoordinator
             }
             else
             {
-                _log.Warning("Audio processing service unavailable. Qwen auto reference extraction skipped.");
-                return;
+                throw new PipelineProviderException(
+                    "Qwen3-TTS requires a speaker reference audio clip, but the audio processing " +
+                    "service is not available. Ensure the audio processing service is registered at startup.");
             }
         }
 

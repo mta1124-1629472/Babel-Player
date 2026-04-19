@@ -725,7 +725,8 @@ public sealed partial class SessionWorkflowCoordinator
         {
             _log.Warning(
                 $"Discarding TTS run {snapshot.RunId} because session inputs changed. Keeping orphaned artifacts under {snapshot.SegmentsDir}.");
-            return;
+            throw new InvalidOperationException(
+                "TTS inputs changed while the pipeline was running. Rerun TTS to apply the latest settings.");
         }
 
         int totalSegments = orderedSegments.Count;

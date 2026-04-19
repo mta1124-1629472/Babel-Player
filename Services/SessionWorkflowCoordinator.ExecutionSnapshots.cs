@@ -164,8 +164,15 @@ public sealed partial class SessionWorkflowCoordinator
         lock (_sessionLock)
         {
             return CurrentSession.SessionId == snapshot.SessionId
-                && SessionRevision == snapshot.SessionRevision
                 && snapshot.TranslationIdentity.Matches(CurrentSession.TranslationPath)
+                && string.Equals(
+                    CurrentSession.AmbianceAudioPath,
+                    snapshot.AmbianceAudioPath,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    CurrentSession.DefaultTtsVoiceFallback,
+                    snapshot.DefaultVoiceFallback,
+                    StringComparison.Ordinal)
                 && DictionariesEqual(CurrentSession.SpeakerVoiceAssignments, snapshot.SpeakerVoiceAssignments)
                 && DictionariesEqual(CurrentSession.SpeakerReferenceAudioPaths, snapshot.SpeakerReferenceAudioPaths)
                 && DictionariesEqual(CurrentSession.SegmentTimingModeOverrides, snapshot.SegmentTimingOverrides);
