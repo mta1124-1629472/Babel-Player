@@ -79,4 +79,46 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         Assert.NotNull(error);
         Assert.Contains("Translation artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task ValidateTts_CorruptedTranslationJson_ReturnsFalseAndError()
+    {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TtsProvider = ProviderNames.EdgeTts,
+            TtsVoice = "en-US-JennyNeural",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var ttsSnapshot = template with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+        };
+        var (ttsPath, segmentsDir, segmentPaths) =
+            await SessionSemanticsIntegrityFixture.WriteTtsBundleAsync(_dir, translationPath, ttsSnapshot);
+        await File.WriteAllTextAsync(translationPath, "{ not json }");
+
+        var snapshot = ttsSnapshot with
+        {
+            TtsPath = ttsPath,
+            TtsSegmentsPath = segmentsDir,
+            TtsSegmentAudioPaths = segmentPaths,
+        };
+
+        var valid = ArtifactIntegrityValidator.ValidateTts(snapshot, out var error);
+
+        Assert.False(valid);
+        Assert.NotNull(error);
+        Assert.Contains("Translation artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
+    }
 }
