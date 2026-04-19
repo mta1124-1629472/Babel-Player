@@ -81,6 +81,38 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateTranslation_CorruptedTranscriptJson_ReturnsFalseAndError()
+    {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        await File.WriteAllTextAsync(transcriptPath, "{ not json }");
+
+        var snapshot = template with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+        };
+
+        var valid = ArtifactIntegrityValidator.ValidateTranslation(snapshot, out var error);
+
+        Assert.False(valid);
+        Assert.NotNull(error);
+        Assert.Contains("Transcript artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ValidateTts_CorruptedTranslationJson_ReturnsFalseAndError()
     {
         var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
