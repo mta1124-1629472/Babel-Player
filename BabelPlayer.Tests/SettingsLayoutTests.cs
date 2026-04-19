@@ -56,11 +56,13 @@ public sealed class SettingsLayoutTests : IDisposable
         Assert.False(playback.Preview.IsSegmentsPaneVisible);
         Assert.False(playback.Preview.IsRightPaneVisible);
 
-        // Mutate settings the same way SettingsViewModel.Apply would, then notify.
-        // Avoid constructing SettingsViewModel here: it starts DispatcherTimer + Rx
-        // subscriptions that post to Avalonia's UI dispatcher, which can hang headless CI.
+        // Update persisted settings and sync the preview VM directly. Do not call
+        // coordinator.NotifySettingsModified() here: that runs the full playback
+        // settings handler (provider health refresh, dispatcher marshalling). In CI,
+        // another test may leave Application.Current set without a pumping UI thread,
+        // and InvokeAsync-based paths can deadlock for minutes under --blame-hang.
         coordinator.CurrentSettings.IsSegmentsPaneVisible = true;
-        coordinator.NotifySettingsModified();
+        playback.Preview.SyncPaneLayoutFromSettings();
 
         Assert.True(coordinator.CurrentSettings.IsSegmentsPaneVisible);
         Assert.True(playback.Preview.IsSegmentsPaneVisible);
