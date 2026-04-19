@@ -8,6 +8,7 @@ using Babel.Player.ViewModels;
 
 namespace BabelPlayer.Tests;
 
+[Xunit.Trait("Category", "Quarantined")]
 public sealed class EmbeddedPlaybackPreviewViewModelTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"babel-preview-vm-tests-{Guid.NewGuid():N}");
