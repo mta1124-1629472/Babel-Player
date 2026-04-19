@@ -53,9 +53,42 @@ public sealed partial class SessionWorkflowCoordinator
             .ConfigureAwait(false);
     }
 
-    private async Task<DubRenderResult> RenderDubAudioAsync(
+    /// <summary>
+    /// Composes dub audio using the caller's timeline rules (typically current session for export).
+    /// </summary>
+    private Task<DubRenderResult> RenderDubAudioAsync(
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         IReadOnlyDictionary<string, string> segmentAudioPaths,
+        string dubPath,
+        string? ambiancePath,
+        double ambianceMixDb,
+        CancellationToken cancellationToken) =>
+        RenderDubAudioAsync(
+            () => BuildTimelineDubSegmentsAsync(orderedSegments, segmentAudioPaths, cancellationToken),
+            dubPath,
+            ambiancePath,
+            ambianceMixDb,
+            cancellationToken);
+
+    /// <summary>
+    /// Composes dub audio using timing overrides and defaults frozen in <paramref name="snapshot"/>
+    /// so stitch matches the TTS run that produced the segment clips.
+    /// </summary>
+    private Task<DubRenderResult> RenderDubAudioAsync(
+        TtsExecutionSnapshot snapshot,
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
+        IReadOnlyDictionary<string, string> segmentAudioPaths,
+        string dubPath,
+        CancellationToken cancellationToken) =>
+        RenderDubAudioAsync(
+            () => BuildTimelineDubSegmentsAsync(snapshot, orderedSegments, segmentAudioPaths, cancellationToken),
+            dubPath,
+            snapshot.AmbianceAudioPath,
+            snapshot.AmbianceMixDb,
+            cancellationToken);
+
+    private async Task<DubRenderResult> RenderDubAudioAsync(
+        Func<Task<List<TimelineDubSegment>>> buildTimelineAsync,
         string dubPath,
         string? ambiancePath,
         double ambianceMixDb,
@@ -64,8 +97,7 @@ public sealed partial class SessionWorkflowCoordinator
         if (_audioProcessingService is null)
             throw new InvalidOperationException("Audio processing service unavailable. Unable to compose dub audio.");
 
-        var timeline = await BuildTimelineDubSegmentsAsync(orderedSegments, segmentAudioPaths, cancellationToken)
-            .ConfigureAwait(false);
+        var timeline = await buildTimelineAsync().ConfigureAwait(false);
         await _audioProcessingService.ComposeTimelineDubAsync(timeline, dubPath, cancellationToken)
             .ConfigureAwait(false);
 

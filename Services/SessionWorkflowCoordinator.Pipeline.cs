@@ -692,11 +692,10 @@ public sealed partial class SessionWorkflowCoordinator
             progress01: 1,
             isIndeterminate: true);
         return await RenderDubAudioAsync(
+                snapshot,
                 orderedSegments,
                 segmentAudioPaths,
                 ttsPath,
-                snapshot.AmbianceAudioPath,
-                snapshot.AmbianceMixDb,
                 cancellationToken)
             .ConfigureAwait(false);
     }
