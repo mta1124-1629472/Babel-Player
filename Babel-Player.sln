@@ -8,7 +8,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BabelPlayer.Tests", "BabelP
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LocaleGenerator", "Tools\LocaleGenerator\LocaleGenerator.csproj", "{AD0EAD53-F128-486C-A40E-622B0E49F3CE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LocaleGenerator", "tools\LocaleGenerator\LocaleGenerator.csproj", "{AD0EAD53-F128-486C-A40E-622B0E49F3CE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
