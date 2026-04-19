@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Credentials;
 using Babel.Player.Services;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
@@ -563,6 +564,54 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
 
     [Fact]
     [Trait("Category", "Smoke")]
+    public async Task GenerateTtsAsync_UsesFrozenSnapshotTimingWhenSettingsChangeMidRun()
+    {
+        _settings.DubTimingMode = SegmentTimingMode.Stretch;
+        var audioProcessing = new FakeAudioProcessingService
+        {
+            TimeStretchShouldSucceed = true,
+        };
+        var ttsProvider = new BlockingFakeTtsProvider();
+        var coordinator = CreateCoordinator(audioProcessing, ttsProvider);
+        coordinator.Initialize();
+
+        var mediaPath = CreateMediaFile("snapshot-timing-source.mp4");
+        var translationPath = WriteTranslationArtifact(new TranslationSegmentArtifact
+        {
+            Id = "segment_0.0",
+            Start = 0.0,
+            End = 2.0,
+            Text = "hola",
+            TranslatedText = "hello",
+        });
+
+        coordinator.CurrentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            SourceMediaPath = mediaPath,
+            IngestedMediaPath = mediaPath,
+            TranslationPath = translationPath,
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TtsProvider = "fake-tts",
+            TtsVoice = "default",
+        };
+
+        var generateTask = coordinator.GenerateTtsAsync();
+        await ttsProvider.SegmentStarted.Task;
+
+        _settings.DubTimingMode = SegmentTimingMode.Off;
+        ttsProvider.AllowSegmentCompletion.TrySetResult(true);
+
+        await generateTask;
+
+        Assert.Equal(SegmentTimingMode.Off, _settings.DubTimingMode);
+        Assert.Equal(1, audioProcessing.TimeStretchCallCount);
+        Assert.True(audioProcessing.ComposeTimelineDubAsyncCalled);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
     public async Task GenerateTtsAsync_WhenAmbianceMixOutputIsMissing_ThrowsAndLeavesSessionUnmixed()
     {
         var audioProcessing = new FakeAudioProcessingService
@@ -604,14 +653,16 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
         Assert.Null(coordinator.CurrentSession.MixedDubAudioPath);
     }
 
-    private SessionWorkflowCoordinator CreateCoordinator(IAudioProcessingService? audioProcessingService = null)
+    private SessionWorkflowCoordinator CreateCoordinator(
+        IAudioProcessingService? audioProcessingService = null,
+        ITtsProvider? ttsProvider = null)
     {
         var registries = new RegistryBundle(
             _perSessionStore,
             _recentStore,
             new FakeTranscriptionRegistry(),
             new FakeTranslationRegistry(),
-            new FakeTtsRegistry());
+            new FakeTtsRegistry(ttsProvider));
 
         return new SessionWorkflowCoordinator(
             new CoordinatorCoreServices(_store, _log, _settings),
@@ -772,5 +823,30 @@ public sealed class SessionWorkflowCoordinatorSmokeTests : IDisposable
                 provenanceDigest: provenance,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private sealed class BlockingFakeTtsProvider : ITtsProvider
+    {
+        public TaskCompletionSource<bool> SegmentStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> AllowSegmentCompletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("BlockingFakeTtsProvider only supports per-segment generation.");
+
+        public async Task<TtsResult> GenerateSegmentTtsAsync(SingleSegmentTtsRequest request, CancellationToken cancellationToken = default)
+        {
+            SegmentStarted.TrySetResult(true);
+            await AllowSegmentCompletion.Task.WaitAsync(cancellationToken);
+            await File.WriteAllBytesAsync(request.OutputAudioPath, [0x01, 0x02, 0x03], cancellationToken);
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, 3, null);
+        }
+
+        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) => new(true, "Ready");
+
+        public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress, CancellationToken ct = default) =>
+            Task.FromResult(true);
     }
 }

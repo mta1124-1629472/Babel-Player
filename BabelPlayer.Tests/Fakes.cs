@@ -130,6 +130,13 @@ public sealed class FakeTranslationProvider : ITranslationProvider
 
 public sealed class FakeTtsRegistry : ITtsRegistry
 {
+    private readonly ITtsProvider _provider;
+
+    public FakeTtsRegistry(ITtsProvider? provider = null)
+    {
+        _provider = provider ?? new FakeTtsProvider();
+    }
+
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null) =>
         [new("fake-tts", "Fake TTS", false, null, ["default"])];
 
@@ -137,7 +144,7 @@ public sealed class FakeTtsRegistry : ITtsRegistry
         ["default"];
 
     public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, ComputeProfile? profile = null) =>
-        new FakeTtsProvider();
+        _provider;
 
     public ProviderReadiness CheckReadiness(string providerId, string modelOrVoice, AppSettings settings, ApiKeyStore? keyStore, ComputeProfile? profile = null) =>
         new(true, "Ready");
@@ -169,12 +176,14 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
     public bool CombineAudioSegmentsAsyncCalled { get; private set; }
     public bool ComposeTimelineDubAsyncCalled { get; private set; }
     public bool MixDubOverAmbianceAsyncCalled { get; private set; }
+    public int TimeStretchCallCount { get; private set; }
     /// <summary>Last <c>ambianceGainDb</c> value the fake received, so tests can assert
     /// the coordinator forwarded <c>AppSettings.AmbianceMixDb</c> correctly.</summary>
     public double? LastAmbianceGainDb { get; private set; }
     public bool SkipTimelineOutputCreation { get; set; }
     public bool SkipMixedOutputCreation { get; set; }
     public bool ThrowOnMixDubOverAmbiance { get; set; }
+    public bool TimeStretchShouldSucceed { get; set; }
 
     public async Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputAudioPath, CancellationToken cancellationToken)
     {
@@ -245,8 +254,18 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         double targetDurationSeconds,
         double minRatio = DubTimingDefaults.StretchMinTempoRatio,
         double maxRatio = DubTimingDefaults.StretchMaxTempoRatio,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult(false);
+        CancellationToken cancellationToken = default)
+    {
+        TimeStretchCallCount++;
+        if (!TimeStretchShouldSucceed)
+            return Task.FromResult(false);
+
+        var dir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+        File.WriteAllBytes(outputPath, [0x11, 0x22]);
+        return Task.FromResult(true);
+    }
 
     public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
         => Task.FromResult<double?>(null);

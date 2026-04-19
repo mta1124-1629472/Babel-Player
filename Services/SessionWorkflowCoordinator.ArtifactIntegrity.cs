@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
@@ -140,6 +141,14 @@ public sealed partial class SessionWorkflowCoordinator
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         CancellationToken cancellationToken)
     {
+        var artifactSettings = new AppSettings
+        {
+            TtsRuntime = candidateSnapshot.TtsRuntime ?? InferenceRuntimeCatalog.InferTtsRuntime(candidateSnapshot.TtsProvider),
+            TtsProvider = candidateSnapshot.TtsProvider ?? string.Empty,
+            TtsVoice = candidateSnapshot.TtsVoice ?? string.Empty,
+            DubTimingMode = candidateSnapshot.DubTimingMode ?? SegmentTimingMode.Off,
+            AmbianceMixDb = candidateSnapshot.AmbianceMixDb ?? -15.0,
+        };
         var orderedPairs = orderedSegments
             .Where(segment => !string.IsNullOrWhiteSpace(segment.Id))
             .Select(segment => new KeyValuePair<string, string>(
@@ -154,7 +163,7 @@ public sealed partial class SessionWorkflowCoordinator
         var segmentProvenance = ArtifactIntegrity.ComputeTtsSegmentSetProvenanceDigest(
             translationHash,
             candidateSnapshot,
-            CurrentSettings);
+            artifactSettings);
         var segmentManifest = await ArtifactIntegrity.WriteDirectoryManifestAsync(
                 segmentsDir,
                 "tts_segment_set",
@@ -173,7 +182,7 @@ public sealed partial class SessionWorkflowCoordinator
         var dubProvenance = ArtifactIntegrity.ComputeDubProvenanceDigest(
             segmentManifest.Sha256,
             ambianceHash,
-            CurrentSettings);
+            artifactSettings);
         var dubDuration = _audioProcessingService is null
             ? null
             : await _audioProcessingService.ProbeDurationAsync(ttsPath, cancellationToken).ConfigureAwait(false);
