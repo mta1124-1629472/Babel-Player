@@ -447,7 +447,7 @@ dotnet run --project BabelPlayer.csproj --no-build
 '''
 
 [[actions]]
-name = "Full Test"
+name = "Test (Excluding Quarantined)"
 icon = "test"
 command = "dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter \"Category!=Quarantined\""
 
