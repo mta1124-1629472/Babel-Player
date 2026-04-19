@@ -528,6 +528,46 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateArtifacts_InvalidTranscriptWithValidStemsAndDiarization_RecordsDiarizationClear()
+    {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var (vocalsPath, ambiancePath) = await SessionSemanticsIntegrityFixture.WriteStemPairAsync(_dir, mediaPath);
+        var now = DateTimeOffset.UtcNow;
+        var template = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            VocalsAudioPath = vocalsPath,
+            AmbianceAudioPath = ambiancePath,
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        await File.WriteAllTextAsync(transcriptPath, "{ not json }");
+
+        var snap = template with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            SourceLanguage = "es",
+            DiarizationProvider = ProviderNames.NemoLocal,
+            SpeakersDetectedAtUtc = now,
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("vocal_separation", result.ClearedArtifacts);
+        Assert.Contains("diarization", result.ClearedArtifacts);
+        Assert.Contains("transcription", result.ClearedArtifacts);
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, result.Snapshot.Stage);
+        Assert.Null(result.Snapshot.VocalsAudioPath);
+        Assert.Null(result.Snapshot.AmbianceAudioPath);
+        Assert.Null(result.Snapshot.DiarizationProvider);
+        Assert.Null(result.Snapshot.SpeakersDetectedAtUtc);
+        Assert.Null(result.Snapshot.TranscriptPath);
+        Assert.Null(result.Snapshot.SourceLanguage);
+    }
+
+    [Fact]
     public async Task ValidateArtifacts_MissingMedia_DegradesToFoundation()
     {
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
