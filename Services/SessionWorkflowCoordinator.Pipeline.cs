@@ -652,8 +652,16 @@ public sealed partial class SessionWorkflowCoordinator
         }
 
         if (!File.Exists(ttsPath))
+        {
+            if (_audioProcessingService is null)
+            {
+                throw new InvalidOperationException(
+                    $"Stitching skipped because audio processing service unavailable; combined file not created at '{ttsPath}'.");
+            }
+
             throw new InvalidOperationException(
                 $"Stitching completed but combined dub file was not created at '{ttsPath}'. Check ffmpeg output and disk permissions.");
+        }
 
         _log.Info($"TTS combined complete: {ttsPath}");
     }

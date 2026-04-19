@@ -639,7 +639,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         Language: ttsLanguage,
                         SourceVideoPath: _c.CurrentSession.IngestedMediaPath ?? _c.CurrentSession.SourceMediaPath),
                     cancellationToken);
-                _c._pendingTtsTasks.Add(task);
+                _c.TrackPendingTtsTask(task);
                 var result = await task.ConfigureAwait(false);
                 if (result.Success && File.Exists(segmentAudioPath))
                 {
@@ -746,7 +746,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 targetLanguage,
                 null);
 
-        private static string ResolveTranslatedText(
+        private string ResolveTranslatedText(
             TranslationResult result,
             int segmentIndex,
             string sourceText,
@@ -763,13 +763,21 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             }
 
             if (result.Segments.Count == 1 && !string.IsNullOrWhiteSpace(result.Segments[0].TranslatedText))
+            {
+                _c.Log.Warning(
+                    $"ResolveTranslatedText used fallback='single-segment' for segmentId='{segmentId}', segmentIndex={segmentIndex}, sourceText='{sourceText}'.");
                 return result.Segments[0].TranslatedText;
+            }
 
             var byText = result.Segments.FirstOrDefault(segment =>
                 string.Equals(segment.Text, sourceText, StringComparison.Ordinal) &&
                 !string.IsNullOrWhiteSpace(segment.TranslatedText));
             if (byText is not null)
+            {
+                _c.Log.Warning(
+                    $"ResolveTranslatedText used fallback='text-match' for segmentId='{segmentId}', segmentIndex={segmentIndex}, sourceText='{sourceText}'.");
                 return byText.TranslatedText;
+            }
 
             throw new InvalidOperationException(
                 $"Translation result did not contain a translated value for segment '{segmentId}'.");
