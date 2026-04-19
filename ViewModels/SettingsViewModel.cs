@@ -47,9 +47,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     /// <summary>
     /// Set by <see cref="Apply"/> once the current language selection has been persisted
-    /// to settings.  <see cref="Dispose"/> uses this to decide whether the live culture
-    /// preview should be reverted to <see cref="_originalCulture"/> when the window
-    /// closes via Cancel, the OS X button, or Alt+F4.
+    /// to settings.  <see cref="Dispose"/> uses this to decide whether closing should
+    /// revert the live preview to the culture captured at window open (<see cref="_originalCulture"/>),
+    /// or snap it to the last persisted <c>AppLanguage</c> (so a later preview after Apply
+    /// is not left applied when the user dismisses without saving again).
     /// </summary>
     private bool _languageChangeCommitted;
     private bool _suppressAppLanguageSelectionPreview;
@@ -885,11 +886,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        // Revert any live language preview that wasn't persisted via Apply / OK.
-        // Covers Cancel, the OS X button, and Alt+F4.  Safe even if culture is
-        // already the original (SetCulture short-circuits on equality).
+        // Drop any in-dialog preview: either back to the culture at open, or to the
+        // last persisted AppLanguage (after Apply/OK) so a second preview cannot stick.
+        var persistedIso = LocalizationService.ResolveAppLanguage(_coordinator.CurrentSettings.AppLanguage);
+        var persistedCulture = CultureInfo.GetCultureInfo(persistedIso);
         if (!_languageChangeCommitted)
             LocalizationService.Instance.SetCulture(_originalCulture);
+        else
+            LocalizationService.Instance.SetCulture(persistedCulture);
 
         _healthTimer.Stop();
         _restartCts?.Cancel();

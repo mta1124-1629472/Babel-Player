@@ -165,6 +165,9 @@
   <data name="Label_SpokenLanguage" xml:space="preserve">
     <value>Spoken language (ASR hint)</value>
   </data>
+  <data name="SpokenLanguage_AutoDetect" xml:space="preserve">
+    <value>Auto-detect</value>
+  </data>
   <data name="Section_Diarization" xml:space="preserve">
     <value>DIARIZATION / SPEAKERS</value>
   </data>

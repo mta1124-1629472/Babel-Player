@@ -23,7 +23,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def write_locale(lang: str, entries: Dict[str, str]) -> str:
     path = os.path.join(REPO_ROOT, "Resources", f"Strings.{lang}.resx")
     lines = [RESX_HEADER]
-    for key, value in entries.items():
+    for key in sorted(entries.keys()):
+        value = entries[key]
         lines.append(f'  <data name="{_escape(key)}" xml:space="preserve">')
         lines.append(f'    <value>{_escape(value)}</value>')
         lines.append('  </data>')
@@ -61,6 +62,7 @@ GERMAN_VERIFICATION: Dict[str, str] = {
     "Automation_ExpandErrorDetails": "Fehlerdetails erweitern",
     "Label_SegmentCount_One": "{0} Segment",
     "Label_SegmentCount_Many": "{0} Segmente",
+    "SpokenLanguage_AutoDetect": "Automatisch erkennen",
     "Automation_RefreshSegments": "Segmente aktualisieren",
     "Settings_Group_AppLanguage": "App-Sprache",
     "Settings_Hint_AppLanguage":

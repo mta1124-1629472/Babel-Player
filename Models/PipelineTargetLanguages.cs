@@ -40,19 +40,25 @@ public sealed class PipelineTargetLanguageOption : INotifyPropertyChanged, IEqua
 
     public static IReadOnlyList<PipelineTargetLanguageOption> All { get; } = BuildAll();
 
+    private static readonly CultureInfo EnglishSortCulture = CultureInfo.GetCultureInfo("en");
+
     private static IReadOnlyList<PipelineTargetLanguageOption> BuildAll()
     {
         var items = NllbLanguageCatalog.IsoCodes
             .Select(code => new PipelineTargetLanguageOption(code))
             .ToList();
 
-        // Stable order: English first, then alphabetical by the baseline English display name.
+        // Stable order: English first, then alphabetical by English UI labels (current UI
+        // culture would make order drift after a runtime language switch).
         items.Sort(static (a, b) =>
             string.Equals(a.Code, "en", StringComparison.OrdinalIgnoreCase)
                 ? -1
                 : string.Equals(b.Code, "en", StringComparison.OrdinalIgnoreCase)
                     ? 1
-                    : string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
+                    : string.Compare(
+                        LanguageDisplayNames.ForIso639(a.Code, EnglishSortCulture),
+                        LanguageDisplayNames.ForIso639(b.Code, EnglishSortCulture),
+                        StringComparison.OrdinalIgnoreCase));
 
         return items;
     }
