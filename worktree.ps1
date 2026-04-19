@@ -1,3 +1,5 @@
+#Requires -Version 7.0
+
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory = $true)]
@@ -68,11 +70,16 @@ function Invoke-Git {
     }
 
     $previousErrorActionPreference = $ErrorActionPreference
+    $invocationSucceeded = $false
     $ErrorActionPreference = "Continue"
     try {
-        # Resolve git via Get-Command above so a missing executable fails fast; rely on $LASTEXITCODE
-        # for success/failure (do not use $? here: stderr merged via 2>&1 can clear $? even on exit 0).
+        # Get-Command validates the executable. $? reflects whether the call operator reported an error;
+        # $LASTEXITCODE is the process exit code. If the process never starts, $? can be $false while
+        # $LASTEXITCODE stays 0 (stale). If both succeed, trust $LASTEXITCODE (including non-zero).
+        # Note: on Windows PowerShell 5.1, stderr merged via 2>&1 can clear $? even when git exits 0;
+        # use PowerShell 7+ (pwsh) for this helper if you hit spurious failures.
         $output = & $gitCommand.Source -C $WorkingDirectory @Args 2>&1
+        $invocationSucceeded = $?
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
@@ -85,7 +92,14 @@ function Invoke-Git {
             if ($null -eq $_) { "" } else { $_.ToString() }
         })
     }
-    $exitCode = $LASTEXITCODE
+
+    $exitCode = if ($invocationSucceeded) {
+        $LASTEXITCODE
+    } elseif ($LASTEXITCODE -ne 0) {
+        $LASTEXITCODE
+    } else {
+        1
+    }
 
     if (-not $AllowFailure -and $exitCode -ne 0) {
         throw "git $($Args -join ' ') failed:`n$output"
