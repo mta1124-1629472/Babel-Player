@@ -355,6 +355,7 @@ public partial class App : Application
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
     {
         if (_sessionWorkflowCoordinator is null) return;
+        _startupLog?.Info($"App shutdown requested: exitCode={e.ApplicationExitCode}");
         try
         {
             _sessionWorkflowCoordinator.FlushPendingSave();

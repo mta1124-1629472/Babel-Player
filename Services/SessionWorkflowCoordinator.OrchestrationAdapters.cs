@@ -55,6 +55,7 @@ public sealed partial class SessionWorkflowCoordinator :
         string normalizedSourceLanguage,
         string normalizedTargetLanguage,
         IProgress<double>? progress,
+        bool allowPendingTranscriptArtifact,
         CancellationToken cancellationToken) =>
         PrepareTranslationExecutionSnapshotAsync(
             stagePlan,
@@ -62,6 +63,7 @@ public sealed partial class SessionWorkflowCoordinator :
             normalizedSourceLanguage,
             normalizedTargetLanguage,
             progress,
+            allowPendingTranscriptArtifact,
             cancellationToken);
 
     Task<string> IProviderLifecycleManager.SeparateVocalsAsync(

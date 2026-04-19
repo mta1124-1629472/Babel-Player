@@ -125,6 +125,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     _c.CurrentSession.SourceLanguage ?? "unknown",
                     targetLanguage,
                     translationDownloadProgress,
+                    allowPendingTranscriptArtifact: true,
                     cancellationToken)
                 .ConfigureAwait(false);
             await using var translationProviderLease = translationSnapshot.ProviderLease;
@@ -326,6 +327,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     _c.CurrentSession.SourceLanguage ?? transcript.Language ?? "unknown",
                     targetLanguage,
                     translationDownloadProgress,
+                    allowPendingTranscriptArtifact: false,
                     cancellationToken)
                 .ConfigureAwait(false);
             await using var translationProviderLease = translationSnapshot.ProviderLease;

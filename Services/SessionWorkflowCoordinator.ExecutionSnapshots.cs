@@ -58,6 +58,7 @@ public sealed partial class SessionWorkflowCoordinator
         string normalizedSourceLanguage,
         string normalizedTargetLanguage,
         IProgress<double>? progress,
+        bool allowPendingTranscriptArtifact,
         CancellationToken cancellationToken)
     {
         await EnsureTranslationExecutionReadyAsync(progress, cancellationToken).ConfigureAwait(false);
@@ -80,10 +81,17 @@ public sealed partial class SessionWorkflowCoordinator
             normalizedSourceLanguage,
             normalizedTargetLanguage,
             transcriptPath,
-            ArtifactIdentity.Capture(transcriptPath),
+            CaptureTranslationTranscriptIdentity(transcriptPath, allowPendingTranscriptArtifact),
             translationPath,
             ArtifactIntegrity.GetWorkingPath(translationPath));
     }
+
+    internal static ArtifactIdentity CaptureTranslationTranscriptIdentity(
+        string transcriptPath,
+        bool allowPendingTranscriptArtifact) =>
+        allowPendingTranscriptArtifact
+            ? ArtifactIdentity.CapturePending(transcriptPath)
+            : ArtifactIdentity.Capture(transcriptPath);
 
     private async Task<TtsExecutionSnapshot> PrepareTtsExecutionSnapshotAsync(
         StageExecutionPlan stagePlan,

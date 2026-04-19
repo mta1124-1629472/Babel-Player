@@ -81,6 +81,7 @@ internal sealed class TranslationOrchestrator
                     normalizedSourceLanguage,
                     normalizedTargetLanguage,
                     downloadProgress,
+                    allowPendingTranscriptArtifact: false,
                     cancellationToken)
                 .ConfigureAwait(false);
             await using var translationProviderLease = snapshot.ProviderLease;

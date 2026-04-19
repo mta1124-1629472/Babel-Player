@@ -159,6 +159,21 @@ public sealed class MainWindowBindingsTests
         Assert.Same(paneLayoutHost, segmentsPaneHost.Parent);
     }
 
+    [Fact]
+    public void MainWindow_ForceCloseMenu_IsDevOnly_AndCodeBehindAvoidsFailFast()
+    {
+        var axamlPath = FindRepoFile("Views", "MainWindow.axaml");
+        var axaml = File.ReadAllText(axamlPath);
+        var codeBehindPath = FindRepoFile("Views", "MainWindow.axaml.cs");
+        var codeBehind = File.ReadAllText(codeBehindPath);
+
+        Assert.Contains("Header=\"{local:Localize Menu_File_ForceClose}\"", axaml, StringComparison.Ordinal);
+        Assert.Contains("IsVisible=\"{x:Static bp:BuildInfo.IsDevBuild}\"", axaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Environment.FailFast", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("if (!BuildInfo.IsDevBuild)", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("desktop.Shutdown();", codeBehind, StringComparison.Ordinal);
+    }
+
     private static string FindRepoFile(params string[] relativePathParts)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

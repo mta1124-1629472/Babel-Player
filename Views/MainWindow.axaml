@@ -201,6 +201,7 @@
                                 <MenuItem Header="{local:Localize Common_Close}"
                                           Click="OnCloseWindowClick" />
                                 <MenuItem Header="{local:Localize Menu_File_ForceClose}"
+                                          IsVisible="{x:Static bp:BuildInfo.IsDevBuild}"
                                           Click="OnForceCloseWindowClick" />
                             </ContextMenu>
                         </Button.ContextMenu>

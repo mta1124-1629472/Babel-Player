@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -1062,6 +1063,12 @@ public partial class MainWindow : Window
 
     public void OnForceCloseWindowClick(object? sender, RoutedEventArgs e)
     {
+        if (!BuildInfo.IsDevBuild)
+        {
+            Close();
+            return;
+        }
+
         ForceCloseCurrentProcess();
     }
 
@@ -1134,7 +1141,13 @@ public partial class MainWindow : Window
         }
         catch
         {
-            Environment.FailFast("Force close requested.");
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                desktop.Shutdown();
+                return;
+            }
+
+            Environment.Exit(-1);
         }
     }
 

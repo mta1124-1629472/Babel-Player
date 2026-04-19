@@ -959,6 +959,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 sourceLanguage,
                 targetLanguage,
                 progress: null,
+                allowPendingTranscriptArtifact: false,
                 cancellationToken)
             .ConfigureAwait(false);
         await using var translationProviderLease = snapshot.ProviderLease;

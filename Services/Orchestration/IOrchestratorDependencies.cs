@@ -38,6 +38,7 @@ internal interface IProviderLifecycleManager
         string normalizedSourceLanguage,
         string normalizedTargetLanguage,
         IProgress<double>? progress,
+        bool allowPendingTranscriptArtifact,
         CancellationToken cancellationToken);
     Task<string> SeparateVocalsAsync(
         IProgress<double>? progress,

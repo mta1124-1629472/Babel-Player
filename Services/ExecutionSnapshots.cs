@@ -8,6 +8,11 @@ namespace Babel.Player.Services;
 
 internal readonly record struct ArtifactIdentity(string Path, long Length, long LastWriteUtcTicks)
 {
+    private const long PendingArtifactLength = -1;
+    private const long PendingArtifactWriteTicks = -1;
+
+    public bool IsPending => Length == PendingArtifactLength && LastWriteUtcTicks == PendingArtifactWriteTicks;
+
     public static ArtifactIdentity Capture(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -17,6 +22,13 @@ internal readonly record struct ArtifactIdentity(string Path, long Length, long 
             throw new FileNotFoundException($"Artifact not found: {fullPath}", fullPath);
 
         return new ArtifactIdentity(fullPath, info.Length, info.LastWriteTimeUtc.Ticks);
+    }
+
+    public static ArtifactIdentity CapturePending(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var fullPath = System.IO.Path.GetFullPath(path);
+        return new ArtifactIdentity(fullPath, PendingArtifactLength, PendingArtifactWriteTicks);
     }
 
     public bool Matches(string? candidatePath)
@@ -29,6 +41,9 @@ internal readonly record struct ArtifactIdentity(string Path, long Length, long 
             return false;
 
         var info = new FileInfo(fullPath);
+        if (IsPending)
+            return info.Exists;
+
         return info.Exists
             && info.Length == Length
             && info.LastWriteTimeUtc.Ticks == LastWriteUtcTicks;
