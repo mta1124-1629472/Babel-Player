@@ -29,9 +29,9 @@ public sealed partial class SessionWorkflowCoordinator
             throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
 
         if (!string.IsNullOrWhiteSpace(CurrentSession.VocalsAudioPath)
-            && !string.IsNullOrWhiteSpace(CurrentSession.InstrumentalAudioPath)
+            && !string.IsNullOrWhiteSpace(CurrentSession.AmbianceAudioPath)
             && File.Exists(CurrentSession.VocalsAudioPath)
-            && File.Exists(CurrentSession.InstrumentalAudioPath))
+            && File.Exists(CurrentSession.AmbianceAudioPath))
         {
             return CurrentSession.VocalsAudioPath;
         }
@@ -52,7 +52,7 @@ public sealed partial class SessionWorkflowCoordinator
                 CurrentSettings,
                 _containerizedProbe,
                 cancellationToken).ConfigureAwait(false)
-            : ContainerizedProviderReadiness.CheckVocalSeparation(CurrentSettings, _containerizedProbe);
+            : ContainerizedProviderReadiness.CheckVocalSeparation(CurrentSettings, serviceProbe: _containerizedProbe);
 
         if (!readiness.IsReady)
             throw new PipelineProviderException(readiness.BlockingReason ?? "Vocal separation is not ready.");
@@ -74,7 +74,7 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (!result.Success
             || string.IsNullOrWhiteSpace(result.VocalsAudioPath)
-            || string.IsNullOrWhiteSpace(result.InstrumentalAudioPath))
+            || string.IsNullOrWhiteSpace(result.AmbianceAudioPath))
         {
             throw new InvalidOperationException(
                 $"Vocal separation failed: {result.ErrorMessage ?? "Unknown vocal separation error"}");
@@ -83,16 +83,26 @@ public sealed partial class SessionWorkflowCoordinator
         if (!File.Exists(result.VocalsAudioPath))
             throw new InvalidOperationException($"Vocal separation completed but vocals artifact was not found: {result.VocalsAudioPath}");
 
-        if (!File.Exists(result.InstrumentalAudioPath))
-            throw new InvalidOperationException($"Vocal separation completed but instrumental artifact was not found: {result.InstrumentalAudioPath}");
+        if (!File.Exists(result.AmbianceAudioPath))
+            throw new InvalidOperationException($"Vocal separation completed but ambiance artifact was not found: {result.AmbianceAudioPath}");
 
-        CurrentSession = CurrentSession with
+        await WriteStemManifestsAsync(
+                result.VocalsAudioPath,
+                result.AmbianceAudioPath,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        lock (_sessionLock)
         {
-            VocalsAudioPath = result.VocalsAudioPath,
-            InstrumentalAudioPath = result.InstrumentalAudioPath,
-            StatusMessage = "Vocal and instrumental stems prepared for transcription.",
-        };
-        SaveCurrentSession();
+            CurrentSession = CurrentSession with
+            {
+                VocalsAudioPath = result.VocalsAudioPath,
+                AmbianceAudioPath = result.AmbianceAudioPath,
+                InstrumentalAudioPath = result.AmbianceAudioPath,
+                StatusMessage = "Audio prepared for transcription.",
+            };
+        }
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         ReportStage(
             stageContext,
@@ -129,7 +139,10 @@ public sealed partial class SessionWorkflowCoordinator
         IProgress<double>? progress,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken) =>
-        _transcriptionOrchestrator.ExecuteAsync(progress, stageContext, cancellationToken);
+        _transcriptionOrchestrator.ExecuteAsync(
+            progress,
+            stageContext is { } context ? context.ToShared() : null,
+            cancellationToken);
 
     /// <summary>
         /// Advances the current session by translating the existing transcript into the specified target language.
@@ -166,7 +179,12 @@ public sealed partial class SessionWorkflowCoordinator
         string? sourceLanguage,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken) =>
-        _translationOrchestrator.ExecuteAsync(progress, targetLanguage, sourceLanguage, stageContext, cancellationToken);
+        _translationOrchestrator.ExecuteAsync(
+            progress,
+            targetLanguage,
+            sourceLanguage,
+            stageContext is { } context ? context.ToShared() : null,
+            cancellationToken);
 
     /// <summary>
         /// Runs the TTS generation pipeline for the current session using the provided voice and progress reporter.
@@ -300,21 +318,26 @@ public sealed partial class SessionWorkflowCoordinator
         _transcriptionService ??= CreateTranscriptionService();
     }
 
-    private void CommitTranscriptionSessionState(TranscriptionResult result, string transcriptPath)
+    private async Task CommitTranscriptionSessionStateAsync(TranscriptionResult result, string transcriptPath)
     {
+        transcriptPath = await ArtifactIntegrity.FinalizeWorkingArtifactAsync(transcriptPath).ConfigureAwait(false);
+        var transcriptArtifact = await ArtifactJson.LoadTranscriptAsync(transcriptPath).ConfigureAwait(false);
+        await WriteTranscriptManifestAsync(transcriptPath, transcriptArtifact, CancellationToken.None).ConfigureAwait(false);
+
         var nowUtc = DateTimeOffset.UtcNow;
         // When vocal separation is disabled, clear any stale stem paths from a previous run that
         // had separation enabled. When separation is enabled, SeparateVocalsAsync already wrote
         // fresh stem paths into CurrentSession before this method is called, so we preserve them.
         var vocalsPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.VocalsAudioPath : null;
-        var instrumentalPath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.InstrumentalAudioPath : null;
-        CurrentSession = CurrentSession with
+        var ambiancePath = CurrentSettings.VocalSeparationEnabled ? CurrentSession.AmbianceAudioPath : null;
+        var candidate = CurrentSession with
         {
             Stage = SessionWorkflowStage.Transcribed,
             TranscriptPath = transcriptPath,
             SourceLanguage = result.Language,
             VocalsAudioPath = vocalsPath,
-            InstrumentalAudioPath = instrumentalPath,
+            AmbianceAudioPath = ambiancePath,
+            InstrumentalAudioPath = ambiancePath,
             TranscribedAtUtc = nowUtc,
             TranscriptionRuntime = CurrentSettings.TranscriptionRuntime,
             TranscriptionProvider = CurrentSettings.TranscriptionProvider,
@@ -325,19 +348,36 @@ public sealed partial class SessionWorkflowCoordinator
                 ? $"Transcribed {result.Segments.Count} segments ({result.Language}). Speaker mapping is available before translation."
                 : $"Transcribed {result.Segments.Count} segments ({result.Language}). Ready for translation.",
         };
+        if (!ArtifactIntegrityValidator.ValidateTranscript(candidate, out var integrityError))
+            throw new InvalidOperationException($"Transcript integrity validation failed after commit: {integrityError}");
 
-        _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
-        SaveCurrentSession();
+        lock (_sessionLock)
+        {
+            CurrentSession = candidate;
+        }
+
+        _log.Debug($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
-    private void CommitTranslationSessionState(
+    private async Task CommitTranslationSessionStateAsync(
         TranslationResult result,
         string translationPath,
         string sourceLanguage,
         string targetLanguage)
     {
+        translationPath = await ArtifactIntegrity.FinalizeWorkingArtifactAsync(translationPath).ConfigureAwait(false);
+        var translationArtifact = await ArtifactJson.LoadTranslationAsync(translationPath).ConfigureAwait(false);
+        await WriteTranslationManifestAsync(
+                translationPath,
+                translationArtifact,
+                sourceLanguage,
+                targetLanguage,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
         var nowUtc = DateTimeOffset.UtcNow;
-        CurrentSession = CurrentSession with
+        var candidate = CurrentSession with
         {
             Stage = SessionWorkflowStage.Translated,
             TranslationPath = translationPath,
@@ -347,11 +387,18 @@ public sealed partial class SessionWorkflowCoordinator
             TranslationRuntime = CurrentSettings.TranslationRuntime,
             TranslationProvider = CurrentSettings.TranslationProvider,
             TranslationModel = CurrentSettings.TranslationModel,
-            StatusMessage = $"Translated {result.Segments.Count} segments to {targetLanguage}. Ready for TTS/dubbing.",
+            StatusMessage = "Translation complete. Ready for dubbing.",
         };
+        if (!ArtifactIntegrityValidator.ValidateTranslation(candidate, out var integrityError))
+            throw new InvalidOperationException($"Translation integrity validation failed after commit: {integrityError}");
 
-        _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
-        SaveCurrentSession();
+        lock (_sessionLock)
+        {
+            CurrentSession = candidate;
+        }
+
+        _log.Debug($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -481,21 +528,28 @@ public sealed partial class SessionWorkflowCoordinator
             else
             {
                 int completed = 0;
-                foreach (var seg in candidateSegments)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await GenerateSingleSegmentAsync(
-                        seg,
-                        voice,
-                        ttsLanguage,
-                        segmentsDir,
-                        segmentAudioPaths,
-                        segmentDurations,
-                        totalSegments,
-                        stageContext,
-                        cancellationToken,
-                        onSucceeded: () => Interlocked.Increment(ref completed));
-                }
+                var parallelism = Math.Max(1, _ttsService?.MaxConcurrency ?? 1);
+                await Parallel.ForEachAsync(
+                    candidateSegments,
+                    new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = parallelism,
+                        CancellationToken = cancellationToken,
+                    },
+                    async (seg, ct) =>
+                    {
+                        await GenerateSingleSegmentAsync(
+                            seg,
+                            voice,
+                            ttsLanguage,
+                            segmentsDir,
+                            segmentAudioPaths,
+                            segmentDurations,
+                            totalSegments,
+                            stageContext,
+                            ct,
+                            onSucceeded: () => Interlocked.Increment(ref completed)).ConfigureAwait(false);
+                    }).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -619,51 +673,26 @@ public sealed partial class SessionWorkflowCoordinator
     /// <paramref name="orderedSegments"/> comes from <see cref="GenerateSegmentClipsAsync"/> to avoid
     /// a redundant disk read of the translation artifact.
     /// </summary>
-    private async Task StitchSegmentClipsAsync(
+    private async Task<DubRenderResult> StitchSegmentClipsAsync(
         ConcurrentDictionary<string, string> segmentAudioPaths,
         IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         string ttsPath,
         PipelineStageContext? stageContext,
         CancellationToken cancellationToken)
     {
-        var orderedPaths = orderedSegments
-            .Where(seg => seg.Id != null && segmentAudioPaths.ContainsKey(seg.Id))
-            .Select(seg => segmentAudioPaths[seg.Id!])
-            .ToList();
-
-        if (orderedPaths.Count == 0)
-            throw new InvalidOperationException(
-                "No eligible segment audio files were produced. Stitching cannot proceed. Check provider configuration and logs.");
-
-        _log.Info($"Stitching {orderedPaths.Count} segment clips into combined dub file...");
         ReportStage(
             stageContext,
             "Stitching segment clips into combined dub file…",
             progress01: 1,
             isIndeterminate: true);
-
-        if (_audioProcessingService is not null)
-        {
-            await _audioProcessingService.CombineAudioSegmentsAsync(orderedPaths, ttsPath, cancellationToken);
-        }
-        else
-        {
-            _log.Warning("Audio processing service unavailable. Skipping audio concatenation.");
-        }
-
-        if (!File.Exists(ttsPath))
-        {
-            if (_audioProcessingService is null)
-            {
-                throw new InvalidOperationException(
-                    $"Stitching skipped because audio processing service unavailable; combined file not created at '{ttsPath}'.");
-            }
-
-            throw new InvalidOperationException(
-                $"Stitching completed but combined dub file was not created at '{ttsPath}'. Check ffmpeg output and disk permissions.");
-        }
-
-        _log.Info($"TTS combined complete: {ttsPath}");
+        return await RenderDubAudioAsync(
+                orderedSegments,
+                segmentAudioPaths,
+                ttsPath,
+                CurrentSession.AmbianceAudioPath,
+                CurrentSettings.AmbianceMixDb,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -679,15 +708,17 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="totalSegments">Total number of segments expected for the translation/TTS run.</param>
     /// <param name="stageContext">Optional pipeline stage context used for final reporting.</param>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="totalSegments"/> &gt; 0 but no segments were successfully generated.</exception>
-    private void CommitTtsSessionState(
+    private async Task CommitTtsSessionStateAsync(
         string voice,
         string ttsPath,
+        DubRenderResult renderResult,
         string segmentsDir,
         ConcurrentDictionary<string, string> segmentAudioPaths,
         ConcurrentDictionary<string, double>? segmentDurations,
-        int totalSegments,
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
         PipelineStageContext? stageContext)
     {
+        int totalSegments = orderedSegments.Count;
         int succeeded = segmentAudioPaths.Count;
 
         if (totalSegments > 0 && succeeded == 0)
@@ -697,14 +728,40 @@ public sealed partial class SessionWorkflowCoordinator
                 "TTS stage completed but no segments were generated. Check provider configuration and logs.");
         }
 
-        string statusMessage = succeeded == totalSegments
-            ? $"TTS generated ({voice}). Dubbing complete."
-            : $"TTS generated ({voice}). {succeeded}/{totalSegments} segments ready — {totalSegments - succeeded} failed.";
+        if (succeeded != totalSegments)
+        {
+            lock (_sessionLock)
+            {
+                CurrentSession = CurrentSession with
+                {
+                    Stage = SessionWorkflowStage.Translated,
+                    TtsPath = null,
+                    MixedDubAudioPath = null,
+                    TtsGeneratedAtUtc = null,
+                    TtsSegmentsPath = segmentsDir,
+                    TtsSegmentAudioPaths = new Dictionary<string, string>(segmentAudioPaths),
+                    TtsSegmentDurations = segmentDurations is { Count: > 0 }
+                        ? new Dictionary<string, double>(segmentDurations)
+                        : null,
+                    TtsVoice = voice,
+                    TtsRuntime = CurrentSettings.TtsRuntime,
+                    TtsProvider = CurrentSettings.TtsProvider,
+                    DubTimingMode = CurrentSettings.DubTimingMode,
+                    AmbianceMixDb = CurrentSettings.AmbianceMixDb,
+                    StatusMessage = $"Dub incomplete. {succeeded}/{totalSegments} segment clips are ready; regenerate the failed clips before finalizing the dub.",
+                };
+            }
 
-        CurrentSession = CurrentSession with
+            await SaveCurrentSessionAsync().ConfigureAwait(false);
+            throw new InvalidOperationException(
+                $"TTS generated only {succeeded}/{totalSegments} segment clips. Remaining failed segments must be regenerated before finalizing the dub.");
+        }
+
+        var candidate = CurrentSession with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
-            TtsPath = ttsPath,
+            TtsPath = renderResult.DubTimelinePath,
+            MixedDubAudioPath = renderResult.AmbianceMixed ? renderResult.MixedWithAmbiancePath : null,
             TtsVoice = voice,
             TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
             TtsSegmentsPath = segmentsDir,
@@ -714,16 +771,102 @@ public sealed partial class SessionWorkflowCoordinator
                 : null,
             TtsRuntime = CurrentSettings.TtsRuntime,
             TtsProvider = CurrentSettings.TtsProvider,
-            StatusMessage = statusMessage,
+            DubTimingMode = CurrentSettings.DubTimingMode,
+            AmbianceMixDb = CurrentSettings.AmbianceMixDb,
+            StatusMessage = renderResult.AmbianceExpected && !renderResult.AmbianceMixed
+                ? $"Dub complete ({voice}). Ambiance mix is unavailable; using the dry dub only."
+                : $"TTS generated ({voice}). Dubbing complete.",
         };
+        await WriteTtsIntegrityArtifactsAsync(
+                candidate,
+                renderResult.DubTimelinePath,
+                renderResult,
+                segmentsDir,
+                segmentAudioPaths,
+                orderedSegments,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        if (!ArtifactIntegrityValidator.ValidateTts(candidate, out var integrityError))
+            throw new InvalidOperationException($"TTS integrity validation failed after commit: {integrityError}");
 
-        SaveCurrentSession();
+        lock (_sessionLock)
+        {
+            CurrentSession = candidate;
+        }
+        await SaveCurrentSessionAsync().ConfigureAwait(false);
 
         ReportStage(
             stageContext,
             $"Dub complete. {succeeded}/{totalSegments} segment clips are ready with voice {voice}.",
             progress01: 1,
             isIndeterminate: false);
+    }
+
+    private async Task<List<TimelineDubSegment>> BuildTimelineDubSegmentsAsync(
+        IReadOnlyList<TranslationSegmentArtifact> orderedSegments,
+        IReadOnlyDictionary<string, string> segmentAudioPaths,
+        CancellationToken cancellationToken)
+    {
+        var timelineSegments = new List<TimelineDubSegment>(orderedSegments.Count);
+        var stretchDir = Path.Combine(GetSessionDirectory(), "tts", "segments", "_timeline");
+        Directory.CreateDirectory(stretchDir);
+
+        foreach (var segment in orderedSegments)
+        {
+            if (string.IsNullOrWhiteSpace(segment.Id))
+                continue;
+            if (!segmentAudioPaths.TryGetValue(segment.Id, out var sourcePath) || !File.Exists(sourcePath))
+                continue;
+
+            var segmentDuration = Math.Max(0.05, segment.End - segment.Start);
+            var timingMode = ResolveRenderTimingMode(segment.Id);
+            var effectivePath = sourcePath;
+
+            if (timingMode == SegmentTimingMode.Stretch && _audioProcessingService is not null)
+            {
+                var stretchedPath = Path.Combine(stretchDir, $"{segment.Id}.stretch.mp3");
+                var stretched = await _audioProcessingService.TimeStretchAsync(
+                    sourcePath,
+                    stretchedPath,
+                    segmentDuration,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (stretched && File.Exists(stretchedPath))
+                    effectivePath = stretchedPath;
+            }
+
+            timelineSegments.Add(new TimelineDubSegment(
+                segment.Id,
+                effectivePath,
+                Math.Max(0, segment.Start),
+                segmentDuration,
+                TrimToSegmentWindow: true));
+        }
+
+        if (timelineSegments.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No eligible segment audio files were produced for timeline composition.");
+        }
+
+        return timelineSegments;
+    }
+
+    private SegmentTimingMode ResolveRenderTimingMode(string segmentId)
+    {
+        if (CurrentSession.SegmentTimingModeOverrides is not null
+            && CurrentSession.SegmentTimingModeOverrides.TryGetValue(segmentId, out var overrideMode))
+        {
+            if (overrideMode == SegmentTimingMode.Pause)
+            {
+                _log.Debug(
+                    $"Ignoring preview-only Pause timing override for render on segment '{segmentId}'; using session default timing mode.");
+                return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
+            }
+
+            return DubTimingDefaults.NormalizeRenderTimingMode(overrideMode);
+        }
+
+        return DubTimingDefaults.NormalizeRenderTimingMode(CurrentSettings.DubTimingMode);
     }
 
     /// <summary>
@@ -965,7 +1108,9 @@ public sealed partial class SessionWorkflowCoordinator
                     break;
                 case PipelineAdvanceAction.Diarize:
                     await _diarizationStageOrchestrator.ExecuteAsync(
-                        GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress),
+                        GetStageContext(remainingStages, SessionWorkflowStage.Diarized, stageProgress) is { } stageContext
+                            ? stageContext.ToShared()
+                            : null,
                         cancellationToken);
                     if (CurrentSession.Stage <= stageBeforeAction)
                         throw new InvalidOperationException($"Pipeline stalled: stage did not advance after {action} (still at {CurrentSession.Stage}).");
