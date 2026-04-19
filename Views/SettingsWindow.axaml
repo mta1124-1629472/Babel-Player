@@ -118,6 +118,11 @@
                         <Border Classes="settings-card">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="{local:Localize Settings_Group_Layout}" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <CheckBox IsChecked="{Binding ShowPipelinePane, Mode=TwoWay}"
+                                          Content="{local:Localize Settings_Check_ShowPipelinePane}"/>
+                                <CheckBox IsChecked="{Binding ShowSegmentsPane, Mode=TwoWay}"
+                                          Content="{local:Localize Settings_Check_ShowSegmentsPane}"/>
+                                <TextBlock Text="{local:Localize Settings_Hint_PaneVisibility}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
                                 <CheckBox IsChecked="{Binding SwapPaneSides, Mode=TwoWay}"
                                           Content="{local:Localize Settings_Check_SwapPaneSides}"/>
                                 <TextBlock Text="{local:Localize Settings_Hint_SwapPaneSides}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>

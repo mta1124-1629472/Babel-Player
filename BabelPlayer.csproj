@@ -102,14 +102,6 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-<ItemGroup Condition="Exists('tools\$(BabelWinNativeSubdir)\ffmpeg.exe')">
-  <None Include="tools\$(BabelWinNativeSubdir)\ffmpeg.exe">
-    <Link>tools\$(BabelWinNativeSubdir)\ffmpeg.exe</Link>
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-  </None>
-</ItemGroup>
-
   <!-- Staged after optional FetchWinNativeDepsIfNeeded (Directory.Build.targets) so a single build picks up freshly downloaded files. Uses $(BabelWinNativeSubdir) (win-x64 vs win-arm64) from Directory.Build.targets. -->
   <Target Name="IncludeBabelWinNativeArtifacts" BeforeTargets="AssignTargetPaths" AfterTargets="FetchWinNativeDepsIfNeeded" Condition="'$(OS)' == 'Windows_NT'">
     <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\$(BabelWinNativeSubdir)\libmpv-2.dll')">
@@ -126,6 +118,31 @@
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       </None>
     </ItemGroup>
+    <MakeDir Directories="$(OutDir)tools\$(BabelWinNativeSubdir)"
+             Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')
+                        or Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe"
+          DestinationFiles="$(OutDir)tools\$(BabelWinNativeSubdir)\ffmpeg.exe"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe"
+          DestinationFiles="$(OutDir)tools\$(BabelWinNativeSubdir)\ffprobe.exe"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
+  </Target>
+
+  <Target Name="IncludeBabelWinNativeArtifactsInPublish" AfterTargets="CopyFilesToPublishDirectory" Condition="'$(OS)' == 'Windows_NT' and '$(PublishDir)' != ''">
+    <MakeDir Directories="$(PublishDir)tools\$(BabelWinNativeSubdir)"
+             Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')
+                        or Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe"
+          DestinationFiles="$(PublishDir)tools\$(BabelWinNativeSubdir)\ffmpeg.exe"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe"
+          DestinationFiles="$(PublishDir)tools\$(BabelWinNativeSubdir)\ffprobe.exe"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
   </Target>
 
 <ItemGroup>

@@ -104,6 +104,21 @@ public sealed class MainWindowBindingsTests
     }
 
     [Fact]
+    public void MainWindow_PlayerEmptyState_UsesMediaLoadedClassToggle_AndOpenMediaAction()
+    {
+        var axamlPath = FindRepoFile("Views", "MainWindow.axaml");
+        var axaml = File.ReadAllText(axamlPath);
+
+        var emptyStateTag = FindTagByName(axaml, "VideoEmptyState");
+        Assert.Equal("{Binding Playback.Preview.IsSourceMediaLoaded}", GetAttributeValue(emptyStateTag, "Classes.media-loaded"));
+
+        var openButtonTag = FindTagByName(axaml, "VideoEmptyStateOpenButton");
+        Assert.Equal("OnOpenMediaClick", GetAttributeValue(openButtonTag, "Click"));
+        Assert.Equal("{local:Localize Automation_OpenMedia}", GetAttributeValue(openButtonTag, "Content"));
+        Assert.Equal("{local:Localize Tooltip_OpenMedia}", GetAttributeValue(openButtonTag, "ToolTip.Tip"));
+    }
+
+    [Fact]
     public void MainWindow_PaneLayout_UsesPhysicalSideSplitters_AndSettingsShowSeparateHotkeys()
     {
         var axamlPath = FindRepoFile("Views", "MainWindow.axaml");

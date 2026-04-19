@@ -495,6 +495,15 @@
   <data name="Settings_Group_Layout" xml:space="preserve">
     <value>Layout</value>
   </data>
+  <data name="Settings_Check_ShowPipelinePane" xml:space="preserve">
+    <value>Show pipeline pane</value>
+  </data>
+  <data name="Settings_Check_ShowSegmentsPane" xml:space="preserve">
+    <value>Show segments pane</value>
+  </data>
+  <data name="Settings_Hint_PaneVisibility" xml:space="preserve">
+    <value>Use these toggles to restore a pane if it has been hidden from the main window.</value>
+  </data>
   <data name="Settings_Check_SwapPaneSides" xml:space="preserve">
     <value>Swap pane sides</value>
   </data>

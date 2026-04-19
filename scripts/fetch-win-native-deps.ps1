@@ -25,6 +25,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+if ($IncludeFfmpeg -and [string]::IsNullOrWhiteSpace($FfmpegVersion)) {
+    # Keep local build/runtime bootstrap aligned with the currently validated x64
+    # codexffmpeg release when CI does not override FFMPEG_VERSION explicitly.
+    $FfmpegVersion = "2026-04-09-git-d3d0b7a5ee"
+}
+
 function Invoke-FileDownload {
     param(
         [Parameter(Mandatory = $true)]
@@ -161,9 +167,6 @@ try {
             $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-lgpl.zip"
             Write-Host "Downloading FFmpeg (winarm64 LGPL) from $ffmpegUrl"
         } else {
-            if ([string]::IsNullOrWhiteSpace($FfmpegVersion)) {
-                throw "IncludeFfmpeg was set but FfmpegVersion / env:FFMPEG_VERSION is empty."
-            }
             $ffmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/$FfmpegVersion/ffmpeg-$FfmpegVersion-essentials_build.zip"
             Write-Host "Downloading FFmpeg $FfmpegVersion from $ffmpegUrl"
         }

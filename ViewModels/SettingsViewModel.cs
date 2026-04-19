@@ -95,6 +95,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             ?? AppLanguageOptions[0];
         MaxRecentSessions      = current.MaxRecentSessions;
         AutoSaveEnabled        = current.AutoSaveEnabled;
+        ShowPipelinePane       = current.IsPipelinePaneVisible;
+        ShowSegmentsPane       = current.IsSegmentsPaneVisible;
         SwapPaneSides          = current.SwapPaneSides;
         BilingualSubtitlesEnabled = current.BilingualSubtitlesEnabled;
         PreferredLocalGpuBackend = current.PreferredLocalGpuBackend;
@@ -447,6 +449,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private bool _autoSaveEnabled;
 
     [ObservableProperty]
+    private bool _showPipelinePane;
+
+    [ObservableProperty]
+    private bool _showSegmentsPane;
+
+    [ObservableProperty]
     private bool _swapPaneSides;
 
     /// <summary>When true, exported/embedded subtitles include both source and translated lines (see Settings ▸ Video).</summary>
@@ -767,6 +775,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _languageChangeCommitted = true;
         settings.MaxRecentSessions  = MaxRecentSessions;
         settings.AutoSaveEnabled    = AutoSaveEnabled;
+        settings.IsPipelinePaneVisible = ShowPipelinePane;
+        settings.IsSegmentsPaneVisible = ShowSegmentsPane;
         settings.SwapPaneSides     = SwapPaneSides;
         settings.BilingualSubtitlesEnabled = BilingualSubtitlesEnabled;
         settings.PreferredLocalGpuBackend = PreferredLocalGpuBackend;
