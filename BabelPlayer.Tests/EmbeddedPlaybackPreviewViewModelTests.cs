@@ -120,9 +120,13 @@ public sealed class EmbeddedPlaybackPreviewViewModelTests : IDisposable
         {
             Directory.Delete(_dir, recursive: true);
         }
-        catch
+        catch (IOException ex)
         {
-            // Best-effort cleanup.
+            throw new IOException($"Failed to clean preview VM test directory '{_dir}'.", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new UnauthorizedAccessException($"Failed to clean preview VM test directory '{_dir}'.", ex);
         }
     }
 

@@ -170,4 +170,39 @@ public sealed class SettingsServiceTests : IDisposable
         Assert.Equal(418, loaded.SegmentsPaneWidth, precision: 3);
         Assert.True(loaded.SwapPaneSides);
     }
+
+    [Fact]
+    public void LoadOrDefault_InvalidPaneWidths_FallBackToDefaults()
+    {
+        File.WriteAllText(
+            _settingsPath,
+            """
+            {
+              "PipelinePaneWidth": -1,
+              "SegmentsPaneWidth": "NaN"
+            }
+            """);
+
+        var service = new SettingsService(_settingsPath, _log);
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(AppSettings.PipelinePaneDefaultWidth, loaded.PipelinePaneWidth, precision: 3);
+        Assert.Equal(AppSettings.SegmentsPaneDefaultWidth, loaded.SegmentsPaneWidth, precision: 3);
+    }
+
+    [Fact]
+    public void Save_InvalidPaneWidths_WritesDefaults()
+    {
+        var service = new SettingsService(_settingsPath, _log);
+        service.Save(new AppSettings
+        {
+            PipelinePaneWidth = double.PositiveInfinity,
+            SegmentsPaneWidth = 0
+        });
+
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(AppSettings.PipelinePaneDefaultWidth, loaded.PipelinePaneWidth, precision: 3);
+        Assert.Equal(AppSettings.SegmentsPaneDefaultWidth, loaded.SegmentsPaneWidth, precision: 3);
+    }
 }

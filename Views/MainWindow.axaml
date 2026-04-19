@@ -1371,7 +1371,7 @@
                                 <Border Background="{DynamicResource ControlBackgroundBrush}" CornerRadius="4" Padding="8,2"
                                         VerticalAlignment="Center">
                                     <TextBlock FontSize="11" Foreground="#8888A0" VerticalAlignment="Center"
-                                               Text="{Binding Playback.Preview.Segments.Count, StringFormat='{}{0} items'}" />
+                                               Text="{Binding Playback.Preview.SegmentCountLabel}" />
                                 </Border>
                             </StackPanel>
 

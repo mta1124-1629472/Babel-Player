@@ -38,7 +38,7 @@ internal static class MainWindowShortcutRouter
         if (modifiers != KeyModifiers.None)
             return false;
 
-        if (key == Key.F11)
+        if (key == MainWindowShortcutDefaults.ToggleFullscreenKey)
         {
             action = MainWindowShortcutAction.ToggleFullscreen;
             return true;
@@ -49,11 +49,11 @@ internal static class MainWindowShortcutRouter
 
         action = key switch
         {
-            Key.Space => MainWindowShortcutAction.PlayPause,
-            Key.C => MainWindowShortcutAction.ToggleSubtitles,
-            Key.A => MainWindowShortcutAction.ToggleLeftPane,
-            Key.S => MainWindowShortcutAction.ToggleRightPane,
-            Key.D => MainWindowShortcutAction.ToggleDubMode,
+            MainWindowShortcutDefaults.PlayPauseKey => MainWindowShortcutAction.PlayPause,
+            MainWindowShortcutDefaults.ToggleSubtitlesKey => MainWindowShortcutAction.ToggleSubtitles,
+            MainWindowShortcutDefaults.ToggleLeftPaneKey => MainWindowShortcutAction.ToggleLeftPane,
+            MainWindowShortcutDefaults.ToggleRightPaneKey => MainWindowShortcutAction.ToggleRightPane,
+            MainWindowShortcutDefaults.ToggleDubModeKey => MainWindowShortcutAction.ToggleDubMode,
             _ => MainWindowShortcutAction.None,
         };
 

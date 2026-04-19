@@ -37,12 +37,14 @@ public partial class MainWindow : Window
     private EventHandler<SizeChangedEventArgs>? _wideVideoChromeLayoutSizeChangedHandler;
     private bool _playerChromeWidthHostSizeHooked;
     private EventHandler<SizeChangedEventArgs>? _paneLayoutHostSizeChangedHandler;
+    private double _wideVideoChromeRequiredWidth;
     private Screens? _subscribedScreens;
     private long _lastControlsActivityTickMs;
     private bool _isApplyingWindowStateFromViewModel;
     private bool _isApplyingFullscreenFromWindowState;
     private SpeakerReferenceWizardWindow? _speakerWizardWindow;
     private Control? _activePaneSplitter;
+    private Control? _paneLayoutHostForDrag;
     private bool _activePaneSplitterIsLeft;
     private double _paneSplitterStartWidth;
     private double _paneSplitterDragStartX;
@@ -238,6 +240,7 @@ public partial class MainWindow : Window
         wideVideoChromeLayout.SizeChanged -= _wideVideoChromeLayoutSizeChangedHandler;
         wideVideoChromeLayout.SizeChanged += _wideVideoChromeLayoutSizeChangedHandler;
 
+        CacheWideVideoChromeRequiredWidth(forceMeasure: true);
         UpdateVideoChromeCompactState();
     }
 
@@ -246,8 +249,11 @@ public partial class MainWindow : Window
         UpdateVideoChromeCompactState();
     }
 
-    private void OnWideVideoChromeLayoutSizeChanged(object? sender, SizeChangedEventArgs e) =>
+    private void OnWideVideoChromeLayoutSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        CacheWideVideoChromeRequiredWidth();
         UpdateVideoChromeCompactState();
+    }
 
     private void UpdateVideoChromeCompactState()
     {
@@ -263,8 +269,7 @@ public partial class MainWindow : Window
         if (availableWidth <= 0)
             return;
 
-        wideVideoChromeLayout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var requiredWidth = Math.Max(wideVideoChromeLayout.DesiredSize.Width, wideVideoChromeLayout.Bounds.Width);
+        var requiredWidth = CacheWideVideoChromeRequiredWidth();
         if (requiredWidth <= 0)
             return;
 
@@ -274,6 +279,31 @@ public partial class MainWindow : Window
             : availableWidth < requiredWidth;
 
         vm.Playback.Preview.IsCompactVideoChrome = shouldCompact;
+    }
+
+    private double CacheWideVideoChromeRequiredWidth(bool forceMeasure = false)
+    {
+        var wideVideoChromeLayout = this.FindControl<Control>("WideVideoChromeLayoutRoot");
+        if (wideVideoChromeLayout is null)
+            return 0;
+
+        if (forceMeasure || _wideVideoChromeRequiredWidth <= 0)
+        {
+            wideVideoChromeLayout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _wideVideoChromeRequiredWidth = Math.Max(
+                wideVideoChromeLayout.DesiredSize.Width,
+                wideVideoChromeLayout.Bounds.Width);
+            return _wideVideoChromeRequiredWidth;
+        }
+
+        // Keep the cached width current when the layout naturally grows, but avoid
+        // shrinking it on constrained drag frames where Bounds width reflects the
+        // current squeeze instead of the wide layout's true fit requirement.
+        var observedWidth = Math.Max(wideVideoChromeLayout.DesiredSize.Width, wideVideoChromeLayout.Bounds.Width);
+        if (observedWidth > _wideVideoChromeRequiredWidth)
+            _wideVideoChromeRequiredWidth = observedWidth;
+
+        return _wideVideoChromeRequiredWidth;
     }
 
     private void WirePaneLayoutHost()
@@ -289,10 +319,8 @@ public partial class MainWindow : Window
 
     private void OnPaneLayoutHostSizeChanged(object? sender, SizeChangedEventArgs e)
     {
-        if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) <= double.Epsilon)
-            return;
-
-        UpdateVideoChromeCompactState();
+        // Drag clamping uses the live host width. No-op here beyond keeping the
+        // reference available for future updates without relying on a magic width.
     }
 
     private void OnVideoAreaPointerMoved(object? sender, PointerEventArgs e)
@@ -433,6 +461,7 @@ public partial class MainWindow : Window
         _paneSplitterStartWidth = _activePaneSplitterIsLeft
             ? vm.Playback.Preview.LeftPaneWidth
             : vm.Playback.Preview.RightPaneWidth;
+        _paneLayoutHostForDrag = this.FindControl<Control>("PaneLayoutHost");
         e.Pointer.Capture(splitter);
         e.Handled = true;
     }
@@ -456,7 +485,6 @@ public partial class MainWindow : Window
         else
             vm.Playback.Preview.ResizeRightPane(desiredWidth, hostWidth);
 
-        UpdateVideoChromeCompactState();
         e.Handled = true;
     }
 
@@ -484,13 +512,13 @@ public partial class MainWindow : Window
 
     private double GetPaneLayoutHostWidth()
     {
-        var paneLayoutHost = this.FindControl<Control>("PaneLayoutHost");
-        return paneLayoutHost?.Bounds.Width ?? 0;
+        return _paneLayoutHostForDrag?.Bounds.Width ?? 0;
     }
 
     private void ClearActivePaneSplitter()
     {
         _activePaneSplitter = null;
+        _paneLayoutHostForDrag = null;
         _paneSplitterStartWidth = 0;
         _paneSplitterDragStartX = 0;
     }

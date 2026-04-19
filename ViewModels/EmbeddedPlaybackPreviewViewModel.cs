@@ -194,6 +194,12 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     public string RightPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Segments") : GetLocalized("Section_Pipeline");
     public string LeftPaneTooltip => BuildPaneTooltip(isLeftSide: true, LeftPaneRole, hotkey: "A");
     public string RightPaneTooltip => BuildPaneTooltip(isLeftSide: false, RightPaneRole, hotkey: "S");
+    public string SegmentCountLabel => Segments.Count == 1
+        ? GetLocalized("Label_SegmentCountSingle")
+        : string.Format(
+            LocalizationService.Instance.CurrentCulture,
+            GetLocalized("Label_SegmentCountFormat"),
+            Segments.Count);
     [ObservableProperty]
     private bool _isCompactVideoChrome;
 
@@ -280,7 +286,6 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     }
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
-    public string SegmentCountLabel => FormatSegmentCount(Segments.Count);
 
     public async Task HandleCurrentSessionChangedAsync()
     {
@@ -1066,15 +1071,6 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         var segment = _sortedSegments[candidate];
         return positionSeconds < segment.EndSeconds ? segment : null;
-    }
-
-    private static string FormatSegmentCount(int count)
-    {
-        var culture = LocalizationService.Instance.CurrentCulture;
-        var key = count == 1 ? "Label_SegmentCount_One" : "Label_SegmentCount_Many";
-        var format = Strings.ResourceManager.GetString(key, culture)
-            ?? (count == 1 ? "{0} segment" : "{0} segments");
-        return string.Format(culture, format, count);
     }
 
     private WorkflowSegmentState? FindPreviousSegmentEndingBefore(double positionSeconds)

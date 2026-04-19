@@ -179,8 +179,8 @@ public sealed class SettingsService
             settings.VocalSeparationEnabled = VocalSeparationEnabled ?? settings.VocalSeparationEnabled;
             settings.IsPipelinePaneVisible = IsPipelinePaneVisible ?? settings.IsPipelinePaneVisible;
             settings.IsSegmentsPaneVisible = IsSegmentsPaneVisible ?? settings.IsSegmentsPaneVisible;
-            settings.PipelinePaneWidth = PipelinePaneWidth ?? settings.PipelinePaneWidth;
-            settings.SegmentsPaneWidth = SegmentsPaneWidth ?? settings.SegmentsPaneWidth;
+            settings.PipelinePaneWidth = NormalizePaneWidth(PipelinePaneWidth, settings.PipelinePaneWidth);
+            settings.SegmentsPaneWidth = NormalizePaneWidth(SegmentsPaneWidth, settings.SegmentsPaneWidth);
             settings.SwapPaneSides = SwapPaneSides ?? settings.SwapPaneSides;
             settings.ShownManagedBackendWarmupNotice =
                 ShownManagedBackendWarmupNotice ?? settings.ShownManagedBackendWarmupNotice;
@@ -269,8 +269,8 @@ public sealed class SettingsService
             VocalSeparationEnabled = settings.VocalSeparationEnabled,
             IsPipelinePaneVisible = settings.IsPipelinePaneVisible,
             IsSegmentsPaneVisible = settings.IsSegmentsPaneVisible,
-            PipelinePaneWidth = settings.PipelinePaneWidth,
-            SegmentsPaneWidth = settings.SegmentsPaneWidth,
+            PipelinePaneWidth = NormalizePaneWidth(settings.PipelinePaneWidth, AppSettings.PipelinePaneDefaultWidth),
+            SegmentsPaneWidth = NormalizePaneWidth(settings.SegmentsPaneWidth, AppSettings.SegmentsPaneDefaultWidth),
             SwapPaneSides = settings.SwapPaneSides,
             ShownManagedBackendWarmupNotice = settings.ShownManagedBackendWarmupNotice,
             TranslationProvider = settings.TranslationProvider,
@@ -331,6 +331,14 @@ public sealed class SettingsService
             }
 
             return GpuHostBackend.ManagedVenv;
+        }
+
+        private static double NormalizePaneWidth(double? value, double fallback)
+        {
+            if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value) || value.Value <= 0)
+                return fallback;
+
+            return value.Value;
         }
     }
 }

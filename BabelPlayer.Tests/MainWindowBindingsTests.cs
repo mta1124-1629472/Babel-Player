@@ -96,8 +96,11 @@ public sealed class MainWindowBindingsTests
         Assert.Contains("FindControl<Control>(\"PlayerChromeWidthHost\")", codeBehind, StringComparison.Ordinal);
         Assert.Contains("FindControl<Control>(\"WideVideoChromeLayoutRoot\")", codeBehind, StringComparison.Ordinal);
         Assert.Contains("OnPlayerChromeWidthHostSizeChanged", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("CacheWideVideoChromeRequiredWidth", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("FindControl<Control>(\"VideoSegmentsChromeHost\")", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("const double thresholdPx = 540", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateCompactVideoChromeLayout()", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("wideVideoChromeLayout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));\r\n        var requiredWidth = Math.Max(wideVideoChromeLayout.DesiredSize.Width, wideVideoChromeLayout.Bounds.Width);", codeBehind, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -119,6 +122,8 @@ public sealed class MainWindowBindingsTests
         Assert.Contains("Settings_Label_ToggleLeftPaneHotkey", settingsAxaml, StringComparison.Ordinal);
         Assert.Contains("Settings_Label_ToggleRightPaneHotkey", settingsAxaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Settings_Label_ToggleSegmentsHotkey", settingsAxaml, StringComparison.Ordinal);
+        Assert.Contains("Playback.Preview.SegmentCountLabel", axaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("StringFormat='{}{0} items'", axaml, StringComparison.Ordinal);
     }
 
     private static string FindRepoFile(params string[] relativePathParts)

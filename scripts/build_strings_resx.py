@@ -112,6 +112,8 @@ STRINGS: Dict[str, str] = {
     "Label_SegmentCount_Many": "{0} segments",
     "Tooltip_ExportSegments": "Export captions (.srt), dubbed audio only (.mp3), or video with dub + soft subs (.mp4) — audio matches current timings and mix.",
     "Button_Export": "Export",
+    "Label_SegmentCountSingle": "1 segment",
+    "Label_SegmentCountFormat": "{0} segments",
     "Menu_Export_Srt": "to .srt",
     "Menu_Export_Mp3": "to .mp3",
     "Menu_Export_Mp4": "to .mp4",

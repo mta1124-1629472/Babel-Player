@@ -17,6 +17,7 @@ using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using Babel.Player.Services.Transcription;
+using Babel.Player.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SettingsService = Babel.Player.Services.Settings.SettingsService;
@@ -128,11 +129,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         LocalizationService.Instance.CultureChanged += OnCultureChanged;
 
         // Hotkeys (default values)
-        PlayPauseHotkey         = "Space";
-        ToggleLeftPaneHotkey    = "A";
-        ToggleRightPaneHotkey   = "S";
-        ToggleDubModeHotkey     = "D";
-        ToggleFullscreenHotkey  = "F11";
+        PlayPauseHotkey         = MainWindowShortcutDefaults.PlayPauseLabel;
+        ToggleLeftPaneHotkey    = MainWindowShortcutDefaults.ToggleLeftPaneLabel;
+        ToggleRightPaneHotkey   = MainWindowShortcutDefaults.ToggleRightPaneLabel;
+        ToggleDubModeHotkey     = MainWindowShortcutDefaults.ToggleDubModeLabel;
+        ToggleFullscreenHotkey  = MainWindowShortcutDefaults.ToggleFullscreenLabel;
 
         _healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _healthTimer.Tick += (_, _) =>

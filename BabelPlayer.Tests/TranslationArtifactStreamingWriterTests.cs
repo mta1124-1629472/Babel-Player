@@ -56,7 +56,7 @@ public sealed class TranslationArtifactStreamingWriterTests : IDisposable
         var artifact = await ArtifactJson.LoadTranslationAsync(finalPath, ct);
         var seg0 = artifact.Segments!.Single(s => s.Id == "segment_0.0");
         var seg1 = artifact.Segments!.Single(s => s.Id == "segment_1.0");
-        Assert.True(string.IsNullOrEmpty(seg0.TranslatedText));
+        Assert.Equal(string.Empty, seg0.TranslatedText);
         Assert.Equal("World", seg1.TranslatedText);
     }
 
