@@ -42,6 +42,7 @@ Do not add these to compiled `BabelPlayer.Tests`:
 - real network tests
 - manual, benchmark, or performance tests
 - broad workflow orchestration suites
+- broad `SessionWorkflowCoordinator*`, `*Orchestrator*`, `EmbeddedPlaybackPreview*`, or similar UI/workflow harness suites, even when they use fakes
 - tests that require `RequiresPython`, `RequiresFfmpeg`, or `RequiresExternalTranslation`
 - tests that need `Thread.Sleep`
 - tests that need `Task.Delay` above 100 ms
@@ -58,6 +59,8 @@ Do not keep a flaky or slow test in the maintained suite just to preserve nomina
 `Smoke` is the only PR-gated test category.
 
 Use `[Trait("Category", "Smoke")]` only for a very small set of tests that verify the seams most likely to regress during normal work. Smoke tests must remain fast, deterministic, and free of runtime-heavy dependencies.
+
+Do not use `Smoke` as a loophole for broad coordinator, orchestration, preview-player, or end-to-end workflow coverage. If a test needs temp directories, multi-object harnesses, playback coordination, or more than a narrow seam, it does not belong in the smoke subset.
 
 Supported smoke command:
 
@@ -101,3 +104,4 @@ Before writing or modifying tests:
 2. decide whether the behavior belongs in the maintained suite or quarantine
 3. prefer a smaller seam test over an end-to-end orchestration test
 4. prefer deleting or quarantining a flaky test over “fixing” it with longer waits
+5. if the test exercises preview playback, main-window workflow, coordinator resets, or orchestrator sequencing, default to quarantine unless the test is trivially small and deterministic
