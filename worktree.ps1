@@ -66,16 +66,21 @@ function Invoke-Git {
     $ErrorActionPreference = "Continue"
     try {
         $output = & git -C $WorkingDirectory @Args 2>&1
-        $gitSucceeded = $?
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 
-    $output = @($output | ForEach-Object { $_.ToString() })
+    if ($null -eq $output) {
+        $output = @()
+    } else {
+        $output = @($output | ForEach-Object {
+            if ($null -eq $_) { "" } else { $_.ToString() }
+        })
+    }
     $exitCode = $LASTEXITCODE
 
-    if (-not $AllowFailure -and (-not $gitSucceeded -or $exitCode -ne 0)) {
+    if (-not $AllowFailure -and $exitCode -ne 0) {
         throw "git $($Args -join ' ') failed:`n$output"
     }
 
