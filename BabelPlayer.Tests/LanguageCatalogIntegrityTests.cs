@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Babel.Player.Models;
@@ -130,5 +131,83 @@ public sealed class LanguageCatalogIntegrityTests
         Assert.Equal("fr", LocalizationService.ResolveAppLanguage("fr"));
         Assert.Equal("ja", LocalizationService.ResolveAppLanguage("ja"));
         Assert.Equal("zh", LocalizationService.ResolveAppLanguage("zh-CN"));
+    }
+
+    [Fact]
+    public void PipelineTargetLanguageOptions_Source_KeepsEnglishSortCultureBeforeAllAndStableComparer()
+    {
+        var source = File.ReadAllText(FindRepoFile("Models", "PipelineTargetLanguages.cs"));
+
+        AssertDeclarationOrder(
+            source,
+            "private static readonly CultureInfo EnglishSortCulture",
+            "public static IReadOnlyList<PipelineTargetLanguageOption> All");
+
+        AssertComparerGuardOrder(
+            source,
+            "if (string.Equals(a.Code, b.Code, StringComparison.OrdinalIgnoreCase))",
+            "if (string.Equals(a.Code, \"en\", StringComparison.OrdinalIgnoreCase))");
+
+        Assert.Contains(
+            "return string.Compare(a.Code, b.Code, StringComparison.OrdinalIgnoreCase);",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SpokenLanguageOptions_Source_KeepsEnglishSortCultureBeforeAll()
+    {
+        var source = File.ReadAllText(FindRepoFile("Models", "TranscriptionSpokenLanguageOptions.cs"));
+
+        AssertDeclarationOrder(
+            source,
+            "private static readonly CultureInfo EnglishSortCulture",
+            "public static IReadOnlyList<SpokenLanguageOption> All");
+    }
+
+    [Fact]
+    public void BuildStringsResx_Source_KeepsAutoDetectKeyInCanonicalDictionary()
+    {
+        var source = File.ReadAllText(FindRepoFile("scripts", "build_strings_resx.py"));
+
+        Assert.Contains(
+            "\"SpokenLanguage_AutoDetect\": \"Auto-detect\"",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    private static void AssertDeclarationOrder(string source, string earlier, string later)
+    {
+        var earlierIndex = source.IndexOf(earlier, StringComparison.Ordinal);
+        var laterIndex = source.IndexOf(later, StringComparison.Ordinal);
+
+        Assert.True(earlierIndex >= 0, $"Could not find '{earlier}'.");
+        Assert.True(laterIndex >= 0, $"Could not find '{later}'.");
+        Assert.True(earlierIndex < laterIndex, $"Expected '{earlier}' before '{later}'.");
+    }
+
+    private static void AssertComparerGuardOrder(string source, string earlier, string later)
+    {
+        var earlierIndex = source.IndexOf(earlier, StringComparison.Ordinal);
+        var laterIndex = source.IndexOf(later, StringComparison.Ordinal);
+
+        Assert.True(earlierIndex >= 0, $"Could not find comparer guard '{earlier}'.");
+        Assert.True(laterIndex >= 0, $"Could not find comparer branch '{later}'.");
+        Assert.True(earlierIndex < laterIndex, $"Expected comparer guard '{earlier}' before '{later}'.");
+    }
+
+    private static string FindRepoFile(string directory, string fileName)
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            var candidate = Path.Combine(current.FullName, directory, fileName);
+            if (File.Exists(candidate))
+                return candidate;
+
+            current = current.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate '{Path.Combine(directory, fileName)}' from '{AppContext.BaseDirectory}'.");
     }
 }
