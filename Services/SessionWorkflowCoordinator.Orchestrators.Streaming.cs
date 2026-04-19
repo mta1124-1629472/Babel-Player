@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Transcription;
 
 namespace Babel.Player.Services;
 
@@ -171,21 +172,22 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             TranscriptionResult? transcriptionResult = null;
             try
             {
+                var streamRequest = CpuTranscriptionRuntimePolicy.BuildTranscriptionRequest(
+                    _c.CurrentSettings,
+                    _c.HardwareSnapshot,
+                    transcriptionSourcePath,
+                    transcriptPath,
+                    _c.CurrentSettings.TranscriptionModel,
+                    SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
+                    _c.Log);
                 transcriptionResult = await _c._inferenceEngine.TranscribeStreamingAsync(
                     streamingProvider,
-                    new TranscriptionRequest(
-                        transcriptionSourcePath,
-                        transcriptPath,
-                        _c.CurrentSettings.TranscriptionModel,
-                        SessionSnapshotSemantics.NormalizeTranscriptionLanguageHint(_c.CurrentSettings.TranscriptionLanguageHint),
-                        _c.CurrentSettings.TranscriptionCpuComputeType,
-                        _c.CurrentSettings.TranscriptionCpuThreads,
-                        _c.CurrentSettings.TranscriptionNumWorkers),
+                    streamRequest,
                     forwardingWriter,
                     pipelineToken).ConfigureAwait(false);
 
                 await transcriptArtifactWriter.CompleteAsync(transcriptionResult, transcriptPath, pipelineToken).ConfigureAwait(false);
-                _c.CommitTranscriptionSessionState(transcriptionResult, transcriptPath);
+                await _c.CommitTranscriptionSessionStateAsync(transcriptionResult, transcriptPath).ConfigureAwait(false);
                 ReportStage(
                     transcriptionStageContext,
                     $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}.",
@@ -194,7 +196,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 var translationResult = await translationTask.ConfigureAwait(false);
                 await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
-                _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+                await _c.CommitTranslationSessionStateAsync(
+                    translationResult,
+                    translationPath,
+                    translationResult.SourceLanguage,
+                    translationResult.TargetLanguage).ConfigureAwait(false);
                 ReportStage(
                     translationStageContext,
                     $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
@@ -203,8 +209,21 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await ttsStageTask.ConfigureAwait(false);
                 var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-                await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                var renderResult = await _c.StitchSegmentClipsAsync(
+                    segmentAudioPaths,
+                    translationWriter.OrderedSegments,
+                    ttsPath,
+                    ttsStageContext,
+                    pipelineToken).ConfigureAwait(false);
+                await _c.CommitTtsSessionStateAsync(
+                    voice,
+                    ttsPath,
+                    renderResult,
+                    segmentsDir,
+                    segmentAudioPaths,
+                    null,
+                    translationWriter.OrderedSegments,
+                    ttsStageContext).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -361,7 +380,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 await producerTask.ConfigureAwait(false);
                 var translationResult = await translationTask.ConfigureAwait(false);
                 await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
-                _c.CommitTranslationSessionState(translationResult, translationPath, translationResult.SourceLanguage, translationResult.TargetLanguage);
+                await _c.CommitTranslationSessionStateAsync(
+                    translationResult,
+                    translationPath,
+                    translationResult.SourceLanguage,
+                    translationResult.TargetLanguage).ConfigureAwait(false);
                 ReportStage(
                     translationStageContext,
                     $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
@@ -370,8 +393,21 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await ttsStageTask.ConfigureAwait(false);
                 var segmentAudioPaths = await ttsCollectorTask.ConfigureAwait(false);
-                await _c.StitchSegmentClipsAsync(segmentAudioPaths, translationWriter.OrderedSegments, ttsPath, ttsStageContext, pipelineToken).ConfigureAwait(false);
-                _c.CommitTtsSessionState(voice, ttsPath, segmentsDir, segmentAudioPaths, null, translationWriter.OrderedSegments.Count, ttsStageContext);
+                var renderResult = await _c.StitchSegmentClipsAsync(
+                    segmentAudioPaths,
+                    translationWriter.OrderedSegments,
+                    ttsPath,
+                    ttsStageContext,
+                    pipelineToken).ConfigureAwait(false);
+                await _c.CommitTtsSessionStateAsync(
+                    voice,
+                    ttsPath,
+                    renderResult,
+                    segmentsDir,
+                    segmentAudioPaths,
+                    null,
+                    translationWriter.OrderedSegments,
+                    ttsStageContext).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -428,13 +464,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     if (segmentIndex < 0)
                         throw new InvalidOperationException($"Pending segment '{item.SegmentId}' was not found in the streaming translation artifact.");
 
-                    var result = await _c._inferenceEngine.TranslateSingleSegmentAsync(
+                    var result = await _c._inferenceEngine.TranslateSingleSegmentTextAsync(
                         _c._translationService!,
-                        new SingleSegmentTranslationRequest(
+                        new SingleSegmentTranslationTextRequest(
                             item.Segment.Text ?? string.Empty,
                             item.SegmentId,
-                            artifactWriter.PartialPath,
-                            artifactWriter.PartialPath,
                             item.SourceLanguage,
                             targetLanguage,
                             _c.CurrentSettings.TranslationModel),
@@ -447,14 +481,9 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         throw new InvalidOperationException($"Translation failed: {errorMsg}");
                     }
 
-                    var translatedText = ResolveTranslatedText(
-                        result,
-                        segmentIndex,
-                        item.Segment.Text ?? string.Empty,
-                        item.SegmentId);
                     var translatedSegment = await artifactWriter.ApplyTranslatedTextAsync(
                         item.SegmentId,
-                        translatedText,
+                        result.TranslatedText,
                         result.SourceLanguage,
                         result.TargetLanguage,
                         cancellationToken).ConfigureAwait(false);
@@ -702,8 +731,10 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             var sessionDir = _c.GetSessionDirectory();
             var transcriptDir = Path.Combine(sessionDir, "transcripts");
             Directory.CreateDirectory(transcriptDir);
-            var fileName = Path.GetFileNameWithoutExtension(sourceAudioPath);
-            return Path.Combine(transcriptDir, $"{fileName}.json");
+            var transcriptStem = SessionWorkflowCoordinator.ResolveTranscriptArtifactStem(
+                _c.CurrentSession.IngestedMediaPath,
+                sourceAudioPath);
+            return Path.Combine(transcriptDir, $"{transcriptStem}.json");
         }
 
         /// <summary>

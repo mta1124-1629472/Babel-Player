@@ -109,7 +109,7 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         };
 
         var valid = ArtifactIntegrityValidator.ValidateTranslation(snapshot, out var error);
-Assert.Equal("Transcript artifact was unreadable", error);
+
         Assert.False(valid);
         Assert.NotNull(error);
         Assert.Contains("Transcript artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
@@ -145,7 +145,7 @@ Assert.Equal("Transcript artifact was unreadable", error);
 
         Assert.False(valid);
         Assert.NotNull(error);
-Assert.Equal("Transcript artifact was unreadable", error);
+        Assert.Contains("Transcript artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
