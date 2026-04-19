@@ -52,14 +52,23 @@ public sealed class PipelineTargetLanguageOption : INotifyPropertyChanged, IEqua
         // Stable order: English first, then alphabetical by English UI labels (current UI
         // culture would make order drift after a runtime language switch).
         items.Sort(static (a, b) =>
-            string.Equals(a.Code, "en", StringComparison.OrdinalIgnoreCase)
-                ? -1
-                : string.Equals(b.Code, "en", StringComparison.OrdinalIgnoreCase)
-                    ? 1
-                    : string.Compare(
-                        LanguageDisplayNames.ForIso639(a.Code, EnglishSortCulture),
-                        LanguageDisplayNames.ForIso639(b.Code, EnglishSortCulture),
-                        StringComparison.OrdinalIgnoreCase));
+        {
+            // First compare codes case-insensitively and return 0 if equal (preserves reflexivity)
+            if (string.Equals(a.Code, b.Code, StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            // Then handle special-casing of "en" (putting it first)
+            if (string.Equals(a.Code, "en", StringComparison.OrdinalIgnoreCase))
+                return -1;
+            if (string.Equals(b.Code, "en", StringComparison.OrdinalIgnoreCase))
+                return 1;
+
+            // Finally fall back to comparing by English display names
+            return string.Compare(
+                LanguageDisplayNames.ForIso639(a.Code, EnglishSortCulture),
+                LanguageDisplayNames.ForIso639(b.Code, EnglishSortCulture),
+                StringComparison.OrdinalIgnoreCase);
+        });
 
         return items;
     }
