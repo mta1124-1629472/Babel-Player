@@ -1,3 +1,5 @@
+#Requires -Version 7.0
+
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory = $true)]
@@ -62,8 +64,42 @@ function Invoke-Git {
         [switch]$AllowFailure
     )
 
-    $output = & git -C $WorkingDirectory @Args 2>&1
-    $exitCode = $LASTEXITCODE
+    $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $gitCommand) {
+        throw "git is not available on PATH. Please ensure Git is installed and added to your PATH environment variable."
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $invocationSucceeded = $false
+    $ErrorActionPreference = "Continue"
+    try {
+        # Get-Command validates the executable. $? reflects whether the call operator reported an error;
+        # $LASTEXITCODE is the process exit code. If the process never starts, $? can be $false while
+        # $LASTEXITCODE stays 0 (stale). If both succeed, trust $LASTEXITCODE (including non-zero).
+        # #Requires -Version 7.0 avoids Windows PowerShell 5.1 cases where stderr merged via 2>&1 clears
+        # $? even when git exits 0.
+        $output = & $gitCommand.Source -C $WorkingDirectory @Args 2>&1
+        $invocationSucceeded = $?
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($null -eq $output) {
+        $output = @()
+    } else {
+        $output = @($output | ForEach-Object {
+            if ($null -eq $_) { "" } else { $_.ToString() }
+        })
+    }
+
+    $exitCode = if ($invocationSucceeded) {
+        $LASTEXITCODE
+    } elseif ($LASTEXITCODE -ne 0) {
+        $LASTEXITCODE
+    } else {
+        1
+    }
 
     if (-not $AllowFailure -and $exitCode -ne 0) {
         throw "git $($Args -join ' ') failed:`n$output"
@@ -75,7 +111,7 @@ function Invoke-Git {
     }
 }
 
-function Ensure-Directory {
+function New-DirectoryIfNotExists {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -162,7 +198,7 @@ function Get-WorktreeRecords {
             continue
         }
 
-        if ($line -like "locked *") {
+        if ($line -eq "locked" -or $line -like "locked *") {
             $current["Locked"] = $true
             continue
         }
@@ -198,7 +234,7 @@ function Assert-RepositoryClean {
 
     $status = (Invoke-Git -Args @("status", "--porcelain") -WorkingDirectory $WorktreePath).Output
     if ($status.Count -gt 0) {
-        Fail "Worktree has uncommitted changes. Commit, stash, or pass -Force only for removal."
+        Fail "Worktree has uncommitted changes. Commit, stash, or discard them before running .\worktree.ps1 sync."
     }
 }
 
@@ -212,7 +248,7 @@ function Resolve-BranchName {
     Fail "Branch name is required for this command."
 }
 
-Ensure-Directory -Path $worktreesRoot
+New-DirectoryIfNotExists -Path $worktreesRoot
 
 switch ($Command) {
     "new" {
@@ -224,7 +260,7 @@ switch ($Command) {
         Invoke-Git -Args @("fetch", $Remote, "--prune") | Out-Null
 
         $parentDir = Split-Path $worktreePath -Parent
-        Ensure-Directory -Path $parentDir
+        New-DirectoryIfNotExists -Path $parentDir
 
         if (Test-Path -LiteralPath $worktreePath) {
             $existing = Get-WorktreeRecords | Where-Object { [System.IO.Path]::GetFullPath($_.Path) -eq $worktreePath } | Select-Object -First 1
