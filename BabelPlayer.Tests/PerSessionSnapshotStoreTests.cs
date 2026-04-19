@@ -31,6 +31,9 @@ public sealed class PerSessionSnapshotStoreTests : IDisposable
         catch { /* best-effort cleanup */ }
     }
 
+    private static string[] FindCorruptBackups(string sessionDir) =>
+        Directory.GetFiles(sessionDir, "snapshot.json.corrupt.*", SearchOption.TopDirectoryOnly);
+
     // ── Constructor ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -167,6 +170,8 @@ public sealed class PerSessionSnapshotStoreTests : IDisposable
 
         var result = _store.Load(id);
         Assert.Null(result);
+        Assert.False(File.Exists(Path.Combine(sessionDir, "snapshot.json")));
+        Assert.Single(FindCorruptBackups(sessionDir));
     }
 
     [Fact]
@@ -248,5 +253,7 @@ public sealed class PerSessionSnapshotStoreTests : IDisposable
         // Only the good snapshot is returned
         Assert.Single(all);
         Assert.Equal(good.SessionId, all[0].SessionId);
+        Assert.False(File.Exists(Path.Combine(corruptDir, "snapshot.json")));
+        Assert.Single(FindCorruptBackups(corruptDir));
     }
 }
