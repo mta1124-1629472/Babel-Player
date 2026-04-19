@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Babel.Player.Models;
 using Babel.Player.Models.LanguageSupport;
+using Babel.Player.Resources;
 using Babel.Player.Services;
 
 namespace BabelPlayer.Tests;
@@ -91,7 +92,10 @@ public sealed class LanguageCatalogIntegrityTests
                 Assert.Contains(code, hints);
         }
 
-        Assert.Equal("Auto-detect", SpokenLanguageOption.All[0].DisplayName);
+        var expectedAuto = Strings.ResourceManager.GetString(
+            "SpokenLanguage_AutoDetect",
+            LocalizationService.Instance.CurrentCulture);
+        Assert.Equal(expectedAuto, SpokenLanguageOption.All[0].DisplayName);
         Assert.Null(SpokenLanguageOption.All[0].Code);
     }
 
