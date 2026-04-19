@@ -69,11 +69,9 @@ function Invoke-Git {
 throw "git is not available on PATH. Please ensure Git is installed and added to your PATH environment variable."
     }
 
-    $previousErrorActionPreference = $ErrorActionPreference
-    $invocationSucceeded = $false
-    $ErrorActionPreference = "Continue"
-    try {
-        # Get-Command validates the executable. $? reflects whether the call operator reported an error;
+    $previousErif ($null -eq $gitCommand) {
+Write-Error "git is not available on PATH. Please ensure Git is installed and added to your PATH environment variable."; exit 1
+}ommand validates the executable. $? reflects whether the call operator reported an error;
         # $LASTEXITCODE is the process exit code. If the process never starts, $? can be $false while
         # $LASTEXITCODE stays 0 (stale). If both succeed, trust $LASTEXITCODE (including non-zero).
         # #Requires -Version 7.0 avoids Windows PowerShell 5.1 cases where stderr merged via 2>&1 clears
