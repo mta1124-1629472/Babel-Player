@@ -100,7 +100,8 @@ public sealed partial class SessionWorkflowCoordinator
         string? ttsLanguage,
         IProgress<double>? progress,
         PipelineStageContext? stageContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowPendingTranslationArtifact = false)
     {
         await EnsureTtsProviderReadyAsync(voice, progress, stageContext, cancellationToken).ConfigureAwait(false);
         var providerLease = AcquireTtsProviderLease(stagePlan.ProviderId);
@@ -129,7 +130,7 @@ public sealed partial class SessionWorkflowCoordinator
             voice,
             ttsLanguage,
             translationPath,
-            ArtifactIdentity.Capture(translationPath),
+            CaptureTtsTranslationIdentity(translationPath, allowPendingTranslationArtifact),
             ttsPath,
             segmentsDir,
             CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath,
@@ -141,6 +142,13 @@ public sealed partial class SessionWorkflowCoordinator
             speakerReferencePaths,
             CurrentSession.DefaultTtsVoiceFallback);
     }
+
+    internal static ArtifactIdentity CaptureTtsTranslationIdentity(
+        string translationPath,
+        bool allowPendingTranslationArtifact) =>
+        allowPendingTranslationArtifact
+            ? ArtifactIdentity.CapturePending(translationPath)
+            : ArtifactIdentity.Capture(translationPath);
 
     private bool TranslationInputsStillMatch(TranslationExecutionSnapshot snapshot)
     {

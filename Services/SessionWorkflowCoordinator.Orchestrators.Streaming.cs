@@ -137,7 +137,8 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     ttsLanguage,
                     progress,
                     ttsStageContext,
-                    cancellationToken)
+                    cancellationToken,
+                    allowPendingTranslationArtifact: true)
                 .ConfigureAwait(false);
             await using var ttsProviderLease = ttsSnapshot.ProviderLease;
             var ttsResultChannel = Channel.CreateBounded<TtsChannelItem>(new BoundedChannelOptions(Math.Max(4, ttsSnapshot.MaxConcurrency))
@@ -339,7 +340,8 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     ttsLanguage,
                     progress,
                     ttsStageContext,
-                    cancellationToken)
+                    cancellationToken,
+                    allowPendingTranslationArtifact: true)
                 .ConfigureAwait(false);
             await using var ttsProviderLease = ttsSnapshot.ProviderLease;
 

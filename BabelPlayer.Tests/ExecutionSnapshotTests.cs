@@ -55,6 +55,33 @@ public sealed class ExecutionSnapshotTests : IDisposable
         Assert.False(identity.Matches(otherTranscriptPath));
     }
 
+    [Fact]
+    public void CaptureTtsTranslationIdentity_ThrowsWhenTranslationIsMissingAndPendingIsNotAllowed()
+    {
+        var translationPath = Path.Combine(_dir, "missing_translation.json");
+
+        Assert.Throws<FileNotFoundException>(() =>
+            SessionWorkflowCoordinator.CaptureTtsTranslationIdentity(
+                translationPath,
+                allowPendingTranslationArtifact: false));
+    }
+
+    [Fact]
+    public void CaptureTtsTranslationIdentity_AllowsPendingTranslationArtifactForStreamingPipeline()
+    {
+        var translationPath = Path.Combine(_dir, "clip_en.json");
+
+        var identity = SessionWorkflowCoordinator.CaptureTtsTranslationIdentity(
+            translationPath,
+            allowPendingTranslationArtifact: true);
+
+        Assert.True(identity.IsPending);
+
+        File.WriteAllText(translationPath, "{}");
+
+        Assert.True(identity.Matches(translationPath));
+    }
+
     public void Dispose()
     {
         try
