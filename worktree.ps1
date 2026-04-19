@@ -70,6 +70,8 @@ function Invoke-Git {
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
+        # Resolve git via Get-Command above so a missing executable fails fast; rely on $LASTEXITCODE
+        # for success/failure (do not use $? here: stderr merged via 2>&1 can clear $? even on exit 0).
         $output = & $gitCommand.Source -C $WorkingDirectory @Args 2>&1
     }
     finally {
@@ -218,7 +220,7 @@ function Assert-RepositoryClean {
 
     $status = (Invoke-Git -Args @("status", "--porcelain") -WorkingDirectory $WorktreePath).Output
     if ($status.Count -gt 0) {
-        Fail "Worktree has uncommitted changes. Commit, stash, or pass -Force only for removal."
+        Fail "Worktree has uncommitted changes. Commit, stash, or discard them before running .\worktree.ps1 sync."
     }
 }
 
