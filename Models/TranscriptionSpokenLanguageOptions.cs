@@ -50,6 +50,7 @@ public sealed class SpokenLanguageOption : INotifyPropertyChanged, IEquatable<Sp
             .OrderBy(
                 h => LanguageDisplayNames.ForIso639(h.Code!, EnglishSortCulture),
                 StringComparer.OrdinalIgnoreCase)
+            .ThenBy(h => h.Code, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return new[] { AutoDetect }.Concat(hints).ToList();

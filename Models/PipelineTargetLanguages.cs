@@ -62,10 +62,15 @@ public sealed class PipelineTargetLanguageOption : INotifyPropertyChanged, IEqua
             if (string.Equals(b.Code, "en", StringComparison.OrdinalIgnoreCase))
                 return 1;
 
-            return string.Compare(
+            var byDisplay = string.Compare(
                 LanguageDisplayNames.ForIso639(a.Code, EnglishSortCulture),
                 LanguageDisplayNames.ForIso639(b.Code, EnglishSortCulture),
                 StringComparison.OrdinalIgnoreCase);
+
+            if (byDisplay != 0)
+                return byDisplay;
+
+            return string.Compare(a.Code, b.Code, StringComparison.OrdinalIgnoreCase);
         });
 
         return items;
