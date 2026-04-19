@@ -1,0 +1,169 @@
+---
+layout: null
+title: Babel Player
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Babel Player | Local-first AI video dubbing workstation</title>
+  <meta name="description" content="Babel Player is a local-first desktop workstation for AI-assisted video dubbing: transcribe, translate, assign voices, preview in context, refine, and export." />
+  <meta property="og:title" content="Babel Player" />
+  <meta property="og:description" content="A local-first desktop workstation for AI-assisted video dubbing." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://mta-babel.github.io/Babel-Player/" />
+  <meta name="theme-color" content="#111827" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="assets/css/site.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <nav class="nav-shell" aria-label="Primary navigation">
+      <a class="brand" href="#top" aria-label="Babel Player home">
+        <span class="brand-mark" aria-hidden="true">BP</span>
+        <span>Babel Player</span>
+      </a>
+      <div class="nav-links">
+        <a href="#workflow">Workflow</a>
+        <a href="#features">Features</a>
+        <a href="#status">Status</a>
+        <a href="#start">Get started</a>
+        <a class="nav-cta" href="https://github.com/mta-babel/Babel-Player">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Local-first AI video dubbing</p>
+          <h1>Turn video dialogue into editable dubbed speech without hiding the pipeline.</h1>
+          <p class="lede">
+            Babel Player is a desktop workstation for loading local media, generating timed transcripts,
+            translating dialogue, assigning voices, previewing dubbed speech in context, and refining the result before export.
+          </p>
+          <div class="hero-actions" aria-label="Primary actions">
+            <a class="button primary" href="https://github.com/mta-babel/Babel-Player/releases">Download / releases</a>
+            <a class="button secondary" href="https://github.com/mta-babel/Babel-Player">View source</a>
+          </div>
+          <p class="note">
+            Experimental, open-source, Windows-first. Local inference is a major path; optional provider support depends on configuration.
+          </p>
+        </div>
+
+        <div class="product-card" aria-label="Babel Player workflow preview">
+          <div class="window-bar">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="mock-player">
+            <div class="video-pane">
+              <div class="play-triangle" aria-hidden="true"></div>
+            </div>
+            <div class="timeline">
+              <div class="waveform" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+              <div class="segment active">
+                <strong>Speaker 1</strong>
+                <span>Original transcript → translated line → generated voice</span>
+              </div>
+              <div class="segment">
+                <strong>Speaker 2</strong>
+                <span>Regenerate only changed segments</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-strip" aria-label="Core principles">
+      <div><strong>Desktop-first</strong><span>No browser upload required for the core workflow.</span></div>
+      <div><strong>Inspectable stages</strong><span>Transcript, translation, voices, and TTS stay editable.</span></div>
+      <div><strong>Hardware-aware</strong><span>Designed to use local acceleration when available.</span></div>
+    </section>
+
+    <section class="section" id="workflow">
+      <div class="section-heading">
+        <p class="eyebrow">The workflow</p>
+        <h2>Built around staged refinement, not one-shot magic.</h2>
+        <p>
+          Dubbing quality comes from iteration. Babel Player keeps each stage visible so you can fix the source of a problem instead of rerunning a black box.
+        </p>
+      </div>
+      <div class="flow-grid">
+        <article><span>01</span><h3>Ingest</h3><p>Load local media, extract audio, and prepare the project workspace.</p></article>
+        <article><span>02</span><h3>Transcript</h3><p>Generate timed dialogue segments that can be edited before downstream stages.</p></article>
+        <article><span>03</span><h3>Translate</h3><p>Create target-language dialogue while preserving segment timing and speaker context.</p></article>
+        <article><span>04</span><h3>Assign voices</h3><p>Map speakers to voices, review language/provider choices, and keep settings explicit.</p></article>
+        <article><span>05</span><h3>Generate TTS</h3><p>Render dubbed speech per segment so individual fixes do not require a full rerun.</p></article>
+        <article><span>06</span><h3>Preview & refine</h3><p>Hear dubbed speech against the original video, then adjust text, timing, voice, or mix.</p></article>
+      </div>
+    </section>
+
+    <section class="section split" id="features">
+      <div class="section-heading left">
+        <p class="eyebrow">Why Babel Player</p>
+        <h2>A dubbing workstation should tell the truth about its state.</h2>
+        <p>
+          The goal is not to dazzle you with a loading spinner. It is to preserve your work, show which stage produced which artifacts,
+          and make local AI workloads less fiddly.
+        </p>
+      </div>
+      <div class="feature-list">
+        <div><h3>Local media first</h3><p>Projects begin with files on your machine, not forced uploads.</p></div>
+        <div><h3>Resumable work</h3><p>Generated artifacts are saved so reopening a project does not mean recomputing everything.</p></div>
+        <div><h3>Clear provider routing</h3><p>CPU, GPU, and optional provider paths should be visible instead of guessed after the fact.</p></div>
+        <div><h3>Segment-level iteration</h3><p>Fix one line, regenerate one line, preview one range. The pipeline should not become a slot machine.</p></div>
+      </div>
+    </section>
+
+    <section class="section status-panel" id="status">
+      <div class="section-heading">
+        <p class="eyebrow">Project status</p>
+        <h2>Open-source and still evolving.</h2>
+        <p>
+          Babel Player is under active development. Expect rough edges, but the product direction is practical: reliable desktop workflow first, flashy automation second.
+        </p>
+      </div>
+      <div class="status-grid">
+        <article class="good"><h3>Core direction</h3><p>Desktop-first dubbing pipeline with local workflow, staged AI processing, preview, and refinement.</p></article>
+        <article class="watch"><h3>Important caveat</h3><p>Model and voice licenses vary. Commercial use depends on the specific providers, binaries, and model weights you configure.</p></article>
+        <article class="todo"><h3>Want to help?</h3><p>Test clean installs, report runtime failures, improve docs, contribute UI polish, or sponsor development.</p></article>
+      </div>
+    </section>
+
+    <section class="section get-started" id="start">
+      <div class="start-card">
+        <div>
+          <p class="eyebrow">Get started</p>
+          <h2>Try it, inspect it, improve it.</h2>
+          <p>
+            Grab a release if one is available, or build from source. For now, treat Babel Player as a serious alpha rather than a finished commercial dubbing suite.
+          </p>
+        </div>
+        <div class="command-card" aria-label="Repository clone command">
+          <code>git clone https://github.com/mta-babel/Babel-Player.git</code>
+        </div>
+        <div class="hero-actions compact">
+          <a class="button primary" href="https://github.com/mta-babel/Babel-Player/releases">Releases</a>
+          <a class="button secondary" href="https://github.com/mta-babel/Babel-Player/issues">Issues</a>
+          <a class="button secondary" href="https://github.com/mta-babel/Babel-Player#readme">README</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Built for local-first dubbing workflows. Source available on GitHub.</p>
+    <div>
+      <a href="https://github.com/mta-babel/Babel-Player">GitHub</a>
+      <a href="https://github.com/mta-babel/Babel-Player/blob/main/THIRD_PARTY_LICENSES.md">Licenses</a>
+    </div>
+  </footer>
+</body>
+</html>
