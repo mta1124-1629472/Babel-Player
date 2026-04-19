@@ -64,6 +64,7 @@ STRINGS: Dict[str, str] = {
     "Status_NeedsDownload": "⬇ Needs Download",
     "Status_Ready": "✓ Ready",
     "Label_SpokenLanguage": "Spoken language (ASR hint)",
+    "SpokenLanguage_AutoDetect": "Auto-detect",
     "Section_Diarization": "DIARIZATION / SPEAKERS",
     "Tooltip_RerunDiarization": "Re-run speaker mapping (choose this stage only or include downstream)",
     "Automation_RerunDiarization": "Re-run speaker mapping",
@@ -464,3 +465,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -162,6 +162,9 @@
   <data name="Label_SpokenLanguage" xml:space="preserve">
     <value>Gesproken taal (ASR-hint)</value>
   </data>
+  <data name="SpokenLanguage_AutoDetect" xml:space="preserve">
+    <value>Automatisch detecteren</value>
+  </data>
   <data name="Section_Diarization" xml:space="preserve">
     <value>DIARISATIE / LUIDSPREKERS</value>
   </data>
