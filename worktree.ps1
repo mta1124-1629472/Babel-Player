@@ -62,20 +62,21 @@ function Invoke-Git {
         [switch]$AllowFailure
     )
 
+    $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $gitCommand) {
+        throw "git is not available on PATH."
+    }
+
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        $output = & git -C $WorkingDirectory @Args 2>&1
+        $output = & $gitCommand.Source -C $WorkingDirectory @Args 2>&1
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 
     if ($null -eq $output) {
-        $output = @()
-    } else {
-        $output = @($output | ForEach-Object { $_.ToString() })
-    }
         $output = @()
     } else {
         $output = @($output | ForEach-Object {
