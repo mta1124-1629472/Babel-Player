@@ -447,10 +447,8 @@ dotnet run --project BabelPlayer.csproj --no-build
 '''
 
 [[actions]]
-name = "Full Test"
+name = "Test (Excluding Quarantined)"
 icon = "test"
-# Matches the maintained CI strategy: scope to BabelPlayer.Tests and skip the
-# Quarantined bucket (long-running / environment-sensitive suites).
 command = "dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter \"Category!=Quarantined\""
 
 [[actions]]
@@ -464,21 +462,6 @@ icon = "debug"
 command = "dotnet run -c Dev --project BabelPlayer.csproj"
 
 [[actions]]
-name = "Cleanup Preview"
-icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -WhatIf"
-
-[[actions]]
-name = "Cleanup stale local worktrees and branches"
-icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches"
-
-[[actions]]
-name = "Cleanup branches already merged to origin/main"
-icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches -DeleteMergedLocalBranches"
-
-[[actions]]
-name = "Cleanup merged remote agent branches"
-icon = "tool"
-command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches -DeleteMergedLocalBranches -DeleteMergedRemoteBranches"
+name = "Cleanup"
+icon = "trash"
+command = "pwsh -File .\\cleanup-agent-worktrees.ps1"
