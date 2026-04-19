@@ -64,22 +64,34 @@ public static class SessionSnapshotSemantics
             if (!ArtifactIntegrityValidator.ValidateStemPair(snapshot, out _))
             {
                 stage = SessionWorkflowStage.MediaLoaded;
+                var hadDiarization = HasDiarizationMarker(snapshot);
                 snapshot = ClearTranscriptionOutputs(snapshot);
                 cleared.Add("vocal_separation");
+                if (hadDiarization)
+                    cleared.Add("diarization");
                 cleared.Add("transcription");
             }
             else if (!ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _))
             {
                 stage = SessionWorkflowStage.MediaLoaded;
+                var hadStems = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
+                var hadDiarization = HasDiarizationMarker(snapshot);
                 snapshot = ClearTranscriptionOutputs(snapshot);
+                if (hadStems)
+                    cleared.Add("vocal_separation");
+                if (hadDiarization)
+                    cleared.Add("diarization");
                 cleared.Add("transcription");
             }
         }
 
         if (!ArtifactIntegrityValidator.ValidateStemPair(snapshot, out _))
         {
+            var hadDiarization = HasDiarizationMarker(snapshot);
             snapshot = ClearTranscriptionOutputs(snapshot);
             cleared.Add("vocal_separation");
+            if (hadDiarization)
+                cleared.Add("diarization");
             if (stage > SessionWorkflowStage.MediaLoaded) stage = SessionWorkflowStage.MediaLoaded;
         }
 
