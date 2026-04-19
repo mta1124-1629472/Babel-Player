@@ -25,6 +25,7 @@ Use the root helper from the repo checkout when you want an isolated branch work
 ```
 
 By default, the helper keeps feature work in the sibling `Babel-Player.wt` folder (override with `BABEL_PLAYER_WORKTREE_ROOT`) and rebases feature branches onto `origin/main` (override with `-BaseRef`).
+`.\worktree.ps1 sync` aborts if the target worktree has uncommitted changes, so commit, stash, or discard those changes before running it.
 
 ### Project Posture
 
