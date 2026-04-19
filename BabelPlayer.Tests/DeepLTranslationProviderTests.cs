@@ -180,8 +180,9 @@ public sealed class DeepLTranslationProviderTests : IDisposable
     {
         var json = """
         {
+          "schema_version": "2.0",
           "language": "es",
-          "languageProbability": 0.95,
+          "language_probability": 0.95,
           "segments": [
             {
               "start": 0.0,
@@ -203,6 +204,7 @@ public sealed class DeepLTranslationProviderTests : IDisposable
     {
         var json = """
         {
+          "schema_version": "2.0",
           "sourceLanguage": "ES",
           "targetLanguage": "EN",
           "segments": [
