@@ -66,7 +66,7 @@ function Invoke-Git {
 
     $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $gitCommand) {
-        throw "git is not available on PATH."
+throw "git is not available on PATH. Please ensure Git is installed and added to your PATH environment variable."
     }
 
     $previousErrorActionPreference = $ErrorActionPreference
