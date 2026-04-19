@@ -248,7 +248,7 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
         await File.WriteAllBytesAsync(outputPath, [0xEE, 0xFF], cancellationToken);
     }
 
-    public Task<bool> TimeStretchAsync(
+    public async Task<bool> TimeStretchAsync(
         string inputPath,
         string outputPath,
         double targetDurationSeconds,
@@ -258,13 +258,13 @@ public sealed class FakeAudioProcessingService : IAudioProcessingService
     {
         TimeStretchCallCount++;
         if (!TimeStretchShouldSucceed)
-            return Task.FromResult(false);
+            return false;
 
         var dir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
-        File.WriteAllBytes(outputPath, [0x11, 0x22]);
-        return Task.FromResult(true);
+        await File.WriteAllBytesAsync(outputPath, [0x11, 0x22], cancellationToken);
+        return true;
     }
 
     public Task<double?> ProbeDurationAsync(string filePath, CancellationToken cancellationToken = default)
