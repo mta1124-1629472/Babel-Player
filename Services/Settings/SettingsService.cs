@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using Babel.Player.Models;
 using Babel.Player.Services;
 
@@ -23,6 +24,7 @@ public sealed class SettingsService
 
     private readonly string _filePath;
     private readonly AppLog _log;
+    private readonly Lock _gate = new();
 
     public SettingsService(string filePath, AppLog log)
     {
@@ -39,52 +41,96 @@ public sealed class SettingsService
     /// </summary>
     public AppSettings LoadOrDefault()
     {
-        if (!File.Exists(_filePath))
+        lock (_gate)
         {
-            var defaults = new AppSettings();
-            defaults.NormalizeLegacyInferenceSettings();
-            return defaults;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(_filePath);
-            if (string.IsNullOrWhiteSpace(json))
+            if (!File.Exists(_filePath))
             {
                 var defaults = new AppSettings();
                 defaults.NormalizeLegacyInferenceSettings();
                 return defaults;
             }
 
-            var file = JsonSerializer.Deserialize<AppSettingsFile>(json, SerializerOptions)
-                ?? new AppSettingsFile();
-            var settings = file.ToSettings();
-            if (file.DubTimingMode == SegmentTimingMode.Pause)
-                _log.Info("Migrated legacy Pause session timing default to Off because Pause is preview-only.");
-            settings.NormalizeLegacyInferenceSettings();
-            return settings;
-        }
-        catch (Exception ex)
-        {
-            _log.Warning($"Settings load failed ({ex.Message}). Using defaults.");
-            var defaults = new AppSettings();
-            defaults.NormalizeLegacyInferenceSettings();
-            return defaults;
+            try
+            {
+                var json = File.ReadAllText(_filePath);
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    RecoverUnreadableSettings("Settings file was empty or whitespace. Using defaults.");
+                    var defaults = new AppSettings();
+                    defaults.NormalizeLegacyInferenceSettings();
+                    return defaults;
+                }
+
+                var file = JsonSerializer.Deserialize<AppSettingsFile>(json, SerializerOptions);
+                if (file is null)
+                {
+                    RecoverUnreadableSettings("Settings file deserialized to null. Using defaults.");
+                    var defaults = new AppSettings();
+                    defaults.NormalizeLegacyInferenceSettings();
+                    return defaults;
+                }
+
+                var settings = file.ToSettings();
+                if (file.DubTimingMode == SegmentTimingMode.Pause)
+                    _log.Info("Migrated legacy Pause session timing default to Off because Pause is preview-only.");
+                settings.NormalizeLegacyInferenceSettings();
+                return settings;
+            }
+            catch (JsonException ex)
+            {
+                RecoverUnreadableSettings("Settings JSON was invalid. Using defaults.", ex);
+                var defaults = new AppSettings();
+                defaults.NormalizeLegacyInferenceSettings();
+                return defaults;
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Settings load failed ({ex.Message}). Using defaults.");
+                var defaults = new AppSettings();
+                defaults.NormalizeLegacyInferenceSettings();
+                return defaults;
+            }
         }
     }
 
     /// <summary>Save settings. Failures are logged but non-fatal.</summary>
     public void Save(AppSettings settings)
     {
+        lock (_gate)
+        {
+            try
+            {
+                settings.NormalizeLegacyInferenceSettings();
+                var file = AppSettingsFile.FromSettings(settings);
+                var json = JsonSerializer.Serialize(file, SerializerOptions);
+                JsonStorePersistence.AtomicWriteText(_filePath, json);
+            }
+            catch (Exception ex)
+            {
+                _log.Error("Failed to save app settings.", ex);
+            }
+        }
+    }
+
+    private void RecoverUnreadableSettings(string statusMessage, Exception? ex = null)
+    {
+        if (ex is not null)
+        {
+            _log.Warning($"{statusMessage} {ex.Message}");
+        }
+        else
+        {
+            _log.Warning(statusMessage);
+        }
+
         try
         {
-            settings.NormalizeLegacyInferenceSettings();
-            var file = AppSettingsFile.FromSettings(settings);
-            File.WriteAllText(_filePath, JsonSerializer.Serialize(file, SerializerOptions));
+            var backupPath = JsonStorePersistence.MoveUnreadableFileToBackup(_filePath);
+            _log.Warning($"Unreadable settings file was moved to {backupPath}.");
         }
-        catch (Exception ex)
+        catch (Exception moveEx)
         {
-            _log.Error("Failed to save app settings.", ex);
+            _log.Error($"Failed to quarantine unreadable settings file '{_filePath}'.", moveEx);
         }
     }
 

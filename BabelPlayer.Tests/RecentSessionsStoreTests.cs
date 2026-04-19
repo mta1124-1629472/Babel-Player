@@ -41,6 +41,9 @@ public sealed class RecentSessionsStoreTests : IDisposable
             stage,
             DateTimeOffset.UtcNow);
 
+    private string[] FindCorruptBackups() =>
+        Directory.GetFiles(_dir, "recent-sessions.json.corrupt.*", SearchOption.TopDirectoryOnly);
+
     // ── Load — missing / empty ─────────────────────────────────────────────────
 
     [Fact]
@@ -80,6 +83,8 @@ public sealed class RecentSessionsStoreTests : IDisposable
         File.WriteAllText(_filePath, "{ not valid json {{{{");
         var result = _store.Load();
         Assert.Empty(result);
+        Assert.False(File.Exists(_filePath));
+        Assert.Single(FindCorruptBackups());
     }
 
     // ── Upsert ─────────────────────────────────────────────────────────────────
@@ -240,5 +245,33 @@ public sealed class RecentSessionsStoreTests : IDisposable
         var json = File.ReadAllText(_filePath);
         using var doc = JsonDocument.Parse(json);
         Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+    }
+
+    [Fact]
+    public void Upsert_CorruptExistingFile_RecoversAndWritesReplacementList()
+    {
+        File.WriteAllText(_filePath, "{ still not valid json");
+        var entry = MakeEntry();
+
+        _store.Upsert(entry);
+
+        var loaded = _store.Load();
+        Assert.Single(loaded);
+        Assert.Equal(entry.SessionId, loaded[0].SessionId);
+        Assert.Single(FindCorruptBackups());
+    }
+
+    [Fact]
+    public void Upsert_WhenPersistFails_PreservesLiveMruCache()
+    {
+        Directory.CreateDirectory(_filePath);
+        var entry = MakeEntry();
+
+        _store.Upsert(entry);
+
+        var loaded = _store.Load();
+        Assert.Single(loaded);
+        Assert.Equal(entry.SessionId, loaded[0].SessionId);
+        Assert.True(Directory.Exists(_filePath));
     }
 }

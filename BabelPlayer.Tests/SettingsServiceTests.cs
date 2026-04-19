@@ -27,6 +27,9 @@ public sealed class SettingsServiceTests : IDisposable
         catch { }
     }
 
+    private string[] FindCorruptBackups() =>
+        Directory.GetFiles(_dir, "app-settings.json.corrupt.*", SearchOption.TopDirectoryOnly);
+
     [Fact]
     public void LoadOrDefault_LegacyContainerizedRuntime_MigratesToGpuProfilesAndDockerBackend()
     {
@@ -205,5 +208,31 @@ public sealed class SettingsServiceTests : IDisposable
 
         Assert.Equal(AppSettings.PipelinePaneDefaultWidth, loaded.PipelinePaneWidth, precision: 3);
         Assert.Equal(AppSettings.SegmentsPaneDefaultWidth, loaded.SegmentsPaneWidth, precision: 3);
+    }
+
+    [Fact]
+    public void LoadOrDefault_CorruptJson_MovesUnreadableFileToBackup()
+    {
+        File.WriteAllText(_settingsPath, "{ definitely not valid json");
+
+        var service = new SettingsService(_settingsPath, _log);
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(new AppSettings().Theme, loaded.Theme);
+        Assert.False(File.Exists(_settingsPath));
+        Assert.Single(FindCorruptBackups());
+    }
+
+    [Fact]
+    public void LoadOrDefault_WhitespaceFile_MovesUnreadableFileToBackup()
+    {
+        File.WriteAllText(_settingsPath, "   \r\n   ");
+
+        var service = new SettingsService(_settingsPath, _log);
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(new AppSettings().Theme, loaded.Theme);
+        Assert.False(File.Exists(_settingsPath));
+        Assert.Single(FindCorruptBackups());
     }
 }
