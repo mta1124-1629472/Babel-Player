@@ -53,17 +53,15 @@ public sealed class PipelineTargetLanguageOption : INotifyPropertyChanged, IEqua
         // culture would make order drift after a runtime language switch).
         items.Sort(static (a, b) =>
         {
-            // First compare codes case-insensitively and return 0 if equal (preserves reflexivity)
+            // Reflexive: equal codes compare as 0 (List.Sort contract).
             if (string.Equals(a.Code, b.Code, StringComparison.OrdinalIgnoreCase))
                 return 0;
 
-            // Then handle special-casing of "en" (putting it first)
             if (string.Equals(a.Code, "en", StringComparison.OrdinalIgnoreCase))
                 return -1;
             if (string.Equals(b.Code, "en", StringComparison.OrdinalIgnoreCase))
                 return 1;
 
-            // Finally fall back to comparing by English display names
             return string.Compare(
                 LanguageDisplayNames.ForIso639(a.Code, EnglishSortCulture),
                 LanguageDisplayNames.ForIso639(b.Code, EnglishSortCulture),
