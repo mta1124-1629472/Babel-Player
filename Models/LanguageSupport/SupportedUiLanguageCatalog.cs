@@ -23,7 +23,7 @@ namespace Babel.Player.Models.LanguageSupport;
 /// </remarks>
 public static class SupportedUiLanguageCatalog
 {
-    /// <summary>Shipping UI languages in catalog order (English first).</summary>
+    /// <summary>Shipping UI languages in app-language dropdown order (not ISO or English-first).</summary>
     public static readonly IReadOnlyList<string> IsoCodes = new[]
     {
         "ar",

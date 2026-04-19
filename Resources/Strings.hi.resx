@@ -162,6 +162,9 @@
   <data name="Label_SpokenLanguage" xml:space="preserve">
     <value>बोली जाने वाली भाषा (ASR संकेत)</value>
   </data>
+  <data name="SpokenLanguage_AutoDetect" xml:space="preserve">
+    <value>स्वतः पहचान</value>
+  </data>
   <data name="Section_Diarization" xml:space="preserve">
     <value>डायरीकरण / वक्ता</value>
   </data>
