@@ -52,6 +52,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     /// closes via Cancel, the OS X button, or Alt+F4.
     /// </summary>
     private bool _languageChangeCommitted;
+    private bool _suppressAppLanguageSelectionPreview;
     private IDisposable? _readinessSignalSubscription;
 
     /// <summary>
@@ -365,6 +366,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     partial void OnSelectedAppLanguageChanged(AppLanguageOption value)
     {
         if (value is null) return;
+        if (_suppressAppLanguageSelectionPreview) return;
         var effective = LocalizationService.ResolveAppLanguage(value.Code);
         try
         {
@@ -891,11 +893,19 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private void OnCultureChanged(object? sender, CultureInfo newCulture)
     {
         var previousCode = SelectedAppLanguage?.Code;
-        AppLanguageOptions = BuildAppLanguageOptions();
-        SelectedAppLanguage = AppLanguageOptions.FirstOrDefault(o =>
-            string.Equals(o.Code, previousCode, StringComparison.OrdinalIgnoreCase))
-            ?? AppLanguageOptions[0];
-        OnPropertyChanged(nameof(AppLanguageOptions));
+        _suppressAppLanguageSelectionPreview = true;
+        try
+        {
+            AppLanguageOptions = BuildAppLanguageOptions();
+            SelectedAppLanguage = AppLanguageOptions.FirstOrDefault(o =>
+                string.Equals(o.Code, previousCode, StringComparison.OrdinalIgnoreCase))
+                ?? AppLanguageOptions[0];
+            OnPropertyChanged(nameof(AppLanguageOptions));
+        }
+        finally
+        {
+            _suppressAppLanguageSelectionPreview = false;
+        }
     }
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
