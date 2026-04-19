@@ -15,7 +15,7 @@ Use `docs/PLAN.md` as the document map. Dated plan and milestone files are histo
 
 ### Worktrees
 
-Use the root helper from the repo checkout when you want an isolated branch workspace:
+Use the root helper from the repo checkout when you want an isolated branch workspace (PowerShell 7+; `pwsh` — the script uses `#Requires -Version 7.0`):
 
 ```powershell
 .\worktree.ps1 new codex/feature-name
