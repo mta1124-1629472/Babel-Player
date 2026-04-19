@@ -301,7 +301,7 @@
     <value>Rendering-Zeitplan</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Gilt für generierte Synchronisationen und den Export. Pause ist nur für die Vorschau.</value>
+    <value>Gilt für generierte Synchronisationen und den Export.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Ausgewähltes Segment</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>TTS zeitlich strecken, damit dieses Segmentfenster in die gerenderte Synchronisation/den Export passt</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Vorschau-Pause</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Hält die Wiedergabe der Quelle während der Vorschau des ausgewählten Segments an und setzt sie am Ende des Segments fort.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau mit Pause</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Vorschau dieses Segments mit Pausenverhalten ohne Änderung des gerenderten Synchronisationszeitpunkts</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Mediendatei öffnen</value>

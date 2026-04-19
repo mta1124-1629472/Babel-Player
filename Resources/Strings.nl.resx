@@ -301,7 +301,7 @@
     <value>Rendertiming</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Geldt voor gegenereerde dub audio en export. Pauze is alleen voorvertoning.</value>
+    <value>Geldt voor gegenereerde dub audio en export.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Geselecteerd segment</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Time-stretch TTS om in dit segmentvenster te passen in gerenderde dub/export</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Voorbeeld pauze</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Pauzeert het afspelen van de bron tijdens het bekijken van het geselecteerde segment en hervat aan het einde van het segment.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Voorbeeld met pauze</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Bekijk een voorbeeld van dit segment met behulp van pauzegedrag zonder de rendered dub-timing te wijzigen</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Mediabestand openen</value>

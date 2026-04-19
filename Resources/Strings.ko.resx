@@ -301,7 +301,7 @@
     <value>렌더링 타이밍</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>생성된 더빙 오디오 및 내보내기에 적용됩니다. 일시 중지는 미리보기 전용입니다.</value>
+    <value>생성된 더빙 오디오 및 내보내기에 적용됩니다.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>선택한 세그먼트</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>렌더링된 더빙/내보내기에서 이 세그먼트 창에 맞게 TTS 시간 늘이기</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>미리보기 일시 중지</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>선택한 세그먼트를 미리 보는 동안 소스 재생을 일시 중지했다가 세그먼트 끝에서 다시 시작합니다.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>일시정지로 미리보기</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>렌더링된 더빙 타이밍을 변경하지 않고 일시정지 동작을 사용하여 이 세그먼트 미리보기</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>미디어 파일 열기</value>

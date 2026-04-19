@@ -301,7 +301,7 @@
     <value>रेंडर समय</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>उत्पन्न डब ऑडियो और एक्सपोर्ट पर लागू होता है। पॉज़ केवल पूर्वावलोकन के लिए है।</value>
+    <value>उत्पन्न डब ऑडियो और एक्सपोर्ट पर लागू होता है।</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>चयनित अंश</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>रेंडर किए गए डब/एक्सपोर्ट में इस सेगमेंट विंडो को फिट करने के लिए टाइम-स्ट्रेच TTS</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>पूर्वावलोकन विराम</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>चयनित खंड का पूर्वावलोकन करते समय स्रोत प्लेबैक को रोकता है, फिर खंड के अंत में फिर से शुरू करता है।</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>विराम के साथ पूर्वावलोकन</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>रेंडर किए गए डब टाइमिंग को बदले बिना पॉज़ व्यवहार का उपयोग करके इस सेगमेंट का पूर्वावलोकन करें।</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>मीडिया फ़ाइल खोलें</value>

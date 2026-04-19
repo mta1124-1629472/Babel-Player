@@ -301,7 +301,7 @@
     <value>Tidpunkt för rendering</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Gäller för genererat dubbljud och export. Paus är endast för förhandsgranskning.</value>
+    <value>Gäller för genererat dubbljud och export.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Utvalda segment</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Tidssträcka TTS för att passa detta segmentfönster i renderad dubbning/export</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Paus för förhandsgranskning</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Pausar uppspelningen av källan medan det valda segmentet förhandsgranskas och återupptas sedan vid segmentets slut.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Förhandsgranskning med paus</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Förhandsgranska detta segment med pausbeteende utan att ändra renderad dub-timing</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Öppna mediefil</value>

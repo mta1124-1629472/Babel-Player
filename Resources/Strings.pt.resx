@@ -301,7 +301,7 @@
     <value>Tempo de renderização</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Aplica-se ao áudio de dobragem gerado e à exportação. A pausa é apenas para pré-visualização.</value>
+    <value>Aplica-se ao áudio de dobragem gerado e à exportação.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Segmento selecionado</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Esticar o tempo do TTS para se ajustar a esta janela de segmento na dobragem/exportação processada</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Pausa na pré-visualização</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Pausa a reprodução da fonte durante a pré-visualização do segmento selecionado e, em seguida, retoma no final do segmento.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Pré-visualização com pausa</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Pré-visualizar este segmento utilizando o comportamento de pausa sem alterar a temporização da dobragem processada</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Abrir ficheiro multimédia</value>

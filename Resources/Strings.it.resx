@@ -301,7 +301,7 @@
     <value>Tempi di rendering</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Si applica all'audio di doppiaggio generato e all'esportazione. La pausa è solo un'anteprima.</value>
+    <value>Si applica all'audio di doppiaggio generato e all'esportazione.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Segmento selezionato</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Time-stretch TTS per adattarsi a questa finestra di segmento nel doppiaggio/esportazione renderizzata</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Anteprima pausa</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Mette in pausa la riproduzione della sorgente durante l'anteprima del segmento selezionato, quindi riprende alla fine del segmento.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Anteprima con pausa</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Anteprima di questo segmento utilizzando il comportamento di pausa senza modificare la tempistica del dub renderizzato</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Aprire un file multimediale</value>

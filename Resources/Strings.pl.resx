@@ -301,7 +301,7 @@
     <value>Czas renderowania</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Dotyczy wygenerowanego dubbingu audio i eksportu. Pauza jest tylko podglądem.</value>
+    <value>Dotyczy wygenerowanego dubbingu audio i eksportu.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Wybrany segment</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Rozciągnięcie czasowe TTS w celu dopasowania do tego okna segmentu w renderowanym dubie/eksporcie</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Wstrzymanie podglądu</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Wstrzymuje odtwarzanie źródła podczas podglądu wybranego segmentu, a następnie wznawia je na końcu segmentu.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Podgląd z pauzą</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Podgląd tego segmentu przy użyciu pauzy bez zmiany czasu renderowania dubu</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Otwórz plik multimedialny</value>

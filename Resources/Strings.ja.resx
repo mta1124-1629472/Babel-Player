@@ -301,7 +301,7 @@
     <value>レンダリングタイミング</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>生成されたダブ・オーディオとエクスポートに適用されます。一時停止はプレビューのみ。</value>
+    <value>生成されたダブ・オーディオとエクスポートに適用されます。</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>セグメント</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>レンダリングダビング/エクスポートで、このセグメントウィンドウに合うようにTTSをタイムストレッチする。</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>プレビュー</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>選択したセグメントをプレビューしている間、ソース再生を一時停止し、セグメント終了時に再開する。</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>一時停止付きプレビュー</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>レンダリングダブのタイミングを変えずに、ポーズビヘイビアを使ってこのセグメントをプレビューする</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>メディアファイルを開く</value>

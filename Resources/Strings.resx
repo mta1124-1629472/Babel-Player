@@ -331,7 +331,7 @@
     <value>Render timing</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Applies to generated dub audio and export. Pause is preview-only.</value>
+    <value>Applies to generated dub audio and export.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Selected segment</value>
@@ -353,18 +353,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Time-stretch TTS to fit this segment window in rendered dub/export</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Preview pause</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Pauses source playback while previewing the selected segment, then resumes at the segment end.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Preview With Pause</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Preview this segment using pause behavior without changing rendered dub timing</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Open media file</value>

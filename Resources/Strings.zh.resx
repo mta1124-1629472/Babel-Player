@@ -301,7 +301,7 @@
     <value>渲染时间</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>适用于生成的配音音频和导出。暂停仅供预览。</value>
+    <value>适用于生成的配音音频和导出。</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>选定部分</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>在渲染的配音/导出中对 TTS 进行时间拉伸，以适应此片段窗口</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>预览暂停</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>在预览所选片段时暂停源播放，然后在片段结束时恢复。</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>带暂停的预览</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>在不改变渲染配音时间的情况下，使用暂停行为预览此片段</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>打开媒体文件</value>

@@ -301,7 +301,7 @@
     <value>Render zamanlaması</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Oluşturulan dublaj sesi ve dışa aktarma için geçerlidir. Duraklatma yalnızca önizlemedir.</value>
+    <value>Oluşturulan dublaj sesi ve dışa aktarma için geçerlidir.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Seçilen segment</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Oluşturulan dublaj/dışa aktarmada bu segment penceresine sığdırmak için TTS'yi zaman açısından gerin</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Önizleme duraklatma</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Seçilen segmenti önizlerken kaynak oynatmayı duraklatır, ardından segment sonunda devam eder.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Duraklatmalı Önizleme</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Oluşturulan dublaj zamanlamasını değiştirmeden duraklatma davranışını kullanarak bu segmenti önizleyin</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Medya dosyasını aç</value>

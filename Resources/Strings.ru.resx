@@ -301,7 +301,7 @@
     <value>Время рендеринга</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>Применяется к сгенерированному звуку дубляжа и экспорту. Пауза доступна только для предварительного просмотра.</value>
+    <value>Применяется к сгенерированному звуку дубляжа и экспорту.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Выбранный сегмент</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Растягивание TTS по времени, чтобы вместить это окно сегмента в рендеринг дубляжа/экспорта</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Пауза предварительного просмотра</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Приостанавливает воспроизведение источника во время предварительного просмотра выбранного сегмента, а затем возобновляет его в конце сегмента.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Предварительный просмотр с паузой</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Предварительный просмотр этого фрагмента с использованием поведения паузы без изменения времени рендеринга дубляжа</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Открыть медиафайл</value>

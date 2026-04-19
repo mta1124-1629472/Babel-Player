@@ -301,7 +301,7 @@
     <value>توقيت التقديم</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>ينطبق على صوت الدبلجة الذي تم إنشاؤه وتصديره. الإيقاف المؤقت للمعاينة فقط.</value>
+    <value>ينطبق على صوت الدبلجة الذي تم إنشاؤه وتصديره.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>شريحة مختارة</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>تمديد وقت TTS لملاءمة نافذة هذا المقطع في الدبلجة/التصدير المُقدَّم</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>معاينة التوقف المؤقت</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>يوقف تشغيل المصدر مؤقتاً أثناء معاينة المقطع المحدد، ثم يستأنف عند نهاية المقطع.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>معاينة مع إيقاف مؤقت</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>معاينة هذا المقطع باستخدام سلوك الإيقاف المؤقت دون تغيير توقيت الدبل المقدمة</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>فتح ملف الوسائط</value>

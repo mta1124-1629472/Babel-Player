@@ -301,7 +301,7 @@
     <value>Temps de rendu</value>
   </data>
   <data name="Hint_RenderTiming" xml:space="preserve">
-    <value>S'applique au doublage audio généré et à l'exportation. La pause n'est qu'une prévisualisation.</value>
+    <value>S'applique au doublage audio généré et à l'exportation.</value>
   </data>
   <data name="Label_SelectedSegment" xml:space="preserve">
     <value>Segment sélectionné</value>
@@ -323,18 +323,6 @@
   </data>
   <data name="Tooltip_TimingStretch" xml:space="preserve">
     <value>Etirer le temps du TTS pour qu'il s'adapte à la fenêtre de ce segment dans le doublage/exportation rendu.</value>
-  </data>
-  <data name="Label_PreviewPause" xml:space="preserve">
-    <value>Pause de prévisualisation</value>
-  </data>
-  <data name="Hint_PreviewPause" xml:space="preserve">
-    <value>Interrompt la lecture de la source pendant la prévisualisation du segment sélectionné, puis reprend à la fin du segment.</value>
-  </data>
-  <data name="Option_PreviewWithPause" xml:space="preserve">
-    <value>Prévisualisation avec pause</value>
-  </data>
-  <data name="Tooltip_PreviewWithPause" xml:space="preserve">
-    <value>Prévisualiser ce segment en utilisant le comportement de pause sans modifier la synchronisation du rendu.</value>
   </data>
   <data name="Tooltip_OpenMedia" xml:space="preserve">
     <value>Ouvrir un fichier multimédia</value>
