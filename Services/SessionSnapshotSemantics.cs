@@ -71,7 +71,10 @@ public static class SessionSnapshotSemantics
             else if (!ArtifactIntegrityValidator.ValidateTranscript(snapshot, out _))
             {
                 stage = SessionWorkflowStage.MediaLoaded;
+                var hadStems = !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath);
                 snapshot = ClearTranscriptionOutputs(snapshot);
+                if (hadStems)
+                    cleared.Add("vocal_separation");
                 cleared.Add("transcription");
             }
         }
