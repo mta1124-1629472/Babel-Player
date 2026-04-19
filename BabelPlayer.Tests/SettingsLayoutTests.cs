@@ -1,7 +1,5 @@
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
-using Avalonia.Controls;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Registries;
@@ -54,17 +52,15 @@ public sealed class SettingsLayoutTests : IDisposable
 
         using var coordinator = CreateCoordinator(settings);
         using var playback = new EmbeddedPlaybackViewModel(coordinator);
-        using var settingsVm = new SettingsViewModel(
-            _settingsService,
-            coordinator,
-            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
-            new ModelsTabViewModel(new ModelDownloader(_log), coordinator));
 
         Assert.False(playback.Preview.IsSegmentsPaneVisible);
         Assert.False(playback.Preview.IsRightPaneVisible);
 
-        settingsVm.ShowSegmentsPane = true;
-        settingsVm.ApplyCommand.Execute(null);
+        // Mutate settings the same way SettingsViewModel.Apply would, then notify.
+        // Avoid constructing SettingsViewModel here: it starts DispatcherTimer + Rx
+        // subscriptions that post to Avalonia's UI dispatcher, which can hang headless CI.
+        coordinator.CurrentSettings.IsSegmentsPaneVisible = true;
+        coordinator.NotifySettingsModified();
 
         Assert.True(coordinator.CurrentSettings.IsSegmentsPaneVisible);
         Assert.True(playback.Preview.IsSegmentsPaneVisible);
