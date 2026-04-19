@@ -22,6 +22,7 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         catch { }
     }
 
+    [Trait("Category", "Smoke")]
     [Fact]
     public async Task ValidateTranscript_CorruptedJson_ReturnsFalseAndError()
     {
@@ -48,6 +49,7 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         Assert.Contains("Transcript artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Trait("Category", "Smoke")]
     [Fact]
     public async Task ValidateTranslation_CorruptedJson_ReturnsFalseAndError()
     {
@@ -80,8 +82,42 @@ public sealed class ArtifactIntegrityValidatorTests : IDisposable
         Assert.Contains("Translation artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Trait("Category", "Smoke")]
     [Fact]
     public async Task ValidateTranslation_CorruptedTranscriptJson_ReturnsFalseAndError()
+    {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        await File.WriteAllTextAsync(transcriptPath, "{ not json }");
+
+        var snapshot = template with
+        {
+            Stage = SessionWorkflowStage.Translated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+        };
+
+        var valid = ArtifactIntegrityValidator.ValidateTranslation(snapshot, out var error);
+Assert.Equal("Transcript artifact was unreadable", error);
+        Assert.False(valid);
+        Assert.NotNull(error);
+        Assert.Contains("Transcript artifact was unreadable", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Trait("Category", "Smoke")]
+    [Fact]
+    public async Task ValidateTranslation_CorruptedTranscriptJson_ExactMatch_ReturnsFalseAndError()
     {
         var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
         var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with

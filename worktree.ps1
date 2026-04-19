@@ -111,7 +111,7 @@ throw "git is not available on PATH. Please ensure Git is installed and added to
     }
 }
 
-function Ensure-Directory {
+function New-DirectoryIfNotExists {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -248,7 +248,7 @@ function Resolve-BranchName {
     Fail "Branch name is required for this command."
 }
 
-Ensure-Directory -Path $worktreesRoot
+New-DirectoryIfNotExists -Path $worktreesRoot
 
 switch ($Command) {
     "new" {
@@ -260,7 +260,7 @@ switch ($Command) {
         Invoke-Git -Args @("fetch", $Remote, "--prune") | Out-Null
 
         $parentDir = Split-Path $worktreePath -Parent
-        Ensure-Directory -Path $parentDir
+        New-DirectoryIfNotExists -Path $parentDir
 
         if (Test-Path -LiteralPath $worktreePath) {
             $existing = Get-WorktreeRecords | Where-Object { [System.IO.Path]::GetFullPath($_.Path) -eq $worktreePath } | Select-Object -First 1
