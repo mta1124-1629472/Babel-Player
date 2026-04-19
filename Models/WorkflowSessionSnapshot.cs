@@ -45,8 +45,12 @@ public sealed record WorkflowSessionSnapshot(
     InferenceRuntime? TranslationRuntime = null,
     string? TranslationProvider = null,
     string? TranslationModel = null,
+    bool TranslationSettingsDriftedSinceArtifact = false,
+    Guid? TranslationRunId = null,
     InferenceRuntime? TtsRuntime = null,
     string? TtsProvider = null,
+    bool TtsSettingsDriftedSinceArtifact = false,
+    Guid? TtsRunId = null,
     Dictionary<string, SegmentTimingMode>? SegmentTimingModeOverrides = null,
     SegmentTimingMode? DubTimingMode = null,
     double? AmbianceMixDb = null)

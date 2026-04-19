@@ -93,7 +93,7 @@ public sealed partial class SessionWorkflowCoordinator
                 if (!string.Equals(CurrentSettings.TranslationProvider, plan.ProviderId, StringComparison.Ordinal)
                     || CurrentSettings.TranslationProfile != plan.Profile)
                 {
-                    _translationService = null;
+                    RetireTranslationProviderCache("execution planner selected different translation provider");
                 }
                 CurrentSettings.TranslationProvider = plan.ProviderId;
                 CurrentSettings.TranslationProfile = plan.Profile;
@@ -103,7 +103,7 @@ public sealed partial class SessionWorkflowCoordinator
                 if (!string.Equals(CurrentSettings.TtsProvider, plan.ProviderId, StringComparison.Ordinal)
                     || CurrentSettings.TtsProfile != plan.Profile)
                 {
-                    _ttsService = null;
+                    RetireTtsProviderCache("execution planner selected different tts provider");
                 }
                 CurrentSettings.TtsProvider = plan.ProviderId;
                 CurrentSettings.TtsProfile = plan.Profile;

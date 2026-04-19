@@ -127,6 +127,7 @@ public sealed partial class SessionWorkflowCoordinator
             };
         }
 
+        MarkSessionInputsChanged("speaker relabel merged diarized speakers");
         SaveCurrentSession();
         return transcriptChanged;
     }

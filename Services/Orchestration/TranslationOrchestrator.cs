@@ -75,13 +75,18 @@ internal sealed class TranslationOrchestrator
                 stageContext,
                 progress,
                 $"Preparing translation model '{_session.CurrentSettings.TranslationModel}'");
-            await _providers.EnsureTranslationExecutionReadyAsync(downloadProgress, cancellationToken)
+            var snapshot = await _providers.PrepareTranslationExecutionSnapshotAsync(
+                    stagePlan,
+                    _session.CurrentSession.TranscriptPath!,
+                    normalizedSourceLanguage,
+                    normalizedTargetLanguage,
+                    downloadProgress,
+                    cancellationToken)
                 .ConfigureAwait(false);
-
-            var translationService = _providers.TranslationService ??= _providers.CreateTranslationService();
+            await using var translationProviderLease = snapshot.ProviderLease;
 
             var runMessage = BuildInfo.IsDevBuild
-                ? $"Running translation from {normalizedSourceLanguage} to {normalizedTargetLanguage} with {_session.CurrentSettings.TranslationProvider} / {_session.CurrentSettings.TranslationModel}. Segment text will be rewritten into the target language for dubbing."
+                ? $"Running translation from {normalizedSourceLanguage} to {normalizedTargetLanguage} with {snapshot.Plan.ProviderId} / {snapshot.Model}. Segment text will be rewritten into the target language for dubbing."
                 : $"Running translation into {normalizedTargetLanguage}.";
             PipelineStageReporter.ReportStage(
                 stageContext,
@@ -89,28 +94,18 @@ internal sealed class TranslationOrchestrator
                 progress01: 0,
                 isIndeterminate: true);
 
-            var sessionDir = _session.GetSessionDirectory();
-            var translationDir = Path.Combine(sessionDir, "translations");
-            Directory.CreateDirectory(translationDir);
-
-            var fileName = Path.GetFileNameWithoutExtension(_session.CurrentSession.TranscriptPath);
-            var translationPath = Path.Combine(
-                translationDir,
-                $"{fileName}_{normalizedTargetLanguage}.json");
-            var workingTranslationPath = ArtifactIntegrity.GetWorkingPath(translationPath);
-
             _log.Debug(
-                $"Starting translation: {_session.CurrentSession.TranscriptPath} " +
+                $"Starting translation run={snapshot.RunId}: {_session.CurrentSession.TranscriptPath} " +
                 $"({normalizedSourceLanguage} -> {normalizedTargetLanguage})");
 
             var result = await _inferenceEngine.TranslateAsync(
-                    translationService,
+                    snapshot.Provider,
                     new TranslationRequest(
-                        _session.CurrentSession.TranscriptPath,
-                        workingTranslationPath,
+                        snapshot.TranscriptPath,
+                        snapshot.WorkingTranslationPath,
                         normalizedSourceLanguage,
                         normalizedTargetLanguage,
-                        _session.CurrentSettings.TranslationModel),
+                        snapshot.Model),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -120,15 +115,13 @@ internal sealed class TranslationOrchestrator
                 var ex = new InvalidOperationException($"Translation failed: {errorMsg}");
                 _log.Error(ex.Message, ex);
                 throw new PipelineProviderException(
-                    $"Translation provider '{_session.CurrentSettings.TranslationProvider}' failed during translation stage: {errorMsg}",
+                    $"Translation provider '{snapshot.Plan.ProviderId}' failed during translation stage: {errorMsg}",
                     ex);
             }
 
             await _committer.CommitTranslationSessionStateAsync(
-                result,
-                workingTranslationPath,
-                normalizedSourceLanguage,
-                normalizedTargetLanguage).ConfigureAwait(false);
+                snapshot,
+                result).ConfigureAwait(false);
             stageSucceeded = true;
 
             var completionMessage = BuildInfo.IsDevBuild

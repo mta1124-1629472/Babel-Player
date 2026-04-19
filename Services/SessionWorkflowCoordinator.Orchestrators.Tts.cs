@@ -52,14 +52,22 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                 if (string.IsNullOrWhiteSpace(v))
                     throw new InvalidOperationException("No TTS voice configured. Please configure a voice in Settings before generating TTS.");
 
-                await _c.EnsureTtsProviderReadyAsync(v, progress, stageContext, cancellationToken);
-
-                _c._ttsService ??= _c.CreateTtsService();
-                await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken);
-                await _c.EnsureMultiSpeakerReferenceClipsAsync(cancellationToken);
+                var ttsLanguage = NormalizePipelineLanguage(
+                    _c.CurrentSession.TargetLanguage ?? _c.CurrentSettings.TargetLanguage,
+                    _c.CurrentSettings.TargetLanguage);
+                var snapshot = await _c.PrepareTtsExecutionSnapshotAsync(
+                        stagePlan,
+                        _c.CurrentSession.TranslationPath!,
+                        v,
+                        ttsLanguage,
+                        progress,
+                        stageContext,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                await using var ttsProviderLease = snapshot.ProviderLease;
 
                 var startMessage = BuildInfo.IsDevBuild
-                    ? $"Starting TTS synthesis with {_c.CurrentSettings.TtsProvider} / {v}. Generating combined dub audio — progress will appear below."
+                    ? $"Starting TTS synthesis with {snapshot.Plan.ProviderId} / {snapshot.Voice}. Generating combined dub audio; progress will appear below."
                     : $"Starting dub generation with voice {v}.";
                 ReportStage(
                     stageContext,
@@ -67,29 +75,22 @@ internal TtsPipelineOrchestrator(SessionWorkflowCoordinator coordinator) => _c =
                     progress01: 0,
                     isIndeterminate: false);
 
-                var (ttsPath, segmentsDir) = SessionWorkflowCoordinator.BuildTtsOutputPaths(
-                    _c.CurrentSession.TranslationPath!, v!);
-                var ttsLanguage = NormalizePipelineLanguage(
-                    _c.CurrentSession.TargetLanguage ?? _c.CurrentSettings.TargetLanguage,
-                    _c.CurrentSettings.TargetLanguage);
-
-                _c.Log.Debug($"Starting TTS generation: {_c.CurrentSession.TranslationPath} -> {ttsPath}");
+                _c.Log.Debug($"Starting TTS generation run={snapshot.RunId}: {snapshot.TranslationPath} -> {snapshot.TtsPath}");
 
                 var (segmentAudioPaths, segmentDurations, totalSegments, orderedSegments) = await _c.GenerateSegmentClipsAsync(
-                    v!, ttsLanguage, segmentsDir, stageContext, cancellationToken);
+                    snapshot, stageContext, cancellationToken);
 
                 var renderResult = await _c.StitchSegmentClipsAsync(
+                    snapshot,
                     segmentAudioPaths,
                     orderedSegments,
-                    ttsPath,
+                    snapshot.TtsPath,
                     stageContext,
                     cancellationToken);
 
                 await _c.CommitTtsSessionStateAsync(
-                    v!,
-                    ttsPath,
+                    snapshot,
                     renderResult,
-                    segmentsDir,
                     segmentAudioPaths,
                     segmentDurations,
                     orderedSegments,
