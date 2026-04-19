@@ -13,6 +13,20 @@ Read these before non-trivial work:
 
 Use `docs/PLAN.md` as the document map. Dated plan and milestone files are historical unless that file says otherwise.
 
+### Worktrees
+
+Use the root helper from the repo checkout when you want an isolated branch workspace (PowerShell 7+; `pwsh` — the script uses `#Requires -Version 7.0`):
+
+```powershell
+.\worktree.ps1 new codex/feature-name
+.\worktree.ps1 sync codex/feature-name
+.\worktree.ps1 remove codex/feature-name -DeleteBranch
+.\worktree.ps1 list
+```
+
+By default, the helper derives the worktree folder name from the current checkout directory as `<repo-folder>.wt` (override with `BABEL_PLAYER_WORKTREE_ROOT`) and rebases feature branches onto `origin/main` (override with `-BaseRef`).
+`.\worktree.ps1 sync` aborts if the target worktree has uncommitted changes, so commit, stash, or discard those changes before running it.
+
 ### Project Posture
 
 The repo is built around one real user outcome:

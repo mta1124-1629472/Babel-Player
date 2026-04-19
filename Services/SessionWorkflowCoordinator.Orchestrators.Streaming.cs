@@ -73,18 +73,12 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 return;
             }
 
-            var transcriptionStartMessage = BuildInfo.IsDevBuild
-                ? $"Starting transcription with {_c.CurrentSettings.TranscriptionProvider} / {_c.CurrentSettings.TranscriptionModel}. Translation will begin as segments arrive."
-                : "Starting streaming transcription. Translation will begin as segments arrive.";
-            var transcriptionStreamingStatus = BuildInfo.IsDevBuild
-                ? "Downstream translation and dubbing will overlap with ASR output."
-                : "Translation and dubbing will start as transcript segments arrive.";
             ReportStage(
                 transcriptionStageContext,
-                transcriptionStartMessage,
+                $"Starting transcription with {_c.CurrentSettings.TranscriptionProvider} / {_c.CurrentSettings.TranscriptionModel}. Translation will begin as segments arrive.",
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: transcriptionStreamingStatus);
+                streamingStatus: "Downstream translation and dubbing will overlap with ASR output.");
 
             var transcriptPath = BuildTranscriptArtifactPath(transcriptionSourcePath);
             var transcriptPartialPath = TranscriptArtifactStreamingWriter.GetPartialPath(transcriptPath);
@@ -141,30 +135,18 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             await _c.EnsureSingleSpeakerQwenReferenceClipAsync(cancellationToken).ConfigureAwait(false);
             await _c.EnsureMultiSpeakerReferenceClipsAsync(cancellationToken).ConfigureAwait(false);
 
-            var translationStartMessage = BuildInfo.IsDevBuild
-                ? $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}."
-                : $"Streaming translation into {targetLanguage}.";
-            var translationStreamingStatus = BuildInfo.IsDevBuild
-                ? "Dub generation will start as translated segments arrive."
-                : "Dub generation will start as segments finish translating.";
             ReportStage(
                 translationStageContext,
-                translationStartMessage,
+                $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}.",
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: translationStreamingStatus);
-            var ttsStartMessage = BuildInfo.IsDevBuild
-                ? $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}."
-                : $"Streaming TTS synthesis with voice {voice}.";
-            var ttsStreamingStatus = BuildInfo.IsDevBuild
-                ? "Segment clips are generated as translation continues."
-                : "Segment clips are generated while translation continues.";
+                streamingStatus: "Dub generation will start as translated segments arrive.");
             ReportStage(
                 ttsStageContext,
-                ttsStartMessage,
+                $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}.",
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: ttsStreamingStatus);
+                streamingStatus: "Segment clips are generated as translation continues.");
 
             using var pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var pipelineToken = pipelineCts.Token;
@@ -176,7 +158,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 voice,
                 ttsLanguage,
                 segmentsDir,
-                ttsStageContext,
                 pipelineToken);
             var translationTask = RunStreamingTranslationStageAsync(
                 transcriptChannel.Reader,
@@ -207,12 +188,9 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 await transcriptArtifactWriter.CompleteAsync(transcriptionResult, transcriptPath, pipelineToken).ConfigureAwait(false);
                 await _c.CommitTranscriptionSessionStateAsync(transcriptionResult, transcriptPath).ConfigureAwait(false);
-                var transcriptionCompleteMessage = BuildInfo.IsDevBuild
-                    ? $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}."
-                    : $"Transcription complete. {transcriptionResult.Segments.Count} segments detected.";
                 ReportStage(
                     transcriptionStageContext,
-                    transcriptionCompleteMessage,
+                    $"Transcription complete. {transcriptionResult.Segments.Count} segments were detected in {transcriptionResult.Language}.",
                     progress01: 1,
                     isIndeterminate: false);
 
@@ -223,12 +201,9 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     translationPath,
                     translationResult.SourceLanguage,
                     translationResult.TargetLanguage).ConfigureAwait(false);
-                var translationCompleteMessage = BuildInfo.IsDevBuild
-                    ? $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}."
-                    : $"Translation complete. {translationResult.Segments.Count} segments are ready for dubbing.";
                 ReportStage(
                     translationStageContext,
-                    translationCompleteMessage,
+                    $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
                     progress01: 1,
                     isIndeterminate: false);
 
@@ -354,30 +329,18 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 targetLanguage);
             await translationWriter.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
-            var transcriptTranslationStartMessage = BuildInfo.IsDevBuild
-                ? $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}."
-                : $"Streaming translation into {targetLanguage}.";
-            var transcriptTranslationStatus = BuildInfo.IsDevBuild
-                ? "Dub generation will start as translated segments arrive."
-                : "Dub generation will start as segments finish translating.";
             ReportStage(
                 translationStageContext,
-                transcriptTranslationStartMessage,
+                $"Streaming translation to {targetLanguage} with {_c.CurrentSettings.TranslationProvider} / {_c.CurrentSettings.TranslationModel}.",
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: transcriptTranslationStatus);
-            var transcriptTtsStartMessage = BuildInfo.IsDevBuild
-                ? $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}."
-                : $"Streaming TTS synthesis with voice {voice}.";
-            var transcriptTtsStatus = BuildInfo.IsDevBuild
-                ? "Segment clips are generated as translation continues."
-                : "Segment clips are generated while translation continues.";
+                streamingStatus: "Dub generation will start as translated segments arrive.");
             ReportStage(
                 ttsStageContext,
-                transcriptTtsStartMessage,
+                $"Streaming TTS synthesis with {_c.CurrentSettings.TtsProvider} / {voice}.",
                 progress01: 0,
                 isIndeterminate: true,
-                streamingStatus: transcriptTtsStatus);
+                streamingStatus: "Segment clips are generated as translation continues.");
 
             var translationChannel = Channel.CreateBounded<TranslationChannelItem>(new BoundedChannelOptions(8)
             {
@@ -402,7 +365,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 voice,
                 ttsLanguage,
                 segmentsDir,
-                ttsStageContext,
                 pipelineToken);
             var translationTask = RunStreamingTranslationStageAsync(
                 transcriptChannel.Reader,
@@ -423,12 +385,9 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                     translationPath,
                     translationResult.SourceLanguage,
                     translationResult.TargetLanguage).ConfigureAwait(false);
-                var translatedFromTranscriptMessage = BuildInfo.IsDevBuild
-                    ? $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}."
-                    : $"Translation complete. {translationResult.Segments.Count} segments are ready for dubbing.";
                 ReportStage(
                     translationStageContext,
-                    translatedFromTranscriptMessage,
+                    $"Translation complete. {translationResult.Segments.Count} segments were translated from {translationResult.SourceLanguage} to {translationResult.TargetLanguage}.",
                     progress01: 1,
                     isIndeterminate: false);
 
@@ -575,7 +534,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         /// <param name="defaultVoice">Fallback voice to use when a segment has no resolved voice.</param>
         /// <param name="ttsLanguage">Language tag to pass to the TTS provider, or null to let the provider decide.</param>
         /// <param name="segmentsDir">Directory where per-segment audio files should be written.</param>
-        /// <param name="stageContext">Optional stage context used to report TTS heartbeat updates while a long synth is still running.</param>
         /// <param name="cancellationToken">Token to observe for cancellation of reading and task scheduling.</param>
         private async Task RunStreamingTtsStageAsync(
             ChannelReader<TranslationChannelItem> translationReader,
@@ -583,7 +541,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             string defaultVoice,
             string? ttsLanguage,
             string segmentsDir,
-            PipelineStageContext? stageContext,
             CancellationToken cancellationToken)
         {
             var parallelism = Math.Max(1, _c._ttsService?.MaxConcurrency ?? 1);
@@ -605,7 +562,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                                 ttsLanguage,
                                 segmentsDir,
                                 resultWriter,
-                                stageContext,
                                 cancellationToken).ConfigureAwait(false);
                         }
                         finally
@@ -681,7 +637,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
         /// <param name="ttsLanguage">The language hint to use for TTS, or null to let the provider decide.</param>
         /// <param name="segmentsDir">Directory where per-segment MP3 files will be written.</param>
         /// <param name="resultWriter">Channel writer to publish successful TTS results (TtsChannelItem).</param>
-        /// <param name="stageContext">Optional stage context used to emit heartbeat updates for long-running TTS calls.</param>
         /// <param name="cancellationToken">Token used to observe cancellation for the inference call and channel write.</param>
         private async Task GenerateStreamingTtsSegmentAsync(
             TranslationChannelItem item,
@@ -689,7 +644,6 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
             string? ttsLanguage,
             string segmentsDir,
             ChannelWriter<TtsChannelItem> resultWriter,
-            PipelineStageContext? stageContext,
             CancellationToken cancellationToken)
         {
             var id = item.SegmentId;
@@ -715,22 +669,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                         SourceVideoPath: _c.CurrentSession.IngestedMediaPath ?? _c.CurrentSession.SourceMediaPath),
                     cancellationToken);
                 _c.TrackPendingTtsTask(task);
-                var result = _c._ttsService is QwenContainerTtsProvider
-                    ? await _c.AwaitWithTtsHeartbeatAsync(
-                        task,
-                        stageContext,
-                        elapsed => $"Still generating the current clip. {SessionWorkflowCoordinator.FormatTtsHeartbeatElapsed(elapsed)} elapsed.",
-                        progressFactory: null,
-                        isIndeterminate: true,
-                        cancellationToken,
-                        streamingStatusFactory: _ => "Dub generation is still running.").ConfigureAwait(false)
-                    : await task.ConfigureAwait(false);
+                var result = await task.ConfigureAwait(false);
                 if (result.Success && File.Exists(segmentAudioPath))
                 {
                     await resultWriter.WriteAsync(
                         new TtsChannelItem(
                             id,
-                            StreamingArtifactCloneHelpers.CloneTranslationSegment(item.Segment),
+                            CloneTranslationSegment(item.Segment),
                             result with { AudioPath = segmentAudioPath }),
                         cancellationToken).ConfigureAwait(false);
                 }
@@ -832,12 +777,49 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 targetLanguage,
                 null);
 
+        private string ResolveTranslatedText(
+            TranslationResult result,
+            int segmentIndex,
+            string sourceText,
+            string segmentId)
+        {
+            if (result.Segments.Count == 0)
+                throw new InvalidOperationException($"Translation result for segment '{segmentId}' did not contain any segments.");
+
+            if (segmentIndex >= 0 && segmentIndex < result.Segments.Count)
+            {
+                var indexed = result.Segments[segmentIndex];
+                if (!string.IsNullOrWhiteSpace(indexed.TranslatedText))
+                    return indexed.TranslatedText;
+            }
+
+            if (result.Segments.Count == 1 && !string.IsNullOrWhiteSpace(result.Segments[0].TranslatedText))
+            {
+                _c.Log.Warning(
+                    $"ResolveTranslatedText used fallback='single-segment' for segmentId='{segmentId}', segmentIndex={segmentIndex}, sourceText='{sourceText}'.");
+                return result.Segments[0].TranslatedText;
+            }
+
+            var byText = result.Segments.FirstOrDefault(segment =>
+                string.Equals(segment.Text, sourceText, StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(segment.TranslatedText));
+            if (byText is not null)
+            {
+                _c.Log.Warning(
+                    $"ResolveTranslatedText used fallback='text-match' for segmentId='{segmentId}', segmentIndex={segmentIndex}, sourceText='{sourceText}'.");
+                return byText.TranslatedText;
+            }
+
+            throw new InvalidOperationException(
+                $"Translation result did not contain a translated value for segment '{segmentId}'.");
+        }
+
         /// <summary>
-        /// Create a copy of the provided transcript segment artifact.
-        /// </summary>
-        /// <param name="segment">The segment to clone.</param>
-        /// <returns>A new <see cref="TranscriptSegmentArtifact"/> with the same Start, End, Text, SpeakerId, and OriginalStart values, and a cloned `Words` list if the original had one.</returns>
-        private static TranscriptSegmentArtifact CloneTranscriptSegment(TranscriptSegmentArtifact segment) =>
+            /// Create a copy of the provided transcript segment artifact.
+            /// </summary>
+            /// <param name="segment">The segment to clone.</param>
+            /// <returns>A new <see cref="TranscriptSegmentArtifact"/> with the same Start, End, Text, SpeakerId, and OriginalStart values, and a cloned `Words` list if the original had one.</returns>
+            private static TranscriptSegmentArtifact CloneTranscriptSegment(TranscriptSegmentArtifact segment) =>
             new()
             {
                 Start = segment.Start,
@@ -847,5 +829,13 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 OriginalStart = segment.OriginalStart,
                 Words = segment.Words is null ? null : [.. segment.Words],
             };
+
+        /// <summary>
+            /// Creates a new TranslationSegmentArtifact that copies the identifying, timing, text, translation, and speaker fields from the provided segment.
+            /// </summary>
+            /// <param name="segment">The source segment to clone.</param>
+            /// <returns>A new <see cref="TranslationSegmentArtifact"/> with the same Id, Start, End, Text, TranslatedText, and SpeakerId as <paramref name="segment"/>.</returns>
+            private static TranslationSegmentArtifact CloneTranslationSegment(TranslationSegmentArtifact segment) =>
+                StreamingArtifactCloneHelpers.CloneTranslationSegment(segment);
     }
 }
