@@ -52,11 +52,15 @@ NAMESPACE = 'xmlns:local="using:Babel.Player.Converters"'
 
 
 def load_strings() -> Dict[str, str]:
+    target_path = os.path.join(REPO, "scripts", "build_strings_resx.py")
     spec = importlib.util.spec_from_file_location(
         "build_strings_resx",
-        os.path.join(REPO, "scripts", "build_strings_resx.py"),
+        target_path,
     )
-    assert spec and spec.loader
+    if spec is None:
+        raise ImportError(f"Failed to load build_strings_resx: spec_from_file_location returned None for {target_path}")
+    if spec.loader is None:
+        raise ImportError(f"Failed to load build_strings_resx: spec.loader is None for {target_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.STRINGS  # type: ignore[attr-defined]
@@ -73,7 +77,8 @@ def ensure_namespace(content: bytes) -> bytes:
     head, tail = m.group(1), m.group(2)
     if b"xmlns:local" in head:
         return content
-    injected = head + b"\r\n        " + NAMESPACE.encode() + tail
+    newline = b"\r\n" if b"\r\n" in content else b"\n"
+    injected = head + newline + b"        " + NAMESPACE.encode() + tail
     return content[: m.start()] + injected + content[m.end():]
 
 

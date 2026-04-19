@@ -100,7 +100,7 @@
     <value>API Keys</value>
   </data>
   <data name="Window_Title_Crash" xml:space="preserve">
-    <value>Babel Player — Unhandled Error</value>
+    <value>Babel Player - Unhandled Error</value>
   </data>
   <data name="Window_Title_Wizard" xml:space="preserve">
     <value>Speaker Reference Wizard</value>
@@ -297,6 +297,12 @@
   <data name="Button_Export" xml:space="preserve">
     <value>Export</value>
   </data>
+  <data name="Label_SegmentCountSingle" xml:space="preserve">
+    <value>1 segment</value>
+  </data>
+  <data name="Label_SegmentCountFormat" xml:space="preserve">
+    <value>{0} segments</value>
+  </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
     <value>to .srt</value>
   </data>
@@ -414,11 +420,14 @@
   <data name="Tooltip_Volume" xml:space="preserve">
     <value>Volume</value>
   </data>
-  <data name="Tooltip_ToggleSidePanes" xml:space="preserve">
-    <value>Toggle side panels (S)</value>
+  <data name="Tooltip_PaneSideFormat" xml:space="preserve">
+    <value>{0} pane: {1} ({2})</value>
   </data>
-  <data name="Automation_ToggleSidePanes" xml:space="preserve">
-    <value>Toggle side panes</value>
+  <data name="Automation_ToggleLeftPane" xml:space="preserve">
+    <value>Toggle left pane</value>
+  </data>
+  <data name="Automation_ToggleRightPane" xml:space="preserve">
+    <value>Toggle right pane</value>
   </data>
   <data name="Tooltip_ToggleFullscreen" xml:space="preserve">
     <value>Toggle fullscreen (F11)</value>
@@ -483,6 +492,27 @@
   <data name="Settings_Hint_AppLanguage" xml:space="preserve">
     <value>Changes the language of the Babel Player interface. Auto (system) follows your OS locale on each launch.</value>
   </data>
+  <data name="Settings_Group_Layout" xml:space="preserve">
+    <value>Layout</value>
+  </data>
+  <data name="Settings_Check_ShowPipelinePane" xml:space="preserve">
+    <value>Show pipeline pane</value>
+  </data>
+  <data name="Settings_Check_ShowSegmentsPane" xml:space="preserve">
+    <value>Show segments pane</value>
+  </data>
+  <data name="Settings_Hint_PaneVisibility" xml:space="preserve">
+    <value>Use these toggles to restore a pane if it has been hidden from the main window.</value>
+  </data>
+  <data name="Settings_Check_SwapPaneSides" xml:space="preserve">
+    <value>Swap pane sides</value>
+  </data>
+  <data name="Settings_Hint_SwapPaneSides" xml:space="preserve">
+    <value>Moves the pipeline pane to the right and the segments pane to the left.</value>
+  </data>
+  <data name="Settings_Hint_PaneResize" xml:space="preserve">
+    <value>Double-click a pane divider to restore that pane to its default width.</value>
+  </data>
   <data name="Settings_Option_AutoSystem" xml:space="preserve">
     <value>Auto (system)</value>
   </data>
@@ -543,14 +573,23 @@
   <data name="Settings_Label_PlayPauseHotkey" xml:space="preserve">
     <value>Play/Pause:</value>
   </data>
-  <data name="Settings_Label_ToggleSegmentsHotkey" xml:space="preserve">
-    <value>Toggle Segment Panel:</value>
+  <data name="Settings_Label_ToggleLeftPaneHotkey" xml:space="preserve">
+    <value>Toggle Left Pane:</value>
+  </data>
+  <data name="Settings_Label_ToggleRightPaneHotkey" xml:space="preserve">
+    <value>Toggle Right Pane:</value>
   </data>
   <data name="Settings_Label_ToggleDubHotkey" xml:space="preserve">
     <value>Toggle Dub Mode:</value>
   </data>
   <data name="Settings_Label_ToggleFullscreenHotkey" xml:space="preserve">
     <value>Toggle Fullscreen:</value>
+  </data>
+  <data name="Common_Left" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="Common_Right" xml:space="preserve">
+    <value>Right</value>
   </data>
   <data name="Settings_Group_EmbeddedPlayback" xml:space="preserve">
     <value>Embedded playback</value>
@@ -823,46 +862,46 @@
     <value>Merge source into target - this updates the transcript permanently</value>
   </data>
   <data name="Wizard_Footer_Hint" xml:space="preserve">
-    <value>Finish saves voice and reference changes. Cancel discards all edits.</value>
+    <value>Finish: save changes. Cancel: discard edits.</value>
   </data>
   <data name="Wizard_Button_Cancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
   <data name="Wizard_Tooltip_Cancel" xml:space="preserve">
-    <value>Discard all changes and close</value>
+    <value>Discard edits</value>
   </data>
   <data name="Wizard_Button_Finish" xml:space="preserve">
     <value>Finish</value>
   </data>
   <data name="Wizard_Tooltip_Finish" xml:space="preserve">
-    <value>Apply voice and reference changes to the session</value>
+    <value>Save changes</value>
   </data>
   <data name="Wizard_Tooltip_Close" xml:space="preserve">
     <value>Close wizard</value>
   </data>
   <data name="Wizard_Tooltip_CloseDiscard" xml:space="preserve">
-    <value>Close wizard (discard changes)</value>
+    <value>Discard changes</value>
   </data>
   <data name="Wizard_Hint_TopBanner" xml:space="preserve">
-    <value>Assign voices to speakers and set reference audio clips. Use the preview to find good clips, then click 'Use Playhead' to grab the current moment.</value>
+    <value>Assign voices and set reference clips.</value>
   </data>
   <data name="Wizard_Toggle_NeedsAttention" xml:space="preserve">
     <value>Show needs attention</value>
   </data>
   <data name="Wizard_Tooltip_NeedsAttention" xml:space="preserve">
-    <value>Only show speakers that need review or have poor reference</value>
+    <value>Show speakers needing review</value>
   </data>
   <data name="Wizard_Button_ResetAll" xml:space="preserve">
     <value>Reset All</value>
   </data>
   <data name="Wizard_Tooltip_ResetAll" xml:space="preserve">
-    <value>Clear all draft changes and start fresh</value>
+    <value>Clear all changes</value>
   </data>
   <data name="Wizard_Hint_ScrubPreview" xml:space="preserve">
-    <value>Scrub through the video to find good audio clips. Click 'Use Playhead' on a speaker to grab the current moment as their reference.</value>
+    <value>Scrub to find clips; click Use Playhead.</value>
   </data>
   <data name="Wizard_Hint_LinuxMacFallback" xml:space="preserve">
-    <value>On Linux/macOS, use the main window to scrub through video. When you find a good moment, come back here and click 'Use Playhead' for that speaker.</value>
+    <value>Scrub in main window, return here, click Use Playhead.</value>
   </data>
   <data name="Wizard_Tooltip_SeekSlider" xml:space="preserve">
     <value>Drag to seek through the video</value>

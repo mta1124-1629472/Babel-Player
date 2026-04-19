@@ -70,7 +70,7 @@ public sealed class SessionSnapshotStore
         try
         {
             var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
-            File.WriteAllText(StateFilePath, json);
+            JsonStorePersistence.AtomicWriteText(StateFilePath, json);
         }
         catch (Exception ex)
         {
@@ -93,7 +93,7 @@ public sealed class SessionSnapshotStore
         try
         {
             var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
-            await File.WriteAllTextAsync(StateFilePath, json).ConfigureAwait(false);
+            await JsonStorePersistence.AtomicWriteTextAsync(StateFilePath, json).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -107,9 +107,6 @@ public sealed class SessionSnapshotStore
 
     private string RecoverUnreadableState(string statusMessage, Exception? ex = null)
     {
-        var backupPath = $"{StateFilePath}.corrupt.{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
-        File.Move(StateFilePath, backupPath, overwrite: true);
-
         if (ex is not null)
         {
             _log.Error(statusMessage, ex);
@@ -117,6 +114,17 @@ public sealed class SessionSnapshotStore
         else
         {
             _log.Warning(statusMessage);
+        }
+
+        string? backupPath = null;
+        try
+        {
+            backupPath = JsonStorePersistence.MoveUnreadableFileToBackup(StateFilePath);
+        }
+        catch (Exception moveEx)
+        {
+            _log.Error($"Failed to quarantine unreadable session snapshot '{StateFilePath}'.", moveEx);
+            return $"{statusMessage} The unreadable file could not be moved: {moveEx.Message}.";
         }
 
         _log.Warning($"Unreadable session snapshot was moved to {backupPath}.");

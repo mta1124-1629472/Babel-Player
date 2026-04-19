@@ -10,7 +10,10 @@ namespace Babel.Player.Services;
 /// <summary>Runs ffmpeg with a pre-built <see cref="ExportVideoPlan"/> argument list.</summary>
 public static class FfmpegVideoExportRunner
 {
-    public static async Task RunPlanAsync(ExportVideoPlan plan, CancellationToken cancellationToken = default)
+    public static async Task RunPlanAsync(
+        ExportVideoPlan plan,
+        AppLog? log = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -28,6 +31,13 @@ public static class FfmpegVideoExportRunner
 
         foreach (var arg in plan.FfmpegArguments)
             psi.ArgumentList.Add(arg);
+
+        log?.Debug(
+            $"Video export plan: source='{plan.SourceMediaPath}', output='{plan.OutputPath}', " +
+            $"includeDub={plan.IncludeTtsAudio}, includeSoftCaptions={plan.IncludeSoftCaptions}, " +
+            $"burnInCaptions={plan.BurnInCaptions}, subtitle='{plan.SubtitleFilePath ?? "<none>"}', " +
+            $"inputs=[{string.Join(", ", plan.InputFiles)}]");
+        log?.Debug($"Video export ffmpeg args: {ProcessArgFormatter.FormatArgs(plan.FfmpegArguments)}");
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start ffmpeg for video export.");

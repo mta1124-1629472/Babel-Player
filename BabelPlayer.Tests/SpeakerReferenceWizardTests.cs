@@ -198,6 +198,7 @@ public sealed class SpeakerReferenceWizardTests
             transcriptPath,
             """
             {
+              "schema_version": "2.0",
               "language": "en",
               "language_probability": 1,
               "segments": [
@@ -212,6 +213,7 @@ public sealed class SpeakerReferenceWizardTests
             translationPath,
             """
             {
+              "schema_version": "2.0",
               "sourceLanguage": "en",
               "targetLanguage": "de",
               "segments": [

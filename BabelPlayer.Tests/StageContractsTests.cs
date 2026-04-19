@@ -150,24 +150,20 @@ public sealed class StageContractsTests
         Assert.Equal("googletrans", request.ModelName);
     }
 
-    // ?? SingleSegmentTranslationRequest ????????????????????????????????????????
+    // ?? SingleSegmentTranslationTextRequest ????????????????????????????????????
 
     [Fact]
-    public void SingleSegmentTranslationRequest_CreatesValidRecord()
+    public void SingleSegmentTranslationTextRequest_CreatesValidRecord()
     {
-        var request = new SingleSegmentTranslationRequest(
+        var request = new SingleSegmentTranslationTextRequest(
             "Hola mundo",
             "segment_0.0",
-            "translation.json",
-            "output.json",
             "es",
             "en",
             "googletrans");
 
         Assert.Equal("Hola mundo", request.SourceText);
         Assert.Equal("segment_0.0", request.SegmentId);
-        Assert.Equal("translation.json", request.TranslationJsonPath);
-        Assert.Equal("output.json", request.OutputJsonPath);
         Assert.Equal("es", request.SourceLanguage);
         Assert.Equal("en", request.TargetLanguage);
         Assert.Equal("googletrans", request.ModelName);

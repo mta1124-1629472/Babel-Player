@@ -56,7 +56,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(InferenceStage.Transcription, planner.RequestedStages[0]);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "sample.json"),
+            Path.Combine("transcripts", "sample.json.work"),
             committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal("sample.mp4", Path.GetFileName(session.CurrentSession.IngestedMediaPath));
@@ -108,7 +108,7 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(vocalsPath, engine.LastTranscriptionRequest!.SourceAudioPath);
         Assert.NotNull(committer.TranscriptionCommit);
         Assert.EndsWith(
-            Path.Combine("transcripts", "original.json"),
+            Path.Combine("transcripts", "original.json.work"),
             committer.TranscriptionCommit!.Value.TranscriptPath,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -245,11 +245,11 @@ public sealed class ExtractedOrchestratorTests
         Assert.Equal(1, providers.CreateTranslationServiceCalls);
         Assert.NotNull(providers.TranslationService);
         Assert.NotNull(committer.TranslationCommit);
-        Assert.Equal("es", committer.TranslationCommit!.Value.SourceLanguage);
-        Assert.Equal("en", committer.TranslationCommit.Value.TargetLanguage);
+        Assert.Equal("es", committer.TranslationCommit!.Value.Snapshot.SourceLanguage);
+        Assert.Equal("en", committer.TranslationCommit.Value.Snapshot.TargetLanguage);
         Assert.EndsWith(
-            Path.Combine("translations", "input_en.json"),
-            committer.TranslationCommit.Value.TranslationPath,
+            Path.Combine("translations", "input_en.json.work"),
+            committer.TranslationCommit.Value.Snapshot.WorkingTranslationPath,
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -317,6 +317,79 @@ public sealed class ExtractedOrchestratorTests
             update => !update.IsIndeterminate
                    && Math.Abs(update.Progress01 - 1.0) < 0.001
                    && update.Detail.Contains("Preparing translation model", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task TranslationOrchestrator_ExecuteAsync_UsesCapturedSnapshotAfterSettingsMutation()
+    {
+        using var scope = new TestScope();
+        var transcriptPath = scope.CreateFile("input.json", "{}");
+        var settings = CreateSettings();
+        settings.TranslationProvider = "provider-a";
+        settings.TranslationModel = "model-a";
+        var session = new FakeSessionStateAccessor(
+            settings,
+            scope.SessionDirectory,
+            WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+            {
+                TranscriptPath = transcriptPath,
+                SourceLanguage = "es",
+            });
+        var providers = new FakeProviderLifecycleManager();
+        providers.PrepareTranslationExecutionSnapshotAsyncImpl = (stagePlan, path, sourceLanguage, targetLanguage, _, _) =>
+        {
+            var provider = new StubTranslationProvider();
+            var leases = new ProviderLeaseManager<ITranslationProvider>(scope.Log, "test-translation");
+            var lease = leases.AcquireOrCreate(() => provider, stagePlan.ProviderId);
+            session.CurrentSettings.TranslationProvider = "provider-b";
+            session.CurrentSettings.TranslationModel = "model-b";
+            return Task.FromResult(
+                new TranslationExecutionSnapshot(
+                    Guid.NewGuid(),
+                    session.CurrentSession.SessionId,
+                    1,
+                    1,
+                    stagePlan,
+                    lease,
+                    "model-a",
+                    sourceLanguage,
+                    targetLanguage,
+                    path,
+                    ArtifactIdentity.Capture(path),
+                    Path.Combine(scope.SessionDirectory, "translations", "input_en.json"),
+                    Path.Combine(scope.SessionDirectory, "translations", "input_en.json.work")));
+        };
+        var committer = new FakeSessionCommitter();
+        var engine = new FakeInferenceExecutionEngine
+        {
+            TranslateAsyncImpl = (_, request, _) => Task.FromResult(
+                new TranslationResult(
+                    true,
+                    [new TranslatedSegment(0, 1, "hola", "hello")],
+                    request.SourceLanguage,
+                    request.TargetLanguage,
+                    null)),
+        };
+        var orchestrator = new TranslationOrchestrator(
+            session,
+            new FakeStageExecutionPlanner(),
+            providers,
+            committer,
+            engine,
+            scope.Log);
+
+        await orchestrator.ExecuteAsync(
+            progress: null,
+            targetLanguage: "en",
+            sourceLanguage: "es",
+            stageContext: null,
+            cancellationToken: CancellationToken.None);
+
+        Assert.NotNull(engine.LastTranslationRequest);
+        Assert.Equal("model-a", engine.LastTranslationRequest!.ModelName);
+        Assert.NotNull(committer.TranslationCommit);
+        Assert.Equal("model-a", committer.TranslationCommit!.Value.Snapshot.Model);
+        Assert.NotEqual("provider-b", committer.TranslationCommit.Value.Snapshot.Plan.ProviderId);
     }
 
     [Fact]
@@ -486,6 +559,8 @@ public sealed class ExtractedOrchestratorTests
 
     private sealed class FakeProviderLifecycleManager : IProviderLifecycleManager
     {
+        private readonly ProviderLeaseManager<ITranslationProvider> _translationLeases =
+            new(new AppLog(Path.Combine(Path.GetTempPath(), "babel-player-tests-providerlease.log")), "test-translation");
         private ITranscriptionProvider _createdTranscriptionProvider = new StubTranscriptionProvider();
         private ITranslationProvider _createdTranslationProvider = new StubTranslationProvider();
 
@@ -500,6 +575,8 @@ public sealed class ExtractedOrchestratorTests
         public Func<IProgress<double>?, PipelineStageContext?, CancellationToken, Task>? EnsureTranscriptionProviderReadyAsyncImpl { get; set; }
 
         public Func<IProgress<double>?, CancellationToken, Task>? EnsureTranslationExecutionReadyAsyncImpl { get; set; }
+
+        public Func<StageExecutionPlan, string, string, string, IProgress<double>?, CancellationToken, Task<TranslationExecutionSnapshot>>? PrepareTranslationExecutionSnapshotAsyncImpl { get; set; }
 
         public Func<IProgress<double>?, PipelineStageContext?, CancellationToken, Task<string>>? SeparateVocalsAsyncImpl { get; set; }
 
@@ -522,11 +599,74 @@ public sealed class ExtractedOrchestratorTests
             EnsureTranscriptionProviderReadyAsyncImpl?.Invoke(progress, stageContext, cancellationToken)
             ?? Task.CompletedTask;
 
-        public Task EnsureTranslationExecutionReadyAsync(
+        public Task<TranslationExecutionSnapshot> PrepareTranslationExecutionSnapshotAsync(
+            StageExecutionPlan stagePlan,
+            string transcriptPath,
+            string normalizedSourceLanguage,
+            string normalizedTargetLanguage,
             IProgress<double>? progress,
-            CancellationToken cancellationToken) =>
-            EnsureTranslationExecutionReadyAsyncImpl?.Invoke(progress, cancellationToken)
-            ?? Task.CompletedTask;
+            CancellationToken cancellationToken)
+        {
+            if (PrepareTranslationExecutionSnapshotAsyncImpl is not null)
+            {
+                return PrepareTranslationExecutionSnapshotAsyncImpl(
+                    stagePlan,
+                    transcriptPath,
+                    normalizedSourceLanguage,
+                    normalizedTargetLanguage,
+                    progress,
+                    cancellationToken);
+            }
+
+            var readinessTask = EnsureTranslationExecutionReadyAsyncImpl?.Invoke(progress, cancellationToken)
+                ?? Task.CompletedTask;
+            if (!readinessTask.IsCompletedSuccessfully)
+                return AwaitPreparedSnapshotAsync(readinessTask, stagePlan, transcriptPath, normalizedSourceLanguage, normalizedTargetLanguage);
+
+            TranslationService ??= CreateTranslationService();
+            var lease = _translationLeases.AcquireOrCreate(() => TranslationService, stagePlan.ProviderId);
+            return Task.FromResult(
+                new TranslationExecutionSnapshot(
+                    Guid.NewGuid(),
+                    Guid.NewGuid(),
+                    1,
+                    1,
+                    stagePlan,
+                    lease,
+                    "test-model",
+                    normalizedSourceLanguage,
+                    normalizedTargetLanguage,
+                    transcriptPath,
+                    ArtifactIdentity.Capture(transcriptPath),
+                    Path.Combine(Path.GetDirectoryName(transcriptPath)!, "translations", $"{Path.GetFileNameWithoutExtension(transcriptPath)}_{normalizedTargetLanguage}.json"),
+                    Path.Combine(Path.GetDirectoryName(transcriptPath)!, "translations", $"{Path.GetFileNameWithoutExtension(transcriptPath)}_{normalizedTargetLanguage}.json.work")));
+        }
+
+        private async Task<TranslationExecutionSnapshot> AwaitPreparedSnapshotAsync(
+            Task readinessTask,
+            StageExecutionPlan stagePlan,
+            string transcriptPath,
+            string normalizedSourceLanguage,
+            string normalizedTargetLanguage)
+        {
+            await readinessTask.ConfigureAwait(false);
+            TranslationService ??= CreateTranslationService();
+            var lease = _translationLeases.AcquireOrCreate(() => TranslationService, stagePlan.ProviderId);
+            return new TranslationExecutionSnapshot(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                1,
+                1,
+                stagePlan,
+                lease,
+                "test-model",
+                normalizedSourceLanguage,
+                normalizedTargetLanguage,
+                transcriptPath,
+                ArtifactIdentity.Capture(transcriptPath),
+                Path.Combine(Path.GetDirectoryName(transcriptPath)!, "translations", $"{Path.GetFileNameWithoutExtension(transcriptPath)}_{normalizedTargetLanguage}.json"),
+                Path.Combine(Path.GetDirectoryName(transcriptPath)!, "translations", $"{Path.GetFileNameWithoutExtension(transcriptPath)}_{normalizedTargetLanguage}.json.work"));
+        }
 
         public Task<string> SeparateVocalsAsync(
             IProgress<double>? progress,
@@ -540,7 +680,7 @@ public sealed class ExtractedOrchestratorTests
     {
         public (TranscriptionResult Result, string TranscriptPath)? TranscriptionCommit { get; private set; }
 
-        public (TranslationResult Result, string TranslationPath, string SourceLanguage, string TargetLanguage)? TranslationCommit { get; private set; }
+        public (TranslationExecutionSnapshot Snapshot, TranslationResult Result)? TranslationCommit { get; private set; }
 
         public Task CommitTranscriptionSessionStateAsync(TranscriptionResult result, string transcriptPath)
         {
@@ -549,12 +689,10 @@ public sealed class ExtractedOrchestratorTests
         }
 
         public Task CommitTranslationSessionStateAsync(
-            TranslationResult result,
-            string translationPath,
-            string sourceLanguage,
-            string targetLanguage)
+            TranslationExecutionSnapshot snapshot,
+            TranslationResult result)
         {
-            TranslationCommit = (result, translationPath, sourceLanguage, targetLanguage);
+            TranslationCommit = (snapshot, result);
             return Task.CompletedTask;
         }
     }
@@ -621,9 +759,9 @@ public sealed class ExtractedOrchestratorTests
                 ?? Task.FromException<TranslationResult>(new InvalidOperationException("TranslateAsync was not configured."));
         }
 
-        public Task<TranslationResult> TranslateSingleSegmentAsync(
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
             ITranslationProvider provider,
-            SingleSegmentTranslationRequest request,
+            SingleSegmentTranslationTextRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
@@ -661,8 +799,8 @@ public sealed class ExtractedOrchestratorTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<TranslationResult> TranslateSingleSegmentAsync(
-            SingleSegmentTranslationRequest request,
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(
+            SingleSegmentTranslationTextRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

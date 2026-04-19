@@ -27,6 +27,9 @@ public sealed class SettingsServiceTests : IDisposable
         catch { }
     }
 
+    private string[] FindCorruptBackups() =>
+        Directory.GetFiles(_dir, "app-settings.json.corrupt.*", SearchOption.TopDirectoryOnly);
+
     [Fact]
     public void LoadOrDefault_LegacyContainerizedRuntime_MigratesToGpuProfilesAndDockerBackend()
     {
@@ -147,5 +150,89 @@ public sealed class SettingsServiceTests : IDisposable
         var loaded = service.LoadOrDefault();
 
         Assert.True(loaded.VocalSeparationEnabled);
+    }
+
+    [Fact]
+    public void SaveAndLoad_PaneLayout_RoundTrips()
+    {
+        var service = new SettingsService(_settingsPath, _log);
+        service.Save(new AppSettings
+        {
+            IsPipelinePaneVisible = false,
+            IsSegmentsPaneVisible = true,
+            PipelinePaneWidth = 312,
+            SegmentsPaneWidth = 418,
+            SwapPaneSides = true
+        });
+
+        var loaded = service.LoadOrDefault();
+
+        Assert.False(loaded.IsPipelinePaneVisible);
+        Assert.True(loaded.IsSegmentsPaneVisible);
+        Assert.Equal(312, loaded.PipelinePaneWidth, precision: 3);
+        Assert.Equal(418, loaded.SegmentsPaneWidth, precision: 3);
+        Assert.True(loaded.SwapPaneSides);
+    }
+
+    [Fact]
+    public void LoadOrDefault_InvalidPaneWidths_FallBackToDefaults()
+    {
+        // Valid JSON so deserialization succeeds and NormalizePaneWidth runs per field (invalid numbers, not a thrown JsonException).
+        File.WriteAllText(
+            _settingsPath,
+            """
+            {
+              "PipelinePaneWidth": -1,
+              "SegmentsPaneWidth": 0
+            }
+            """);
+
+        var service = new SettingsService(_settingsPath, _log);
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(AppSettings.PipelinePaneDefaultWidth, loaded.PipelinePaneWidth, precision: 3);
+        Assert.Equal(AppSettings.SegmentsPaneDefaultWidth, loaded.SegmentsPaneWidth, precision: 3);
+    }
+
+    [Fact]
+    public void Save_InvalidPaneWidths_WritesDefaults()
+    {
+        var service = new SettingsService(_settingsPath, _log);
+        service.Save(new AppSettings
+        {
+            PipelinePaneWidth = double.PositiveInfinity,
+            SegmentsPaneWidth = 0
+        });
+
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(AppSettings.PipelinePaneDefaultWidth, loaded.PipelinePaneWidth, precision: 3);
+        Assert.Equal(AppSettings.SegmentsPaneDefaultWidth, loaded.SegmentsPaneWidth, precision: 3);
+    }
+
+    [Fact]
+    public void LoadOrDefault_CorruptJson_MovesUnreadableFileToBackup()
+    {
+        File.WriteAllText(_settingsPath, "{ definitely not valid json");
+
+        var service = new SettingsService(_settingsPath, _log);
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(new AppSettings().Theme, loaded.Theme);
+        Assert.False(File.Exists(_settingsPath));
+        Assert.Single(FindCorruptBackups());
+    }
+
+    [Fact]
+    public void LoadOrDefault_WhitespaceFile_MovesUnreadableFileToBackup()
+    {
+        File.WriteAllText(_settingsPath, "   \r\n   ");
+
+        var service = new SettingsService(_settingsPath, _log);
+        var loaded = service.LoadOrDefault();
+
+        Assert.Equal(new AppSettings().Theme, loaded.Theme);
+        Assert.False(File.Exists(_settingsPath));
+        Assert.Single(FindCorruptBackups());
     }
 }

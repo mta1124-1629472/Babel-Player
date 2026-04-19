@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text.Json.Serialization;
 using Babel.Player.Models;
 
@@ -11,6 +12,8 @@ public sealed class AppSettings
 {
     public const string InferenceServiceUrlEnvVar = "INFERENCE_SERVICE_URL";
     public const string ManagedGpuServiceUrl = "http://127.0.0.1:18000";
+    public const double PipelinePaneDefaultWidth = 260;
+    public const double SegmentsPaneDefaultWidth = 340;
 
     /// <summary>Transcription provider identifier (e.g. "faster-whisper", "openai-whisper-api").</summary>
     public string TranscriptionProvider { get; set; } = ProviderNames.FasterWhisper;
@@ -59,6 +62,31 @@ public sealed class AppSettings
     /// Enables optional vocal separation before transcription when container capability is available.
     /// </summary>
     public bool VocalSeparationEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Whether the pipeline pane is open in the main window.
+    /// </summary>
+    public bool IsPipelinePaneVisible { get; set; } = true;
+
+    /// <summary>
+    /// Whether the segments pane is open in the main window.
+    /// </summary>
+    public bool IsSegmentsPaneVisible { get; set; } = true;
+
+    /// <summary>
+    /// Persisted width of the pipeline pane.
+    /// </summary>
+    public double PipelinePaneWidth { get; set; } = PipelinePaneDefaultWidth;
+
+    /// <summary>
+    /// Persisted width of the segments pane.
+    /// </summary>
+    public double SegmentsPaneWidth { get; set; } = SegmentsPaneDefaultWidth;
+
+    /// <summary>
+    /// When true, the pipeline and segments panes swap physical sides.
+    /// </summary>
+    public bool SwapPaneSides { get; set; }
 
     /// <summary>
     /// Optional lower bound on the number of speakers to detect.
@@ -274,10 +302,32 @@ public sealed class AppSettings
     /// <summary>When false, the app may show a one-time notice about managed GPU host warm-up time.</summary>
     public bool ShownManagedBackendWarmupNotice { get; set; }
 
+    private string _appLanguage = "auto";
+
     /// <summary>
     /// UI language.  <c>"auto"</c> means "follow the OS locale on each launch" (mirrors the
     /// <see cref="Theme"/> <c>"System"</c> sentinel); otherwise a lowercase ISO 639-1 code
     /// supported by the app's localization catalog (e.g. <c>"de"</c>, <c>"ja"</c>).
+    /// Values are normalized to lowercase on set; unknown values are replaced with "auto".
     /// </summary>
-    public string AppLanguage { get; set; } = "auto";
+    public string AppLanguage
+    {
+        get => _appLanguage;
+        set
+        {
+            var normalized = value?.Trim().ToLowerInvariant() ?? "auto";
+            if (string.Equals(normalized, "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                _appLanguage = "auto";
+            }
+            else if (LocalizationService.SupportedUiLanguages.Contains(normalized))
+            {
+                _appLanguage = normalized;
+            }
+            else
+            {
+                _appLanguage = "auto";
+            }
+        }
+    }
 }

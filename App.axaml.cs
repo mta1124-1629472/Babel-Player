@@ -201,6 +201,14 @@ public partial class App : Application
         if (repoRoot is null)
             return;
 
+        if (HasNativeDepsInRepo(repoRoot, rid))
+        {
+            CopyRepoNativeDepsToOutput(repoRoot, rid);
+            log.Info("Startup native deps copied from repo cache.");
+            LogResolvedAudioToolPaths(log, "startup-repo-cache");
+            return;
+        }
+
         var markerDir = Path.Combine(appDataRoot, "state");
         Directory.CreateDirectory(markerDir);
         var markerPath = Path.Combine(markerDir, "win-native-deps-bootstrap.marker");
@@ -233,6 +241,14 @@ public partial class App : Application
             && File.Exists(Path.Combine(appDir, "tools", rid, "uv.exe"))
             && File.Exists(Path.Combine(appDir, "tools", rid, "ffmpeg.exe"))
             && File.Exists(Path.Combine(appDir, "tools", rid, "ffprobe.exe"));
+    }
+
+    private static bool HasNativeDepsInRepo(string repoRoot, string rid)
+    {
+        return File.Exists(Path.Combine(repoRoot, "native", rid, "libmpv-2.dll"))
+            && File.Exists(Path.Combine(repoRoot, "tools", rid, "uv.exe"))
+            && File.Exists(Path.Combine(repoRoot, "tools", rid, "ffmpeg.exe"))
+            && File.Exists(Path.Combine(repoRoot, "tools", rid, "ffprobe.exe"));
     }
 
     private static bool ShouldAttemptNativeDepsBootstrap(string markerPath)

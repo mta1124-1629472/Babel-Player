@@ -69,6 +69,8 @@ dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj -c Release --filter "Cate
 
 `BabelPlayer.Tests/Quarantined/` stores legacy tests that are intentionally excluded from compile.
 
+Some tests remain in the compiled project but are tagged `[Trait("Category", "Quarantined")]` so routine filters (for example Codex “Test (Excluding Quarantined)”) skip them. Use the **directory** for legacy suites you do not want built at all; use the **trait** when a test should stay compiled but excluded from default agent/CI subsets.
+
 Rules:
 
 - keep them on disk only if they provide future rewrite value

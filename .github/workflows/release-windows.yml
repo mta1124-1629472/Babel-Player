@@ -51,9 +51,9 @@ jobs:
         run: |
           $arch = "${{ matrix.fetch_arch }}"
           if ($arch -ne "") {
-            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg -Architecture $arch
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -Architecture $arch
           } else {
-            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1
           }
 
       - name: Setup .NET 10
@@ -124,6 +124,7 @@ jobs:
 
           Copy-Item -Path "$native/libmpv-2.dll" -Destination "./publish/" -Force
           Copy-Item -Path "$tools/ffmpeg.exe"    -Destination "./publish/" -Force
+          Copy-Item -Path "$tools/ffprobe.exe"   -Destination "./publish/" -Force
           Copy-Item -Path "$tools/uv.exe"        -Destination "./publish/" -Force
 
       - name: Verify publish output
@@ -131,7 +132,7 @@ jobs:
         run: |
           $missing = @()
 
-          foreach ($f in @("BabelPlayer.exe", "ffmpeg.exe", "libmpv-2.dll", "uv.exe")) {
+          foreach ($f in @("BabelPlayer.exe", "ffmpeg.exe", "ffprobe.exe", "libmpv-2.dll", "uv.exe")) {
             if (-not (Test-Path "./publish/$f")) { $missing += $f }
           }
 

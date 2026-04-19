@@ -7,11 +7,15 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Threading;
 using Babel.Player.Models;
 using Babel.Player.Resources;
 using Babel.Player.Services;
+using Babel.Player.Services.Settings;
+using Babel.Player.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -19,23 +23,48 @@ namespace Babel.Player.ViewModels;
 
 public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, IDisposable
 {
+    private enum DubPreviewAudioMode
+    {
+        DuckSource,
+        SeparatedAmbiance,
+    }
+
     private static readonly string DebugLogPath = ResolveDebugLogPath();
     private readonly EmbeddedPlaybackViewModel _parent;
     private readonly SessionWorkflowCoordinator _coordinator;
+    private readonly object _ambianceTransportGate = new();
     private string? _lastKnownSourceMediaPath;
+    private string? _lastKnownAmbianceAudioPath;
+    private string? _loadedAmbiancePath;
+    private string? _resolvedAmbiancePreviewPath;
+    private DubPreviewAudioMode? _lastReportedDubPreviewMode;
+    private string? _lastReportedAmbiancePath;
     private bool _isUpdatingPositionFromTimer;
     private bool _isUpdatingActiveSegment;
+    private bool _isStartingAmbiancePlayback;
     private WorkflowSegmentState? _lastDubbedSegment;
     private WorkflowSegmentState[] _sortedSegments = [];
     private double _preMuteVolume = 1.0;
     private bool _isDucked;
-    private bool _preFullscreenSegmentPaneVisible = true;
     private string? _activeSrtPath;
     private ObservableCollection<WorkflowSegmentState>? _observedSegments;
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _controlsHideTimer;
+    private int _ambiancePlayRequestVersion;
     private const int ControlsHideDelayMs = 3000;
+    private const double AmbianceSyncThresholdMs = 50.0;
     private const double PositionUpdateThresholdMs = 0.5;
+    private const double PipelinePaneMinWidth = 220;
+    private const double PipelinePaneMaxWidth = 420;
+    private const double SegmentsPaneMinWidth = 280;
+    private const double SegmentsPaneMaxWidth = 520;
+    private const double PlayerPaneMinWidth = 460;
+    private const double SplitterWidth = 5;
+    private bool _isPipelinePaneVisible;
+    private bool _isSegmentsPaneVisible;
+    private double _pipelinePaneWidth;
+    private double _segmentsPaneWidth;
+    private bool _swapPaneSides;
 
     public EmbeddedPlaybackPreviewViewModel(
         EmbeddedPlaybackViewModel parent,
@@ -44,6 +73,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _parent = parent;
         _coordinator = coordinator;
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
+        _lastKnownAmbianceAudioPath = coordinator.CurrentSession.AmbianceAudioPath;
+        InvalidateAmbiancePreviewPathCache();
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
         _speechRate = coordinator.TtsPlaybackRate;
 
@@ -55,6 +86,11 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _controlsHideTimer.Tick += OnControlsHideTimerTick;
 
         _isBilingualSubtitlesOn = coordinator.CurrentSettings.BilingualSubtitlesEnabled;
+        _isPipelinePaneVisible = coordinator.CurrentSettings.IsPipelinePaneVisible;
+        _isSegmentsPaneVisible = coordinator.CurrentSettings.IsSegmentsPaneVisible;
+        _pipelinePaneWidth = NormalizePipelinePaneWidth(coordinator.CurrentSettings.PipelinePaneWidth);
+        _segmentsPaneWidth = NormalizeSegmentsPaneWidth(coordinator.CurrentSettings.SegmentsPaneWidth);
+        _swapPaneSides = coordinator.CurrentSettings.SwapPaneSides;
         LocalizationService.Instance.CultureChanged += OnLocalizationCultureChanged;
     }
 
@@ -92,17 +128,10 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
-    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
     private bool _isFullscreen;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SegmentPaneToggleLabel))]
-    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
-    private bool _isSegmentPaneVisible = true;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
-    [NotifyPropertyChangedFor(nameof(IsPanePullTabVisible))]
     private bool _isControlsVisible = true;
 
     [ObservableProperty]
@@ -134,9 +163,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     [NotifyPropertyChangedFor(nameof(AudioDuckingLabel))]
     private double _audioDuckingDb = -15.0;
 
-    public string SegmentPaneToggleLabel => IsSegmentPaneVisible ? "◄" : "►";
     public bool IsPullTabVisible => !IsFullscreen || IsControlsVisible;
-    public bool IsPanePullTabVisible => !IsSegmentPaneVisible && IsPullTabVisible;
     public string PlayPauseSourceLabel => IsSourcePaused ? "▶" : "||";
     public string VolumeIconLabel => IsMuted || SourceVolume == 0
         ? "🔇"
@@ -145,6 +172,35 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             : SourceVolume < 0.51
                 ? "🔉"
                 : "🔊";
+    public bool IsPipelinePaneVisible => _isPipelinePaneVisible;
+    public bool IsSegmentsPaneVisible => _isSegmentsPaneVisible;
+    public double PipelinePaneWidth => _pipelinePaneWidth;
+    public double SegmentsPaneWidth => _segmentsPaneWidth;
+    public bool SwapPaneSides => _swapPaneSides;
+    public bool IsPipelinePaneOnLeft => !SwapPaneSides;
+    public bool IsSegmentsPaneOnLeft => SwapPaneSides;
+    public bool IsPipelinePaneShown => !IsFullscreen && IsPipelinePaneVisible;
+    public bool IsSegmentsPaneShown => !IsFullscreen && IsSegmentsPaneVisible;
+    public bool IsLeftPaneVisible => !IsFullscreen && (IsPipelinePaneOnLeft ? IsPipelinePaneVisible : IsSegmentsPaneVisible);
+    public bool IsRightPaneVisible => !IsFullscreen && (IsPipelinePaneOnLeft ? IsSegmentsPaneVisible : IsPipelinePaneVisible);
+    public double LeftPaneWidth => IsPipelinePaneOnLeft ? PipelinePaneWidth : SegmentsPaneWidth;
+    public double RightPaneWidth => IsPipelinePaneOnLeft ? SegmentsPaneWidth : PipelinePaneWidth;
+    public int PipelinePaneColumn => IsPipelinePaneOnLeft ? 0 : 4;
+    public int SegmentsPaneColumn => IsSegmentsPaneOnLeft ? 0 : 4;
+    public Thickness PipelinePaneMargin => IsPipelinePaneOnLeft ? new Thickness(8, 0, 0, 8) : new Thickness(0, 0, 8, 8);
+    public Thickness SegmentsPaneMargin => IsSegmentsPaneOnLeft ? new Thickness(8, 0, 0, 8) : new Thickness(0, 0, 8, 8);
+    public Thickness PipelinePaneBorderThickness => IsPipelinePaneOnLeft ? new Thickness(0, 0, 1, 0) : new Thickness(1, 0, 0, 0);
+    public Thickness SegmentsPaneBorderThickness => IsSegmentsPaneOnLeft ? new Thickness(0, 0, 1, 0) : new Thickness(1, 0, 0, 0);
+    public string LeftPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Pipeline") : GetLocalized("Section_Segments");
+    public string RightPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Segments") : GetLocalized("Section_Pipeline");
+    public string LeftPaneTooltip => BuildPaneTooltip(isLeftSide: true, LeftPaneRole, MainWindowShortcutDefaults.ToggleLeftPaneLabel);
+    public string RightPaneTooltip => BuildPaneTooltip(isLeftSide: false, RightPaneRole, MainWindowShortcutDefaults.ToggleRightPaneLabel);
+    public string SegmentCountLabel => Segments.Count == 1
+        ? GetLocalized("Label_SegmentCountSingle")
+        : string.Format(
+            LocalizationService.Instance.CurrentCulture,
+            GetLocalized("Label_SegmentCountFormat"),
+            Segments.Count);
     [ObservableProperty]
     private bool _isCompactVideoChrome;
 
@@ -173,6 +229,19 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             ApplySubtitleState();
     }
 
+    public void SyncPaneLayoutFromSettings()
+    {
+        var changed = false;
+        changed |= SetPipelinePaneVisibleCore(_coordinator.CurrentSettings.IsPipelinePaneVisible);
+        changed |= SetSegmentsPaneVisibleCore(_coordinator.CurrentSettings.IsSegmentsPaneVisible);
+        changed |= SetPipelinePaneWidthCore(NormalizePipelinePaneWidth(_coordinator.CurrentSettings.PipelinePaneWidth));
+        changed |= SetSegmentsPaneWidthCore(NormalizeSegmentsPaneWidth(_coordinator.CurrentSettings.SegmentsPaneWidth));
+        changed |= SetSwapPaneSidesCore(_coordinator.CurrentSettings.SwapPaneSides);
+
+        if (changed)
+            NotifyPaneLayoutProjectionChanged();
+    }
+
     public void SyncDubMixControlFromSettings()
     {
         OnPropertyChanged(nameof(UsesAmbianceMixControl));
@@ -181,20 +250,18 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         OnPropertyChanged(nameof(DubMixControlDb));
         OnPropertyChanged(nameof(DubMixControlValueLabel));
 
-        // When vocal separation is enabled the slider writes AmbianceMixDb; the live
-        // preview would otherwise keep using the old AudioDuckingDb, making the
-        // control a no-op for what the user hears. Reapply volumes so preview
-        // tracks the ambience level too.
+        // Reapply volumes so preview immediately reflects either the real ambiance
+        // bed or the ducked-source fallback after settings/session changes.
         RecalculateOutputVolumes();
     }
 
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
-    public bool UsesAmbianceMixControl => _coordinator.CurrentSettings.VocalSeparationEnabled;
+    public bool UsesAmbianceMixControl => _resolvedAmbiancePreviewPath is not null;
     public string DubMixControlLabel => UsesAmbianceMixControl ? "Ambience" : "Duck";
     public string DubMixControlTooltip => UsesAmbianceMixControl
-        ? "Set separated ambiance level under the dub"
-        : "Lower source audio during dub preview";
+        ? "Set separated ambience level under dub preview"
+        : "Approximate dub preview by lowering source audio";
     public string DubMixControlValueLabel => $"{DubMixControlDb:F1} dB";
     public double DubMixControlDb
     {
@@ -220,13 +287,28 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     }
     public string SourcePositionFormatted => FormatMs(SourcePositionMs);
     public string SourceDurationFormatted => FormatMs(SourceDurationMs);
-    public string SegmentCountLabel => FormatSegmentCount(Segments.Count);
 
     public async Task HandleCurrentSessionChangedAsync()
     {
         var oldPath = _lastKnownSourceMediaPath;
+        var oldAmbiancePath = _lastKnownAmbianceAudioPath;
         var newPath = _coordinator.CurrentSession.SourceMediaPath;
+        var newAmbiancePath = _coordinator.CurrentSession.AmbianceAudioPath;
+        InvalidateAmbiancePreviewPathCache();
         IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
+
+        var sourceUnchanged = string.Equals(oldPath ?? "", newPath ?? "", StringComparison.OrdinalIgnoreCase);
+        var ambianceUnchanged = string.Equals(oldAmbiancePath ?? "", newAmbiancePath ?? "", StringComparison.OrdinalIgnoreCase);
+
+        if (!sourceUnchanged || !ambianceUnchanged)
+        {
+            PauseAmbiancePreview(resetLoadedPath: true);
+            _lastReportedDubPreviewMode = null;
+            _lastReportedAmbiancePath = null;
+        }
+
+        SyncDubMixControlFromSettings();
+        _lastKnownAmbianceAudioPath = newAmbiancePath;
 
         if (newPath != oldPath)
         {
@@ -236,6 +318,12 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             _isUpdatingActiveSegment = true;
             SelectedSegment = null;
             _isUpdatingActiveSegment = false;
+        }
+
+        if (sourceUnchanged && ambianceUnchanged && IsDubModeOn &&
+            ResolveDubPreviewAudioMode() == DubPreviewAudioMode.SeparatedAmbiance)
+        {
+            SyncSeparatedAmbiancePreview(shouldPlay: !IsSourcePaused);
         }
 
         if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
@@ -398,7 +486,6 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             {
                 if (IsDubModeOn)
                     SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
-
                 await Task.Run(player.Play);
                 IsSourcePaused = false;
                 _parent.ClearStatusErrorDetail();
@@ -482,8 +569,19 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     [RelayCommand]
     private void ToggleFullscreen() => IsFullscreen = !IsFullscreen;
 
+    [RelayCommand(CanExecute = nameof(CanTogglePanesWhileNotFullscreen))]
+    private void ToggleLeftPane() => TogglePaneForSide(isLeftSide: true);
+
+    [RelayCommand(CanExecute = nameof(CanTogglePanesWhileNotFullscreen))]
+    private void ToggleRightPane() => TogglePaneForSide(isLeftSide: false);
+
+    private bool CanTogglePanesWhileNotFullscreen() => !IsFullscreen;
+
     [RelayCommand]
-    private void ToggleSegmentPane() => IsSegmentPaneVisible = !IsSegmentPaneVisible;
+    private void ResetLeftPaneWidth() => ResetPaneWidthForSide(isLeftSide: true);
+
+    [RelayCommand]
+    private void ResetRightPaneWidth() => ResetPaneWidthForSide(isLeftSide: false);
 
     [RelayCommand]
     private void ToggleSubtitles()
@@ -496,6 +594,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     public void Dispose()
     {
+        PauseAmbiancePreview(resetLoadedPath: true);
         LocalizationService.Instance.CultureChanged -= OnLocalizationCultureChanged;
         if (_observedSegments is not null)
             _observedSegments.CollectionChanged -= OnSegmentsCollectionChanged;
@@ -534,6 +633,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             return;
 
         _coordinator.SourceMediaPlayer?.Seek((long)value);
+        if (IsDubModeOn && ResolveDubPreviewAudioMode() == DubPreviewAudioMode.SeparatedAmbiance)
+            SyncSeparatedAmbiancePreview(shouldPlay: !IsSourcePaused, forceSeek: true);
         if (IsDubModeOn && !IsSourcePaused)
             SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
     }
@@ -552,7 +653,11 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     {
         if (!value)
         {
+            _lastReportedDubPreviewMode = null;
+            _lastReportedAmbiancePath = null;
+            PauseAmbiancePreview();
             ApplyDubForSegment(null);
+            RecalculateOutputVolumes();
         }
         else if (!IsSourcePaused)
         {
@@ -564,16 +669,17 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     {
         if (value)
         {
-            _preFullscreenSegmentPaneVisible = IsSegmentPaneVisible;
-            IsSegmentPaneVisible = false;
             NotifyControlsActivity();
         }
         else
         {
-            IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible;
             _controlsHideTimer.Stop();
             IsControlsVisible = true;
         }
+
+        ToggleLeftPaneCommand.NotifyCanExecuteChanged();
+        ToggleRightPaneCommand.NotifyCanExecuteChanged();
+        NotifyPaneLayoutProjectionChanged();
     }
 
     partial void OnIsSubtitleModeOnChanged(bool value) => ApplySubtitleState();
@@ -584,10 +690,13 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         {
             _controlsHideTimer.Stop();
             IsControlsVisible = true;
+            PauseAmbiancePreview();
         }
         else
         {
             NotifyControlsActivity();
+            if (IsDubModeOn && ResolveDubPreviewAudioMode() == DubPreviewAudioMode.SeparatedAmbiance)
+                SyncSeparatedAmbiancePreview(shouldPlay: true, forceSeek: true);
         }
     }
 
@@ -606,8 +715,187 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _parent.SpeakerRouting.RebuildSpeakerIds(value, SelectedSegment?.SpeakerId);
     }
 
-    private void OnLocalizationCultureChanged(object? sender, CultureInfo culture) =>
+    public void ResizeLeftPane(double desiredWidth, double hostWidth) =>
+        ResizePaneForSide(isLeftSide: true, desiredWidth, hostWidth);
+
+    public void ResizeRightPane(double desiredWidth, double hostWidth) =>
+        ResizePaneForSide(isLeftSide: false, desiredWidth, hostWidth);
+
+    public void CommitPaneLayout() => PersistPaneLayout();
+
+    private void TogglePaneForSide(bool isLeftSide)
+    {
+        if (IsFullscreen)
+            return;
+
+        if (IsPipelineAssignedToSide(isLeftSide))
+        {
+            if (SetPipelinePaneVisibleCore(!GetPaneVisibilityForSide(isLeftSide)))
+                PersistPaneLayout();
+        }
+        else if (SetSegmentsPaneVisibleCore(!GetPaneVisibilityForSide(isLeftSide)))
+        {
+            PersistPaneLayout();
+        }
+
+        NotifyPaneLayoutProjectionChanged();
+    }
+
+    private void ResetPaneWidthForSide(bool isLeftSide)
+    {
+        var changed = IsPipelineAssignedToSide(isLeftSide)
+            ? SetPipelinePaneWidthCore(AppSettings.PipelinePaneDefaultWidth)
+            : SetSegmentsPaneWidthCore(AppSettings.SegmentsPaneDefaultWidth);
+
+        if (!changed)
+            return;
+
+        NotifyPaneLayoutProjectionChanged();
+        PersistPaneLayout();
+    }
+
+    private void ResizePaneForSide(bool isLeftSide, double desiredWidth, double hostWidth)
+    {
+        var changed = IsPipelineAssignedToSide(isLeftSide)
+            ? SetPipelinePaneWidthCore(ClampPaneWidthForRole(isPipelineRole: true, desiredWidth, hostWidth))
+            : SetSegmentsPaneWidthCore(ClampPaneWidthForRole(isPipelineRole: false, desiredWidth, hostWidth));
+
+        if (changed)
+            NotifyPaneLayoutProjectionChanged();
+    }
+
+    private bool GetPaneVisibilityForSide(bool isLeftSide) =>
+        IsPipelineAssignedToSide(isLeftSide) ? IsPipelinePaneVisible : IsSegmentsPaneVisible;
+
+    private bool IsPipelineAssignedToSide(bool isLeftSide) =>
+        isLeftSide ? IsPipelinePaneOnLeft : !IsPipelinePaneOnLeft;
+
+    private double ClampPaneWidthForRole(bool isPipelineRole, double desiredWidth, double hostWidth)
+    {
+        var minWidth = isPipelineRole ? PipelinePaneMinWidth : SegmentsPaneMinWidth;
+        var maxWidth = isPipelineRole ? PipelinePaneMaxWidth : SegmentsPaneMaxWidth;
+        var normalizedDesired = Math.Clamp(desiredWidth, minWidth, maxWidth);
+
+        if (hostWidth <= 0)
+            return normalizedDesired;
+
+        var otherPaneVisible = isPipelineRole ? IsSegmentsPaneVisible : IsPipelinePaneVisible;
+        var otherPaneWidth = otherPaneVisible
+            ? (isPipelineRole ? SegmentsPaneWidth : PipelinePaneWidth)
+            : 0;
+        var splitterCount = (IsPipelinePaneVisible ? 1 : 0) + (IsSegmentsPaneVisible ? 1 : 0);
+        var maxByHost = hostWidth - PlayerPaneMinWidth - otherPaneWidth - (splitterCount * SplitterWidth);
+        if (double.IsNaN(maxByHost) || double.IsInfinity(maxByHost))
+            return normalizedDesired;
+
+        return Math.Clamp(normalizedDesired, minWidth, Math.Min(maxWidth, Math.Max(minWidth, maxByHost)));
+    }
+
+    private bool SetPipelinePaneVisibleCore(bool value)
+    {
+        if (_isPipelinePaneVisible == value)
+            return false;
+
+        _isPipelinePaneVisible = value;
+        OnPropertyChanged(nameof(IsPipelinePaneVisible));
+        return true;
+    }
+
+    private bool SetSegmentsPaneVisibleCore(bool value)
+    {
+        if (_isSegmentsPaneVisible == value)
+            return false;
+
+        _isSegmentsPaneVisible = value;
+        OnPropertyChanged(nameof(IsSegmentsPaneVisible));
+        return true;
+    }
+
+    private bool SetPipelinePaneWidthCore(double value)
+    {
+        var normalized = NormalizePipelinePaneWidth(value);
+        if (Math.Abs(_pipelinePaneWidth - normalized) < 0.01)
+            return false;
+
+        _pipelinePaneWidth = normalized;
+        OnPropertyChanged(nameof(PipelinePaneWidth));
+        return true;
+    }
+
+    private bool SetSegmentsPaneWidthCore(double value)
+    {
+        var normalized = NormalizeSegmentsPaneWidth(value);
+        if (Math.Abs(_segmentsPaneWidth - normalized) < 0.01)
+            return false;
+
+        _segmentsPaneWidth = normalized;
+        OnPropertyChanged(nameof(SegmentsPaneWidth));
+        return true;
+    }
+
+    private bool SetSwapPaneSidesCore(bool value)
+    {
+        if (_swapPaneSides == value)
+            return false;
+
+        _swapPaneSides = value;
+        OnPropertyChanged(nameof(SwapPaneSides));
+        return true;
+    }
+
+    private void NotifyPaneLayoutProjectionChanged()
+    {
+        OnPropertyChanged(nameof(IsPipelinePaneOnLeft));
+        OnPropertyChanged(nameof(IsSegmentsPaneOnLeft));
+        OnPropertyChanged(nameof(IsPipelinePaneShown));
+        OnPropertyChanged(nameof(IsSegmentsPaneShown));
+        OnPropertyChanged(nameof(IsLeftPaneVisible));
+        OnPropertyChanged(nameof(IsRightPaneVisible));
+        OnPropertyChanged(nameof(LeftPaneWidth));
+        OnPropertyChanged(nameof(RightPaneWidth));
+        OnPropertyChanged(nameof(PipelinePaneColumn));
+        OnPropertyChanged(nameof(SegmentsPaneColumn));
+        OnPropertyChanged(nameof(PipelinePaneMargin));
+        OnPropertyChanged(nameof(SegmentsPaneMargin));
+        OnPropertyChanged(nameof(PipelinePaneBorderThickness));
+        OnPropertyChanged(nameof(SegmentsPaneBorderThickness));
+        OnPropertyChanged(nameof(LeftPaneRole));
+        OnPropertyChanged(nameof(RightPaneRole));
+        OnPropertyChanged(nameof(LeftPaneTooltip));
+        OnPropertyChanged(nameof(RightPaneTooltip));
+    }
+
+    private void PersistPaneLayout()
+    {
+        _coordinator.CurrentSettings.IsPipelinePaneVisible = IsPipelinePaneVisible;
+        _coordinator.CurrentSettings.IsSegmentsPaneVisible = IsSegmentsPaneVisible;
+        _coordinator.CurrentSettings.PipelinePaneWidth = PipelinePaneWidth;
+        _coordinator.CurrentSettings.SegmentsPaneWidth = SegmentsPaneWidth;
+        _coordinator.CurrentSettings.SwapPaneSides = SwapPaneSides;
+        _coordinator.NotifySettingsModified();
+    }
+
+    private static double NormalizePipelinePaneWidth(double width) =>
+        Math.Clamp(width, PipelinePaneMinWidth, PipelinePaneMaxWidth);
+
+    private static double NormalizeSegmentsPaneWidth(double width) =>
+        Math.Clamp(width, SegmentsPaneMinWidth, SegmentsPaneMaxWidth);
+
+    private string BuildPaneTooltip(bool isLeftSide, string roleLabel, string hotkey) =>
+        string.Format(
+            LocalizationService.Instance.CurrentCulture,
+            GetLocalized("Tooltip_PaneSideFormat"),
+            GetLocalized(isLeftSide ? "Common_Left" : "Common_Right"),
+            roleLabel,
+            hotkey);
+
+    private static string GetLocalized(string key) => LocalizationService.Instance[key];
+
+    private void OnLocalizationCultureChanged(object? sender, CultureInfo culture)
+    {
+        NotifyPaneLayoutProjectionChanged();
         OnPropertyChanged(nameof(SegmentCountLabel));
+    }
 
     private void OnSegmentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         OnPropertyChanged(nameof(SegmentCountLabel));
@@ -628,6 +916,9 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             SourcePositionMs = newPositionMs;
         _isUpdatingPositionFromTimer = false;
 
+        if (player.HasEnded)
+            PauseAmbiancePreview();
+
         UpdateActiveSegment();
         if (IsDubModeOn)
             UpdateDubMode();
@@ -644,32 +935,48 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _isUpdatingActiveSegment = false;
     }
 
+    private Task SeekAndPlayAsync(WorkflowSegmentState segment) =>
+        SeekAndPlayAsync(segment, seekVideoToSegmentStart: false, previewTimingOverride: null);
+
+    /// <summary>
+    /// Previews the selected segment with <see cref="SegmentTimingMode.Pause"/> timing (source pauses during TTS) without persisting a segment override.
+    /// </summary>
     public Task PreviewSelectedSegmentWithPauseAsync()
     {
         if (SelectedSegment is null || !SelectedSegment.HasTtsAudio || !IsSourceMediaLoaded)
             return Task.CompletedTask;
 
-        return SeekAndPlayAsync(SelectedSegment, SegmentTimingMode.Pause);
+        return SeekAndPlayAsync(SelectedSegment, seekVideoToSegmentStart: false, previewTimingOverride: SegmentTimingMode.Pause);
     }
 
-    private Task SeekAndPlayAsync(WorkflowSegmentState segment) =>
-        SeekAndPlayAsync(segment, null);
-
-    private async Task SeekAndPlayAsync(WorkflowSegmentState segment, SegmentTimingMode? previewTimingOverride)
+    private async Task SeekAndPlayAsync(
+        WorkflowSegmentState segment,
+        bool seekVideoToSegmentStart,
+        SegmentTimingMode? previewTimingOverride = null)
     {
         var player = _coordinator.SourceMediaPlayer;
+        var needsDubOrTimingPreview = previewTimingOverride.HasValue || IsDubModeOn;
         if (player is null)
         {
             await PlaySourceAtSegmentAsync(segment);
+            if (needsDubOrTimingPreview && !IsSourcePaused)
+                ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
             return;
         }
 
         player.Seek((long)(segment.StartSeconds * 1000));
 
+        var appliedDubBeforeSourcePlay = false;
         if (IsSourcePaused || player.HasEnded)
         {
             try
             {
+                if (IsDubModeOn)
+                {
+                    ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
+                    appliedDubBeforeSourcePlay = true;
+                }
+
                 await Task.Run(player.Play);
                 IsSourcePaused = false;
                 _parent.ClearStatusErrorDetail();
@@ -682,8 +989,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             }
         }
 
-        if ((previewTimingOverride.HasValue || IsDubModeOn) && !IsSourcePaused)
-            ApplyDubForSegment(segment, previewTimingOverride: previewTimingOverride);
+        if (needsDubOrTimingPreview && !IsSourcePaused && !appliedDubBeforeSourcePlay)
+            ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
     }
 
     private async Task PlaySourceAtSegmentAsync(WorkflowSegmentState? segment)
@@ -708,18 +1015,22 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     private void RecalculateOutputVolumes()
     {
         var masterGain = IsMuted ? 0.0 : SourceVolume;
-        // When vocal separation is on, the dub-mix slider writes AmbianceMixDb and
-        // that's the level the user is shaping; for live preview we don't have a
-        // separated ambience track, but applying the same dB to the source gives
-        // the slider an audible effect that tracks the render.
-        var duckingDb = UsesAmbianceMixControl
+        var previewMode = ResolveDubPreviewAudioMode();
+        var duckingDb = previewMode == DubPreviewAudioMode.SeparatedAmbiance
             ? _coordinator.CurrentSettings.AmbianceMixDb
             : AudioDuckingDb;
-        var sourceGain = _isDucked
-            ? masterGain * Math.Pow(10.0, duckingDb / 20.0)
-            : masterGain;
+        var sourceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+            ? 0.0
+            : _isDucked
+                ? masterGain * Math.Pow(10.0, duckingDb / 20.0)
+                : masterGain;
+        var ambianceGain = IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance
+            ? masterGain * Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0)
+            : 0.0;
 
         _coordinator.SourceMediaPlayer?.Volume = sourceGain;
+        if (_coordinator.AmbiancePlayer is { } ambiancePlayer)
+            ambiancePlayer.Volume = ambianceGain;
         _coordinator.TtsVolume = masterGain;
     }
 
@@ -768,15 +1079,6 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         var segment = _sortedSegments[candidate];
         return positionSeconds < segment.EndSeconds ? segment : null;
-    }
-
-    private static string FormatSegmentCount(int count)
-    {
-        var culture = LocalizationService.Instance.CurrentCulture;
-        var key = count == 1 ? "Label_SegmentCount_One" : "Label_SegmentCount_Many";
-        var format = Strings.ResourceManager.GetString(key, culture)
-            ?? (count == 1 ? "{0} segment" : "{0} segments");
-        return string.Format(culture, format, count);
     }
 
     private WorkflowSegmentState? FindPreviousSegmentEndingBefore(double positionSeconds)
@@ -837,19 +1139,45 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         RestoreDucking();
         _coordinator.StopTtsPlayback();
         _lastDubbedSegment = segment;
+        var previewMode = ResolveDubPreviewAudioMode();
+        if (!IsDubModeOn)
+        {
+            PauseAmbiancePreview();
+            RecalculateOutputVolumes();
+            if (segment is null)
+                return;
+        }
+
+        if (seekVideoToSegmentStart && segment is not null)
+            _coordinator.SourceMediaPlayer?.Seek((long)(segment.StartSeconds * 1000));
+
+        if (IsDubModeOn && previewMode == DubPreviewAudioMode.SeparatedAmbiance)
+        {
+            SyncSeparatedAmbiancePreview(shouldPlay: !IsSourcePaused, forceSeek: seekVideoToSegmentStart);
+        }
+        else
+        {
+            PauseAmbiancePreview();
+            if (IsDubModeOn)
+                AnnounceDubPreviewMode(DubPreviewAudioMode.DuckSource, null);
+        }
+
+        RecalculateOutputVolumes();
+
         if (segment is null)
             return;
 
-        if (seekVideoToSegmentStart)
-            _coordinator.SourceMediaPlayer?.Seek((long)(segment.StartSeconds * 1000));
-
         if (segment.HasTtsAudio)
         {
-            // Resolve effective timing mode: per-segment override takes priority, then session setting.
+            // Non-null segment while global dub is off is intentional for TTS preview flows (e.g. coordinator pause-preview).
+            // Resolve effective timing mode: one-shot preview override, then per-segment override, then session setting.
             var effectiveMode = previewTimingOverride
                 ?? segment.TimingModeOverride
                 ?? _coordinator.CurrentSettings.DubTimingMode;
-            ApplyDucking();
+            if (previewMode == DubPreviewAudioMode.DuckSource && IsDubModeOn)
+                ApplyDucking();
+            else if (previewMode == DubPreviewAudioMode.SeparatedAmbiance && !IsDubModeOn)
+                ApplyDucking();
             _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId, segment, effectiveMode);
         }
     }
@@ -868,6 +1196,196 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart) =>
         ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
+
+    private string? TryGetAmbiancePreviewPath()
+        => _resolvedAmbiancePreviewPath;
+
+    private void InvalidateAmbiancePreviewPathCache()
+    {
+        var path = _coordinator.CurrentSession.AmbianceAudioPath;
+        _resolvedAmbiancePreviewPath = !string.IsNullOrWhiteSpace(path) && File.Exists(path)
+            ? path
+            : null;
+    }
+
+    private DubPreviewAudioMode ResolveDubPreviewAudioMode() =>
+        TryGetAmbiancePreviewPath() is not null
+            ? DubPreviewAudioMode.SeparatedAmbiance
+            : DubPreviewAudioMode.DuckSource;
+
+    private void AnnounceDubPreviewMode(DubPreviewAudioMode mode, string? ambiancePath)
+    {
+        if (!IsDubModeOn)
+            return;
+
+        if (_lastReportedDubPreviewMode == mode &&
+            string.Equals(_lastReportedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastReportedDubPreviewMode = mode;
+        _lastReportedAmbiancePath = ambiancePath;
+
+        if (mode == DubPreviewAudioMode.SeparatedAmbiance)
+        {
+            _coordinator.Log.Debug(
+                $"Dub preview mode: real-ambiance-preview, path='{ambiancePath}', gainDb={_coordinator.CurrentSettings.AmbianceMixDb:F1}");
+            _parent.StatusText = "Dub preview uses separated ambience.";
+            return;
+        }
+
+        _coordinator.Log.Debug(
+            $"Dub preview mode: ducked-source-fallback, gainDb={AudioDuckingDb:F1}");
+        _parent.StatusText = "Dub preview uses source audio fallback.";
+    }
+
+    private void PauseAmbiancePreview(bool resetLoadedPath = false)
+    {
+        Interlocked.Increment(ref _ambiancePlayRequestVersion);
+        _isStartingAmbiancePlayback = false;
+        lock (_ambianceTransportGate)
+        {
+            try
+            {
+                _coordinator.AmbiancePlayer?.Pause();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Shutdown/race path: ambiance transport was disposed during pause.
+            }
+
+            if (resetLoadedPath)
+                _loadedAmbiancePath = null;
+        }
+    }
+
+    private void SyncSeparatedAmbiancePreview(bool shouldPlay, bool forceSeek = false)
+    {
+        var sourcePlayer = _coordinator.SourceMediaPlayer;
+        var ambiancePath = TryGetAmbiancePreviewPath();
+        if (sourcePlayer is null || ambiancePath is null)
+        {
+            PauseAmbiancePreview(resetLoadedPath: ambiancePath is null);
+            return;
+        }
+
+        IMediaTransport? ambiancePlayerForPlay = null;
+        var requestVersion = 0;
+        var ambientSyncFailed = false;
+
+        lock (_ambianceTransportGate)
+        {
+            var ambiancePlayer = _coordinator.GetOrCreateAmbiancePlayer();
+            try
+            {
+                if (!string.Equals(_loadedAmbiancePath, ambiancePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    ambiancePlayer.Load(ambiancePath);
+                    _loadedAmbiancePath = ambiancePath;
+                    forceSeek = true;
+                }
+
+                ambiancePlayer.PlaybackRate = sourcePlayer.PlaybackRate;
+                ambiancePlayer.Volume = (IsMuted ? 0.0 : SourceVolume) *
+                    Math.Pow(10.0, _coordinator.CurrentSettings.AmbianceMixDb / 20.0);
+
+                var sourcePositionMs = sourcePlayer.CurrentTime;
+                if (forceSeek || Math.Abs(ambiancePlayer.CurrentTime - sourcePositionMs) > AmbianceSyncThresholdMs)
+                    ambiancePlayer.Seek(sourcePositionMs);
+            }
+            catch (Exception ex)
+            {
+                _coordinator.Log.Warning($"Ambience preview sync failed (load/seek): {ex.Message}");
+                Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                _isStartingAmbiancePlayback = false;
+                _loadedAmbiancePath = null;
+                try
+                {
+                    ambiancePlayer.Pause();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Shutdown/race path: ambiance transport was disposed during pause.
+                }
+
+                InvalidateAmbiancePreviewPathCache();
+                ambientSyncFailed = true;
+            }
+
+            if (ambientSyncFailed)
+            {
+                // Skip announce/play; post-lock path restores volumes and UI hint.
+            }
+            else
+            {
+                AnnounceDubPreviewMode(DubPreviewAudioMode.SeparatedAmbiance, ambiancePath);
+
+                if (shouldPlay)
+                {
+                    if (_isStartingAmbiancePlayback || ambiancePlayer.IsPlaying)
+                        return;
+
+                    _isStartingAmbiancePlayback = true;
+                    requestVersion = Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                    ambiancePlayerForPlay = ambiancePlayer;
+                }
+                else
+                {
+                    Interlocked.Increment(ref _ambiancePlayRequestVersion);
+                    _isStartingAmbiancePlayback = false;
+                    try
+                    {
+                        ambiancePlayer.Pause();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Shutdown/race path: ambiance transport was disposed during pause.
+                    }
+
+                    return;
+                }
+            }
+        }
+
+        if (ambientSyncFailed)
+        {
+            RecalculateOutputVolumes();
+            if (IsDubModeOn)
+            {
+                _coordinator.Log.Debug("Dub preview mode: ducked-source-fallback after ambience load/seek failure.");
+                _parent.StatusText = "Dub preview uses source audio fallback.";
+            }
+
+            return;
+        }
+
+        var capturedPlayer = ambiancePlayerForPlay;
+        if (capturedPlayer is null)
+            return;
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                lock (_ambianceTransportGate)
+                {
+                    if (requestVersion != Volatile.Read(ref _ambiancePlayRequestVersion))
+                        return;
+
+                    capturedPlayer.Play();
+                }
+            }
+            catch (Exception ex)
+            {
+                _coordinator.Log.Warning($"Failed to start ambiance preview playback: {ex.Message}");
+            }
+            finally
+            {
+                _isStartingAmbiancePlayback = false;
+            }
+        });
+    }
 
     /// <summary>
     /// Applies a per-segment timing mode override through the coordinator (session state owner),

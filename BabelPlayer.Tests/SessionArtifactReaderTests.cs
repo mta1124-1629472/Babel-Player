@@ -49,6 +49,7 @@ public sealed class SessionArtifactReaderTests : IDisposable
 
         var root = new System.Text.Json.Nodes.JsonObject
         {
+            ["schema_version"] = ArtifactJson.CurrentSchemaVersion,
             ["language"] = "es",
             ["language_probability"] = 0.99,
             ["segments"] = segs,
@@ -82,6 +83,7 @@ public sealed class SessionArtifactReaderTests : IDisposable
 
         var root = new System.Text.Json.Nodes.JsonObject
         {
+            ["schema_version"] = ArtifactJson.CurrentSchemaVersion,
             ["sourceLanguage"] = sourceLang,
             ["targetLanguage"] = targetLang,
             ["segments"] = segs,

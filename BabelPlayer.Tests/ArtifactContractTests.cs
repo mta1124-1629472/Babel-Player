@@ -29,6 +29,7 @@ public sealed class ArtifactContractTests : IDisposable
     {
         var artifact = new TranslationArtifact
         {
+            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
             SourceLanguage = "es",
             TargetLanguage = "en",
             Segments =
@@ -67,6 +68,7 @@ public sealed class ArtifactContractTests : IDisposable
         {
                 var json = """
                 {
+                    "schema_version": "2.0",
                     "language": "es",
                     "language_probability": 0.99,
                     "segments": [
@@ -90,6 +92,7 @@ public sealed class ArtifactContractTests : IDisposable
         {
                 var json = """
                 {
+                    "schema_version": "2.0",
                     "sourceLanguage": "es",
                     "targetLanguage": "en",
                     "segments": [
@@ -115,6 +118,7 @@ public sealed class ArtifactContractTests : IDisposable
     {
         var json = """
         {
+          "schema_version": "2.0",
           "sourceLanguage": "es",
           "targetLanguage": "en"
         }
@@ -131,6 +135,7 @@ public sealed class ArtifactContractTests : IDisposable
     {
         var json = """
         {
+          "schema_version": "2.0",
           "sourcelanguage": "es",
           "targetlanguage": "en",
           "segments": []
@@ -140,7 +145,7 @@ public sealed class ArtifactContractTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() =>
             ArtifactJson.DeserializeTranslation(json, "wrong-casing"));
 
-        Assert.Contains("sourceLanguage", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("sourceLanguage", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

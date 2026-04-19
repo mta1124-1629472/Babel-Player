@@ -616,29 +616,13 @@ public sealed class PipelineStageProgressTests() : IDisposable
                 null);
         }
 
-        public async Task<TranslationResult> TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken cancellationToken = default)
+        public Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(SingleSegmentTranslationTextRequest request, CancellationToken cancellationToken = default)
         {
-            var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-            foreach (var segment in translation.Segments ?? [])
-            {
-                if (segment.Id == request.SegmentId)
-                {
-                    segment.TranslatedText = $"{request.SourceText} (en)";
-                }
-            }
-
-            File.WriteAllText(request.OutputJsonPath, ArtifactJson.SerializeTranslation(translation));
-            return new TranslationResult(
+            return Task.FromResult(new SingleSegmentTranslationTextResult(
                 true,
-                (translation.Segments ?? [])
-                    .Select(segment => new TranslatedSegment(
-                        segment.Start,
-                        segment.End,
-                        segment.Text ?? string.Empty,
-                        segment.TranslatedText ?? string.Empty))
-                    .ToList(),
-                translation.SourceLanguage ?? request.SourceLanguage,
-                translation.TargetLanguage ?? request.TargetLanguage,
+                $"{request.SourceText} (en)",
+                request.SourceLanguage,
+                request.TargetLanguage,
                 null);
         }
     }
@@ -851,25 +835,17 @@ public sealed class PipelineStageProgressTests() : IDisposable
             return BuildTranslationResult(segments, request.SourceLanguage, request.TargetLanguage);
         }
 
-        public async Task<TranslationResult> TranslateSingleSegmentAsync(SingleSegmentTranslationRequest request, CancellationToken cancellationToken = default)
+        public async Task<SingleSegmentTranslationTextResult> TranslateSingleSegmentTextAsync(SingleSegmentTranslationTextRequest request, CancellationToken cancellationToken = default)
         {
             probe.MarkStreamingTranslationStarted();
             await Task.Delay(perSegmentDelayMs, cancellationToken);
-
-            var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-            foreach (var segment in translation.Segments ?? [])
-            {
-                if (segment.Id == request.SegmentId)
-                    segment.TranslatedText = $"{request.SourceText} ({request.TargetLanguage})";
-            }
-
-            File.WriteAllText(request.OutputJsonPath, ArtifactJson.SerializeTranslation(translation));
             probe.MarkStreamingTranslationCompleted();
-
-            return BuildTranslationResult(
-                translation.Segments ?? [],
-                translation.SourceLanguage ?? request.SourceLanguage,
-                translation.TargetLanguage ?? request.TargetLanguage);
+            return new SingleSegmentTranslationTextResult(
+                true,
+                $"{request.SourceText} ({request.TargetLanguage})",
+                request.SourceLanguage,
+                request.TargetLanguage,
+                null);
         }
 
         private static TranslationResult BuildTranslationResult(

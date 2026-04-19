@@ -127,59 +127,51 @@ public sealed class DeepLTranslationProviderTests : IDisposable
             () => provider.TranslateAsync(request, cts.Token));
     }
 
-    // ?? TranslateSingleSegmentAsync ????????????????????????????????????????????
+    // ?? TranslateSingleSegmentTextAsync ????????????????????????????????????????
 
     [Fact]
-    public async Task TranslateSingleSegmentAsync_ThrowsArgumentException_WhenSourceTextEmpty()
+    public async Task TranslateSingleSegmentTextAsync_ThrowsArgumentException_WhenSourceTextEmpty()
     {
-        CreateSampleTranslationJson();
         var provider = new DeepLTranslationProvider(_log, TestApiKey);
-        var request = new SingleSegmentTranslationRequest(
+        var request = new SingleSegmentTranslationTextRequest(
             string.Empty,
             "segment_0.0",
-            _translationJsonPath,
-            _outputJsonPath,
             "ES",
             "EN",
             "deepl");
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => provider.TranslateSingleSegmentAsync(request));
+            () => provider.TranslateSingleSegmentTextAsync(request));
     }
 
     [Fact]
-    public async Task TranslateSingleSegmentAsync_ThrowsArgumentException_WhenSourceTextWhitespace()
+    public async Task TranslateSingleSegmentTextAsync_ThrowsArgumentException_WhenSourceTextWhitespace()
     {
-        CreateSampleTranslationJson();
         var provider = new DeepLTranslationProvider(_log, TestApiKey);
-        var request = new SingleSegmentTranslationRequest(
+        var request = new SingleSegmentTranslationTextRequest(
             "   ",
             "segment_0.0",
-            _translationJsonPath,
-            _outputJsonPath,
             "ES",
             "EN",
             "deepl");
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => provider.TranslateSingleSegmentAsync(request));
+            () => provider.TranslateSingleSegmentTextAsync(request));
     }
 
     [Fact]
-    public async Task TranslateSingleSegmentAsync_ThrowsFileNotFoundException_WhenTranslationJsonNotFound()
+    public async Task TranslateSingleSegmentTextAsync_DoesNotRequireTranslationJson()
     {
         var provider = new DeepLTranslationProvider(_log, TestApiKey);
-        var request = new SingleSegmentTranslationRequest(
+        var request = new SingleSegmentTranslationTextRequest(
             "Hola mundo",
             "segment_0.0",
-            "nonexistent.json",
-            _outputJsonPath,
             "ES",
             "EN",
             "deepl");
 
-        await Assert.ThrowsAsync<FileNotFoundException>(
-            () => provider.TranslateSingleSegmentAsync(request));
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => provider.TranslateSingleSegmentTextAsync(request));
     }
 
     // ?? Helper methods ?????????????????????????????????????????????????????????
@@ -188,8 +180,9 @@ public sealed class DeepLTranslationProviderTests : IDisposable
     {
         var json = """
         {
+          "schema_version": "2.0",
           "language": "es",
-          "languageProbability": 0.95,
+          "language_probability": 0.95,
           "segments": [
             {
               "start": 0.0,
@@ -211,6 +204,7 @@ public sealed class DeepLTranslationProviderTests : IDisposable
     {
         var json = """
         {
+          "schema_version": "2.0",
           "sourceLanguage": "ES",
           "targetLanguage": "EN",
           "segments": [

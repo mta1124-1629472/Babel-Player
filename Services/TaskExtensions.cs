@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -26,24 +27,19 @@ internal static class TaskExtensions
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(log);
 
-        _ = ObserveFaultAsync(task, log, context);
+        _ = task.ContinueWith(
+            static (completedTask, state) =>
+            {
+                var (taskLog, taskContext) = ((AppLog Log, string Context))state!;
+                var exception = completedTask.Exception?.GetBaseException();
+                if (exception is not null)
+                    taskLog.Error($"Unhandled exception during {taskContext}", exception);
+            },
+            (log, context),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
         return task;
-    }
-
-    private static async Task ObserveFaultAsync(Task task, AppLog log, string context)
-    {
-        try
-        {
-            await task.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Canceled work is intentionally silent.
-        }
-        catch (Exception ex)
-        {
-            log.Error($"Unhandled exception during {context}", ex);
-        }
     }
 }
