@@ -36,11 +36,12 @@ public sealed class PipelineTargetLanguageOption : INotifyPropertyChanged, IEqua
     private void OnCultureChanged(object? sender, CultureInfo culture)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
 
+    // Declared before All: C# initializes static fields in order; BuildAll must not see null here.
+    private static readonly CultureInfo EnglishSortCulture = CultureInfo.GetCultureInfo("en");
+
     public static PipelineTargetLanguageOption English { get; } = new("en");
 
     public static IReadOnlyList<PipelineTargetLanguageOption> All { get; } = BuildAll();
-
-    private static readonly CultureInfo EnglishSortCulture = CultureInfo.GetCultureInfo("en");
 
     private static IReadOnlyList<PipelineTargetLanguageOption> BuildAll()
     {

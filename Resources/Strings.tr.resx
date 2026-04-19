@@ -162,6 +162,9 @@
   <data name="Label_SpokenLanguage" xml:space="preserve">
     <value>Konuşulan dil (ASR ipucu)</value>
   </data>
+  <data name="SpokenLanguage_AutoDetect" xml:space="preserve">
+    <value>Otomatik algılama</value>
+  </data>
   <data name="Section_Diarization" xml:space="preserve">
     <value>GÜNLÜĞE KAYDETME / KONUŞMACILAR</value>
   </data>
