@@ -74,6 +74,10 @@ function Invoke-Git {
     if ($null -eq $output) {
         $output = @()
     } else {
+        $output = @($output | ForEach-Object { $_.ToString() })
+    }
+        $output = @()
+    } else {
         $output = @($output | ForEach-Object {
             if ($null -eq $_) { "" } else { $_.ToString() }
         })
