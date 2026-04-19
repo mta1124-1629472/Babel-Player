@@ -38,6 +38,14 @@ internal static class MainWindowShortcutRouter
         if (modifiers != KeyModifiers.None)
             return false;
 
+        // Panes are not visible in fullscreen; do not map shortcuts that would still persist layout.
+        if (isFullscreen
+            && (key == MainWindowShortcutDefaults.ToggleLeftPaneKey
+                || key == MainWindowShortcutDefaults.ToggleRightPaneKey))
+        {
+            return false;
+        }
+
         if (key == MainWindowShortcutDefaults.ToggleFullscreenKey)
         {
             action = MainWindowShortcutAction.ToggleFullscreen;

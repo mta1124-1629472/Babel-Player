@@ -462,6 +462,11 @@ icon = "debug"
 command = "dotnet run -c Dev --project BabelPlayer.csproj"
 
 [[actions]]
+name = "Cleanup Preview"
+icon = "tool"
+command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -WhatIf"
+
+[[actions]]
 name = "Cleanup"
-icon = "trash"
-command = "pwsh -File .\\cleanup-agent-worktrees.ps1"
+icon = "tool"
+command = "powershell -ExecutionPolicy Bypass -File .\\cleanup-agent-worktrees.ps1 -RemoveExtraWorktrees -DeleteGoneLocalBranches -DeleteMergedLocalBranches -DeleteMergedRemoteBranches"
