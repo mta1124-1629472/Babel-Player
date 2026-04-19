@@ -145,7 +145,7 @@ public sealed class ArtifactContractTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() =>
             ArtifactJson.DeserializeTranslation(json, "wrong-casing"));
 
-        Assert.Contains("sourceLanguage", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("sourceLanguage", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

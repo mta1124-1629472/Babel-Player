@@ -69,8 +69,8 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
             OnRun = (arguments, _, standardInput) =>
             {
                 Assert.Equal("hola", standardInput);
-                return Task.FromResult(TestCTranslate2TranslationProvider.SuccessResult(
-                    "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}"));
+                var json = "{\"translatedText\":\"greetings\",\"sourceLanguage\":\"es\",\"targetLanguage\":\"en\"}";
+                return Task.FromResult(new PythonSubprocessServiceBase.ScriptResult(0, json, string.Empty));
             }
         };
 
@@ -89,17 +89,17 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
 
     private sealed class TestCTranslate2TranslationProvider(AppLog log, string model) : CTranslate2TranslationProvider(log, model)
     {
-        public Func<IReadOnlyList<string>, string, string?, Task<ScriptResult>>? OnRun { get; set; }
+        public Func<IReadOnlyList<string>, string, string?, Task<PythonSubprocessServiceBase.ScriptResult>>? OnRun { get; set; }
 
-        protected override Task<ScriptResult> RunCTranslate2ScriptAsync(
+        protected override Task<PythonSubprocessServiceBase.ScriptResult> RunCTranslate2ScriptAsync(
             string scriptContent,
             IReadOnlyList<string> arguments,
             string scriptPrefix,
             string? standardInput = null,
             CancellationToken cancellationToken = default) =>
             OnRun?.Invoke(arguments, scriptPrefix, standardInput)
-            ?? Task.FromResult(new ScriptResult(0, string.Empty, string.Empty));
+            ?? Task.FromResult(new PythonSubprocessServiceBase.ScriptResult(0, string.Empty, string.Empty));
 
-        public static ScriptResult SuccessResult(string stdout = "") => new(0, stdout, string.Empty);
+        public static PythonSubprocessServiceBase.ScriptResult SuccessResult() => new(0, string.Empty, string.Empty);
     }
 }

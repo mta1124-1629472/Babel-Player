@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
@@ -29,264 +29,6 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         catch { }
     }
 
-    private string WriteFile(string name, string content = "placeholder")
-    {
-        var path = Path.Combine(_dir, name);
-        File.WriteAllText(path, content);
-        return path;
-    }
-
-    private WorkflowSessionSnapshot WithValidatedMedia(WorkflowSessionSnapshot snapshot, string name = "video.mp4")
-    {
-        var path = WriteFile($"{Guid.NewGuid():N}-{name}", "media");
-        ArtifactIntegrity.WriteFileManifestAsync(
-                path,
-                "media_copy",
-                artifactSchemaVersion: null,
-                probedDurationSeconds: null,
-                segmentCount: null,
-                segmentIds: null,
-                segmentTiming: null,
-                upstreamArtifactHashes: null,
-                provenanceDigest: ArtifactIntegrity.ComputeCompositeSha256(["stage=media_copy"]))
-            .GetAwaiter()
-            .GetResult();
-        return snapshot with { IngestedMediaPath = path };
-    }
-
-    private WorkflowSessionSnapshot WithValidatedStemPair(WorkflowSessionSnapshot snapshot)
-    {
-        var upstream = ArtifactIntegrity.BuildUpstreamHashes(("media_copy", snapshot.IngestedMediaPath));
-        upstream.TryGetValue("media_copy", out var mediaHash);
-        var provenance = ArtifactIntegrity.ComputeCompositeSha256(
-        [
-            "stage=vocal_separation",
-            $"media_copy={mediaHash ?? string.Empty}",
-        ]);
-
-        var vocalsPath = WriteFile($"{Guid.NewGuid():N}-vocals.wav", "vocals");
-        ArtifactIntegrity.WriteFileManifestAsync(
-                vocalsPath,
-                "vocals_stem",
-                artifactSchemaVersion: null,
-                probedDurationSeconds: null,
-                segmentCount: null,
-                segmentIds: null,
-                segmentTiming: null,
-                upstreamArtifactHashes: upstream,
-                provenanceDigest: provenance)
-            .GetAwaiter()
-            .GetResult();
-
-        var ambiancePath = WriteFile($"{Guid.NewGuid():N}-ambiance.wav", "ambiance");
-        ArtifactIntegrity.WriteFileManifestAsync(
-                ambiancePath,
-                "ambiance_stem",
-                artifactSchemaVersion: null,
-                probedDurationSeconds: null,
-                segmentCount: null,
-                segmentIds: null,
-                segmentTiming: null,
-                upstreamArtifactHashes: upstream,
-                provenanceDigest: provenance)
-            .GetAwaiter()
-            .GetResult();
-
-        return snapshot with
-        {
-            VocalsAudioPath = vocalsPath,
-            AmbianceAudioPath = ambiancePath,
-        };
-    }
-
-    private WorkflowSessionSnapshot WithValidatedTranscript(WorkflowSessionSnapshot snapshot, string name = "transcript.json")
-    {
-        var artifact = new TranscriptArtifact
-        {
-            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
-            Language = snapshot.SourceLanguage ?? "es",
-            LanguageProbability = 0.99,
-            Segments =
-            [
-                new TranscriptSegmentArtifact
-                {
-                    Start = 0.0,
-                    End = 1.0,
-                    Text = "hola",
-                },
-            ],
-        };
-
-        var path = Path.Combine(_dir, $"{Guid.NewGuid():N}-{name}");
-        File.WriteAllText(path, ArtifactJson.SerializeTranscript(artifact));
-
-        var upstream = ArtifactIntegrity.BuildUpstreamHashes(
-            ("media_copy", snapshot.IngestedMediaPath),
-            ("vocals_stem", snapshot.VocalsAudioPath));
-        upstream.TryGetValue("media_copy", out var mediaHash);
-        ArtifactIntegrity.WriteFileManifestAsync(
-                path,
-                "transcript",
-                artifact.SchemaVersion,
-                probedDurationSeconds: null,
-                segmentCount: artifact.Segments!.Count,
-                segmentIds: ArtifactIntegrity.BuildTranscriptSegmentIds(artifact.Segments),
-                segmentTiming: ArtifactIntegrity.BuildTranscriptTimingSummary(artifact.Segments),
-                upstreamArtifactHashes: upstream,
-                provenanceDigest: ArtifactIntegrity.ComputeTranscriptionProvenanceDigest(
-                    mediaHash,
-                    !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath),
-                    BuildTranscriptionSettings(snapshot)))
-            .GetAwaiter()
-            .GetResult();
-
-        return snapshot with
-        {
-            TranscriptPath = path,
-            SourceLanguage = artifact.Language,
-        };
-    }
-
-    private WorkflowSessionSnapshot WithValidatedTranslation(WorkflowSessionSnapshot snapshot, string name = "translation.json")
-    {
-        var artifact = new TranslationArtifact
-        {
-            SchemaVersion = ArtifactJson.CurrentSchemaVersion,
-            SourceLanguage = snapshot.SourceLanguage ?? "es",
-            TargetLanguage = snapshot.TargetLanguage ?? "en",
-            Segments =
-            [
-                new TranslationSegmentArtifact
-                {
-                    Id = "segment_0.0",
-                    Start = 0.0,
-                    End = 1.0,
-                    Text = "hola",
-                    TranslatedText = "hello",
-                },
-            ],
-        };
-
-        var path = Path.Combine(_dir, $"{Guid.NewGuid():N}-{name}");
-        File.WriteAllText(path, ArtifactJson.SerializeTranslation(artifact));
-
-        var upstream = ArtifactIntegrity.BuildUpstreamHashes(("transcript", snapshot.TranscriptPath));
-        upstream.TryGetValue("transcript", out var transcriptHash);
-        ArtifactIntegrity.WriteFileManifestAsync(
-                path,
-                "translation",
-                artifact.SchemaVersion,
-                probedDurationSeconds: null,
-                segmentCount: artifact.Segments!.Count,
-                segmentIds: ArtifactIntegrity.BuildTranslationSegmentIds(artifact.Segments),
-                segmentTiming: ArtifactIntegrity.BuildTranslationTimingSummary(artifact.Segments),
-                upstreamArtifactHashes: upstream,
-                provenanceDigest: ArtifactIntegrity.ComputeTranslationProvenanceDigest(
-                    transcriptHash,
-                    BuildTranslationSettings(snapshot),
-                    artifact.SourceLanguage!,
-                    artifact.TargetLanguage!))
-            .GetAwaiter()
-            .GetResult();
-
-        return snapshot with
-        {
-            TranslationPath = path,
-            TargetLanguage = artifact.TargetLanguage,
-        };
-    }
-
-    private WorkflowSessionSnapshot WithValidatedTts(WorkflowSessionSnapshot snapshot, string ttsName = "tts.mp3")
-    {
-        var translation = ArtifactJson.LoadTranslationAsync(snapshot.TranslationPath!).GetAwaiter().GetResult();
-        var segmentsDir = Path.Combine(_dir, $"{Guid.NewGuid():N}-segments");
-        Directory.CreateDirectory(segmentsDir);
-
-        var segmentAudioPaths = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var segment in translation.Segments ?? [])
-        {
-            var segmentPath = Path.Combine(segmentsDir, $"{segment.Id}.mp3");
-            File.WriteAllText(segmentPath, $"audio:{segment.Id}");
-            segmentAudioPaths[segment.Id!] = segmentPath;
-        }
-
-        var orderedPairs = (translation.Segments ?? [])
-            .Select(segment => new KeyValuePair<string, string>(segment.Id!, segmentAudioPaths[segment.Id!]))
-            .ToList();
-        var segmentTiming = ArtifactIntegrity.BuildTranslationTimingSummary(translation.Segments);
-        var segmentProvenance = ArtifactIntegrity.ComputeTtsSegmentSetProvenanceDigest(
-            ArtifactIntegrity.LoadManifest(snapshot.TranslationPath!).Sha256,
-            snapshot,
-            BuildTtsSettings(snapshot));
-        ArtifactIntegrity.WriteDirectoryManifestAsync(
-                segmentsDir,
-                "tts_segment_set",
-                orderedPairs,
-                probedDurationSeconds: null,
-                segmentTiming: segmentTiming,
-                upstreamArtifactHashes: ArtifactIntegrity.BuildUpstreamHashes(("translation", snapshot.TranslationPath)),
-                provenanceDigest: segmentProvenance)
-            .GetAwaiter()
-            .GetResult();
-
-        var ttsPath = WriteFile($"{Guid.NewGuid():N}-{ttsName}", "dub");
-        var segmentManifest = ArtifactIntegrity.LoadManifest(segmentsDir);
-        var dubUpstream = ArtifactIntegrity.BuildUpstreamHashes(
-            ("tts_segment_set", segmentsDir),
-            ("ambiance_stem", snapshot.AmbianceAudioPath));
-        ArtifactIntegrity.WriteFileManifestAsync(
-                ttsPath,
-                "dub_timeline",
-                artifactSchemaVersion: null,
-                probedDurationSeconds: null,
-                segmentCount: orderedPairs.Count,
-                segmentIds: orderedPairs.Select(pair => pair.Key).ToList(),
-                segmentTiming: segmentTiming,
-                upstreamArtifactHashes: dubUpstream,
-                provenanceDigest: ArtifactIntegrity.ComputeDubProvenanceDigest(
-                    segmentManifest.Sha256,
-                    !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath)
-                        ? ArtifactIntegrity.LoadManifest(snapshot.AmbianceAudioPath!).Sha256
-                        : null,
-                    BuildTtsSettings(snapshot)))
-            .GetAwaiter()
-            .GetResult();
-
-        return snapshot with
-        {
-            TtsSegmentsPath = segmentsDir,
-            TtsSegmentAudioPaths = segmentAudioPaths,
-            TtsPath = ttsPath,
-        };
-    }
-
-    private static AppSettings BuildTranscriptionSettings(WorkflowSessionSnapshot snapshot) =>
-        new()
-        {
-            TranscriptionRuntime = snapshot.TranscriptionRuntime ?? InferenceRuntimeCatalog.InferTranscriptionRuntime(snapshot.TranscriptionProvider),
-            TranscriptionProvider = snapshot.TranscriptionProvider ?? string.Empty,
-            TranscriptionModel = snapshot.TranscriptionModel ?? string.Empty,
-            TranscriptionLanguageHint = snapshot.TranscriptionLanguageHint,
-        };
-
-    private static AppSettings BuildTranslationSettings(WorkflowSessionSnapshot snapshot) =>
-        new()
-        {
-            TranslationRuntime = snapshot.TranslationRuntime ?? InferenceRuntimeCatalog.InferTranslationRuntime(snapshot.TranslationProvider),
-            TranslationProvider = snapshot.TranslationProvider ?? string.Empty,
-            TranslationModel = snapshot.TranslationModel ?? string.Empty,
-        };
-
-    private static AppSettings BuildTtsSettings(WorkflowSessionSnapshot snapshot) =>
-        new()
-        {
-            TtsRuntime = snapshot.TtsRuntime ?? InferenceRuntimeCatalog.InferTtsRuntime(snapshot.TtsProvider),
-            TtsProvider = snapshot.TtsProvider ?? string.Empty,
-            TtsVoice = snapshot.TtsVoice ?? string.Empty,
-            DubTimingMode = snapshot.DubTimingMode ?? SegmentTimingMode.Off,
-            AmbianceMixDb = snapshot.AmbianceMixDb ?? -15.0,
-        };
-
     // ── ResolveArtifactStage ──────────────────────────────────────────────────
 
     [Fact]
@@ -297,12 +39,14 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ResolveArtifactStage_MediaLoaded_WithExistingFile_ReturnsMediaLoaded()
+    public async Task ResolveArtifactStage_MediaLoaded_WithExistingFile_ReturnsMediaLoaded()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.MediaLoaded,
-        });
+            IngestedMediaPath = mediaPath,
+        };
         Assert.Equal(SessionWorkflowStage.MediaLoaded, SessionSnapshotSemantics.ResolveArtifactStage(snap));
     }
 
@@ -318,68 +62,118 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ResolveArtifactStage_Transcribed_WithBothFiles_ReturnsTranscribed()
+    public async Task ResolveArtifactStage_Transcribed_WithBothFiles_ReturnsTranscribed()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
         {
             Stage = SessionWorkflowStage.Transcribed,
-        });
-        snap = WithValidatedTranscript(snap);
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
         Assert.Equal(SessionWorkflowStage.Transcribed, SessionSnapshotSemantics.ResolveArtifactStage(snap));
     }
 
     [Fact]
-    public void ResolveArtifactStage_Transcribed_MissingTranscript_ReturnsMediaLoaded()
+    public async Task ResolveArtifactStage_Transcribed_MissingTranscript_ReturnsMediaLoaded()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
             TranscriptPath = Path.Combine(_dir, "missing-transcript.json"),
-        });
+        };
         Assert.Equal(SessionWorkflowStage.MediaLoaded, SessionSnapshotSemantics.ResolveArtifactStage(snap));
     }
 
     [Fact]
-    public void ResolveArtifactStage_Diarized_WithMarker_ReturnsDiarized()
+    public async Task ResolveArtifactStage_Diarized_WithMarker_ReturnsDiarized()
     {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
         var now = DateTimeOffset.UtcNow;
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(now) with
+        var template = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
         {
             Stage = SessionWorkflowStage.Diarized,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
             DiarizationProvider = ProviderNames.NemoLocal,
             SpeakersDetectedAtUtc = now,
-        });
-        snap = WithValidatedTranscript(snap);
+        };
 
         Assert.Equal(SessionWorkflowStage.Diarized, SessionSnapshotSemantics.ResolveArtifactStage(snap));
     }
 
     [Fact]
-    public void ResolveArtifactStage_TtsGenerated_WithAllFiles_ReturnsTtsGenerated()
+    public async Task ResolveArtifactStage_TtsGenerated_WithAllFiles_ReturnsTtsGenerated()
     {
-        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TtsProvider = ProviderNames.EdgeTts,
+            TtsVoice = "en-US-JennyNeural",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var snapForTts = template with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
-            TtsVoice = "voice-a",
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
         };
-        snap = WithValidatedMedia(snap);
-        snap = WithValidatedTranscript(snap);
-        snap = WithValidatedTranslation(snap);
-        snap = WithValidatedTts(snap);
+        var (ttsPath, segmentsDir, segPaths) =
+            await SessionSemanticsIntegrityFixture.WriteTtsBundleAsync(_dir, translationPath, snapForTts);
+        var snap = snapForTts with
+        {
+            TtsPath = ttsPath,
+            TtsSegmentsPath = segmentsDir,
+            TtsSegmentAudioPaths = segPaths,
+        };
         Assert.Equal(SessionWorkflowStage.TtsGenerated, SessionSnapshotSemantics.ResolveArtifactStage(snap));
     }
 
     [Fact]
-    public void ResolveArtifactStage_TtsGenerated_MissingTtsFile_ReturnsTranslated()
+    public async Task ResolveArtifactStage_TtsGenerated_MissingTtsFile_ReturnsTranslated()
     {
-        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var snap = template with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
             TtsPath = Path.Combine(_dir, "missing-tts.mp3"),
         };
-        snap = WithValidatedMedia(snap);
-        snap = WithValidatedTranscript(snap);
-        snap = WithValidatedTranslation(snap);
         Assert.Equal(SessionWorkflowStage.Translated, SessionSnapshotSemantics.ResolveArtifactStage(snap));
     }
 
@@ -395,17 +189,37 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_TtsGeneratedWithAllFiles_NoClearedArtifacts()
+    public async Task ValidateArtifacts_TtsGeneratedWithAllFiles_NoClearedArtifacts()
     {
-        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TtsProvider = ProviderNames.EdgeTts,
+            TtsVoice = "en-US-JennyNeural",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var snapForTts = template with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
-            TtsVoice = "voice-a",
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
         };
-        snap = WithValidatedMedia(snap);
-        snap = WithValidatedTranscript(snap);
-        snap = WithValidatedTranslation(snap);
-        snap = WithValidatedTts(snap);
+        var (ttsPath, segmentsDir, segPaths) =
+            await SessionSemanticsIntegrityFixture.WriteTtsBundleAsync(_dir, translationPath, snapForTts);
+        var snap = snapForTts with
+        {
+            TtsPath = ttsPath,
+            TtsSegmentsPath = segmentsDir,
+            TtsSegmentAudioPaths = segPaths,
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
         Assert.Empty(result.ClearedArtifacts);
@@ -413,17 +227,31 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingTts_DegradesToTranslated()
+    public async Task ValidateArtifacts_MissingTts_DegradesToTranslated()
     {
-        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+            TtsProvider = ProviderNames.EdgeTts,
+            TtsVoice = "some-voice",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var snap = template with
         {
             Stage = SessionWorkflowStage.TtsGenerated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
             TtsPath = Path.Combine(_dir, "missing.mp3"),
             TtsVoice = "some-voice",
         };
-        snap = WithValidatedMedia(snap);
-        snap = WithValidatedTranscript(snap);
-        snap = WithValidatedTranslation(snap);
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
         Assert.Contains("tts", result.ClearedArtifacts);
@@ -432,15 +260,26 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingTranslation_DegradesToTranscribed()
+    public async Task ValidateArtifacts_MissingTranslation_DegradesToTranscribed()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            TargetLanguage = "en",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
         {
             Stage = SessionWorkflowStage.Translated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
             TranslationPath = Path.Combine(_dir, "missing-translation.json"),
             TargetLanguage = "en",
-        });
-        snap = WithValidatedTranscript(snap);
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
         Assert.Contains("translation", result.ClearedArtifacts);
@@ -449,18 +288,29 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingTranslation_WithDiarizationMarker_DegradesToDiarized()
+    public async Task ValidateArtifacts_MissingTranslation_WithDiarizationMarker_DegradesToDiarized()
     {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
         var now = DateTimeOffset.UtcNow;
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(now) with
+        var template = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            TargetLanguage = "en",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
         {
             Stage = SessionWorkflowStage.Translated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
             TranslationPath = Path.Combine(_dir, "missing-translation.json"),
             TargetLanguage = "en",
             DiarizationProvider = ProviderNames.NemoLocal,
             SpeakersDetectedAtUtc = now,
-        });
-        snap = WithValidatedTranscript(snap);
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
@@ -470,14 +320,28 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_DiarizedMissingMarker_DegradesToTranscribed()
+    public async Task ValidateArtifacts_DiarizedMissingMarker_DegradesToTranscribed()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+            TranslationProvider = ProviderNames.Deepl,
+            TranslationModel = "default",
+            SourceLanguage = "es",
+            TargetLanguage = "en",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var snap = template with
         {
             Stage = SessionWorkflowStage.Diarized,
-            SpeakerVoiceAssignments = new() { ["spk_00"] = "voice-1" },
-        });
-        snap = WithValidatedTranscript(snap);
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+            SpeakerVoiceAssignments = new Dictionary<string, string> { ["spk_00"] = "voice-1" },
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
@@ -487,14 +351,16 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingTranscript_DegradesToMediaLoaded()
+    public async Task ValidateArtifacts_MissingTranscript_DegradesToMediaLoaded()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
             TranscriptPath = Path.Combine(_dir, "missing-transcript.json"),
             SourceLanguage = "es",
-        });
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
         Assert.Contains("transcription", result.ClearedArtifacts);
@@ -503,16 +369,18 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingVocalsStem_ClearsVocalSeparationArtifacts()
+    public async Task ValidateArtifacts_MissingVocalsStem_ClearsVocalSeparationArtifacts()
     {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var (_, ambiancePath) = await SessionSemanticsIntegrityFixture.WriteStemPairAsync(_dir, mediaPath);
         var missingVocalsPath = Path.Combine(_dir, "missing-vocals.wav");
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.MediaLoaded,
+            IngestedMediaPath = mediaPath,
             VocalsAudioPath = missingVocalsPath,
-        });
-        var validStemPair = WithValidatedStemPair(snap);
-        snap = snap with { AmbianceAudioPath = validStemPair.AmbianceAudioPath };
+            AmbianceAudioPath = ambiancePath,
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
@@ -522,15 +390,17 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingInstrumentalStem_WithNoVocalsPath_ClearsVocalSeparationArtifacts()
+    public async Task ValidateArtifacts_MissingInstrumentalStem_WithNoVocalsPath_ClearsVocalSeparationArtifacts()
     {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
         var missingInstrumentalPath = Path.Combine(_dir, "missing-instrumental.wav");
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
             Stage = SessionWorkflowStage.MediaLoaded,
+            IngestedMediaPath = mediaPath,
             VocalsAudioPath = null,
             AmbianceAudioPath = missingInstrumentalPath,
-        });
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
@@ -540,17 +410,23 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingVocalsStem_AtTranscribedStage_DegradesToMediaLoaded()
+    public async Task ValidateArtifacts_MissingVocalsStem_AtTranscribedStage_DegradesToMediaLoaded()
     {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
         var missingVocalsPath = Path.Combine(_dir, "missing-vocals.wav");
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var snap = template with
         {
             Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
             VocalsAudioPath = missingVocalsPath,
-        });
-        var validStemPair = WithValidatedStemPair(snap);
-        snap = snap with { AmbianceAudioPath = validStemPair.AmbianceAudioPath };
-        snap = WithValidatedTranscript(snap);
+        };
 
         var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
 
@@ -562,7 +438,7 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ValidateArtifacts_MissingMedia_DegradesToFoundation()
+    public async Task ValidateArtifacts_MissingMedia_DegradesToFoundation()
     {
         var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
@@ -600,15 +476,21 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ComputeInvalidation_TranscribedStageNoChange_ReturnsNone()
+    public async Task ComputeInvalidation_TranscribedStageNoChange_ReturnsNone()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Stage = SessionWorkflowStage.Transcribed,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
-        });
-        snap = WithValidatedTranscript(snap);
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
         var settings = new AppSettings
         {
             TranscriptionProvider = ProviderNames.FasterWhisper,
@@ -618,15 +500,21 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ComputeInvalidation_TranscribedStageModelChanged_ReturnsTranscription()
+    public async Task ComputeInvalidation_TranscribedStageModelChanged_ReturnsTranscription()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Stage = SessionWorkflowStage.Transcribed,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
-        });
-        snap = WithValidatedTranscript(snap);
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
         var settings = new AppSettings
         {
             TranscriptionProvider = ProviderNames.FasterWhisper,
@@ -636,16 +524,24 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ComputeInvalidation_TranscribedStage_VocalSeparationToggleChanged_ReturnsTranscription()
+    public async Task ComputeInvalidation_TranscribedStage_VocalSeparationToggleChanged_ReturnsTranscription()
     {
-        var snap = WithValidatedMedia(WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var (vocalsPath, ambiancePath) = await SessionSemanticsIntegrityFixture.WriteStemPairAsync(_dir, mediaPath);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Stage = SessionWorkflowStage.Transcribed,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
-        });
-        snap = WithValidatedStemPair(snap);
-        snap = WithValidatedTranscript(snap);
+            VocalsAudioPath = vocalsPath,
+            AmbianceAudioPath = ambiancePath,
+        };
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
         var settings = new AppSettings
         {
             TranscriptionProvider = ProviderNames.FasterWhisper,
@@ -657,11 +553,11 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
-    public void ComputeInvalidation_TtsStageOnlyTtsChanged_ReturnsTts()
+    public async Task ComputeInvalidation_TtsStageOnlyTtsChanged_ReturnsTts()
     {
-        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Stage = SessionWorkflowStage.TtsGenerated,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
             TranslationProvider = ProviderNames.Deepl,
@@ -670,10 +566,23 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TtsProvider = ProviderNames.EdgeTts,
             TtsVoice = "en-US-JennyNeural",
         };
-        snap = WithValidatedMedia(snap);
-        snap = WithValidatedTranscript(snap);
-        snap = WithValidatedTranslation(snap);
-        snap = WithValidatedTts(snap);
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var snapForTts = template with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+        };
+        var (ttsPath, segmentsDir, segPaths) =
+            await SessionSemanticsIntegrityFixture.WriteTtsBundleAsync(_dir, translationPath, snapForTts);
+        var snap = snapForTts with
+        {
+            TtsPath = ttsPath,
+            TtsSegmentsPath = segmentsDir,
+            TtsSegmentAudioPaths = segPaths,
+        };
         var settings = new AppSettings
         {
             TranscriptionProvider = ProviderNames.FasterWhisper,
@@ -684,17 +593,17 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TargetLanguage = "en",
             TtsProvider = ProviderNames.EdgeTts,
             TtsProfile = ComputeProfile.Cloud,
-            TtsVoice = "en-US-AriaNeural", // changed voice
+            TtsVoice = "en-US-AriaNeural",
         };
         Assert.Equal(PipelineInvalidation.Tts, SessionSnapshotSemantics.ComputeInvalidation(snap, settings));
     }
 
     [Fact]
-    public void ComputeInvalidation_TtsStageTargetLanguageChanged_ReturnsTranslation()
+    public async Task ComputeInvalidation_TtsStageTargetLanguageChanged_ReturnsTranslation()
     {
-        var snap = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var template = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow) with
         {
-            Stage = SessionWorkflowStage.TtsGenerated,
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
             TranslationProvider = ProviderNames.Deepl,
@@ -703,17 +612,30 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
             TtsProvider = ProviderNames.EdgeTts,
             TtsVoice = "en-US-JennyNeural",
         };
-        snap = WithValidatedMedia(snap);
-        snap = WithValidatedTranscript(snap);
-        snap = WithValidatedTranslation(snap);
-        snap = WithValidatedTts(snap);
+        var transcriptPath = await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var translationPath = await SessionSemanticsIntegrityFixture.WriteTranslationAsync(_dir, transcriptPath, template);
+        var snapForTts = template with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+        };
+        var (ttsPath, segmentsDir, segPaths) =
+            await SessionSemanticsIntegrityFixture.WriteTtsBundleAsync(_dir, translationPath, snapForTts);
+        var snap = snapForTts with
+        {
+            TtsPath = ttsPath,
+            TtsSegmentsPath = segmentsDir,
+            TtsSegmentAudioPaths = segPaths,
+        };
         var settings = new AppSettings
         {
             TranscriptionProvider = ProviderNames.FasterWhisper,
             TranscriptionModel = "base",
             TranslationProvider = ProviderNames.Deepl,
             TranslationModel = "default",
-            TargetLanguage = "fr", // different target language
+            TargetLanguage = "fr",
             TtsProvider = ProviderNames.EdgeTts,
             TtsVoice = "en-US-JennyNeural",
         };
@@ -763,7 +685,6 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         Assert.Null(result.TranslatedAtUtc);
         Assert.Null(result.TranslationProvider);
         Assert.Null(result.TranslationModel);
-        // TTS should also be cleared
         Assert.Null(result.TtsPath);
         Assert.Null(result.TtsVoice);
         Assert.Null(result.TtsSegmentDurations);

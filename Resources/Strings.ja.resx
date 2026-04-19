@@ -691,7 +691,7 @@
     <value>このプラットフォームではプレビューはご利用いただけません。</value>
   </data>
   <data name="Wizard_Playhead_Clip_Tooltip" xml:space="preserve">
-    <value>オーディオクリップの長さ（秒）（3～15秒</value>
+    <value>オーディオクリップの長さ（3～15秒）</value>
   </data>
   <data name="Wizard_Button_Stop" xml:space="preserve">
     <value>ストップ</value>

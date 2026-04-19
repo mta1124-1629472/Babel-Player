@@ -128,6 +128,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public AppSettings CurrentSettings { get; private set; }
 
+    internal AppLog Log => _log;
+
     /// <summary>UTC time when this coordinator instance was created — used for cold-start UX (warm-up hints).</summary>
     public DateTimeOffset ProcessStartedAtUtc { get; } = DateTimeOffset.UtcNow;
 
@@ -263,7 +265,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     public string LogFilePath => _log.LogFilePath;
-    internal AppLog Log => _log;
     internal ContainerizedServiceProbe? ContainerizedProbe => _containerizedProbe;
     public IContainerizedInferenceManager? ContainerizedInferenceManager => _containerizedInferenceManager;
     internal VideoEnhancementDiagnostics VideoEnhancementDiagnostics

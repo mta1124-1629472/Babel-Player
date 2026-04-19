@@ -23,7 +23,7 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        if (!ArtifactIntegrity.HasManifest(snapshot.IngestedMediaPath))
+        if (!ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath, out _, out _))
         {
             error = null;
             return true;
@@ -60,24 +60,25 @@ internal static class ArtifactIntegrityValidator
         if (!ValidateMedia(snapshot, out error))
             return false;
 
+        if (!File.Exists(snapshot.VocalsAudioPath!) || !File.Exists(snapshot.AmbianceAudioPath!))
+        {
+            error = "Vocal separation audio file was missing.";
+            return false;
+        }
+
+        var vocalsHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.VocalsAudioPath!, out _, out _);
+        var ambianceHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.AmbianceAudioPath!, out _, out _);
+        var mediaHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out _, out _);
+
+        if (!vocalsHasManifest || !ambianceHasManifest || !mediaHasManifest)
+        {
+            error = null;
+            return true;
+        }
+
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(("media_copy", snapshot.IngestedMediaPath));
-        var strictVocals = ArtifactIntegrity.HasManifest(snapshot.VocalsAudioPath);
-        var strictAmbiance = ArtifactIntegrity.HasManifest(snapshot.AmbianceAudioPath);
 
-        if (!File.Exists(snapshot.VocalsAudioPath!))
-        {
-            error = $"Artifact file was missing: {snapshot.VocalsAudioPath}";
-            return false;
-        }
-
-        if (!File.Exists(snapshot.AmbianceAudioPath!))
-        {
-            error = $"Artifact file was missing: {snapshot.AmbianceAudioPath}";
-            return false;
-        }
-
-        if (strictVocals
-            && !ValidateFileArtifact(
+        if (!ValidateFileArtifact(
                 snapshot.VocalsAudioPath!,
                 "vocals_stem",
                 expectedSchemaVersion: null,
@@ -91,8 +92,7 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        if (strictAmbiance
-            && !ValidateFileArtifact(
+        if (!ValidateFileArtifact(
                 snapshot.AmbianceAudioPath!,
                 "ambiance_stem",
                 expectedSchemaVersion: null,
@@ -107,19 +107,19 @@ internal static class ArtifactIntegrityValidator
         }
 
         if (ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out var mediaManifest, out _)
-            && mediaManifest is not null)
+            && mediaManifest is not null
+            && ArtifactIntegrity.TryLoadManifest(snapshot.VocalsAudioPath!, out var vocalsManifest, out _)
+            && vocalsManifest is not null
+            && ArtifactIntegrity.TryLoadManifest(snapshot.AmbianceAudioPath!, out var ambianceManifest, out _)
+            && ambianceManifest is not null)
         {
-            if (ArtifactIntegrity.TryLoadManifest(snapshot.VocalsAudioPath!, out var vocalsManifest, out _)
-                && vocalsManifest is not null
-                && !ArtifactIntegrity.DurationsMatch(vocalsManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
+            if (!ArtifactIntegrity.DurationsMatch(vocalsManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
             {
                 error = "Vocals stem duration did not match the ingested media duration.";
                 return false;
             }
 
-            if (ArtifactIntegrity.TryLoadManifest(snapshot.AmbianceAudioPath!, out var ambianceManifest, out _)
-                && ambianceManifest is not null
-                && !ArtifactIntegrity.DurationsMatch(ambianceManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
+            if (!ArtifactIntegrity.DurationsMatch(ambianceManifest.ProbedDurationSeconds, mediaManifest.ProbedDurationSeconds))
             {
                 error = "Ambiance stem duration did not match the ingested media duration.";
                 return false;
@@ -144,11 +144,12 @@ internal static class ArtifactIntegrityValidator
 
         if (!File.Exists(snapshot.TranscriptPath))
         {
-            error = $"Artifact file was missing: {snapshot.TranscriptPath}";
+            error = $"Transcript file was missing: {snapshot.TranscriptPath}";
             return false;
         }
 
-        if (!ArtifactIntegrity.HasManifest(snapshot.TranscriptPath))
+        var transcriptManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TranscriptPath);
+        if (!File.Exists(transcriptManifestPath))
         {
             error = null;
             return true;
@@ -160,8 +161,12 @@ internal static class ArtifactIntegrityValidator
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(
             ("media_copy", snapshot.IngestedMediaPath),
             ("vocals_stem", snapshot.VocalsAudioPath));
+        double? mediaDuration = null;
+        if (ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out var mediaManifestForDuration, out _)
+            && mediaManifestForDuration is not null)
+            mediaDuration = mediaManifestForDuration.ProbedDurationSeconds;
         var provenance = ArtifactIntegrity.ComputeTranscriptionProvenanceDigest(
-            ArtifactIntegrity.TryGetArtifactSha256(snapshot.IngestedMediaPath),
+            upstream.TryGetValue("media_copy", out var mediaHash) ? mediaHash : null,
             !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath),
             BuildTranscriptionSettings(snapshot));
 
@@ -179,13 +184,12 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        if (ArtifactIntegrity.TryLoadManifest(snapshot.TranscriptPath, out var transcriptManifest, out _)
+        if (mediaDuration.HasValue
+            && ArtifactIntegrity.TryLoadManifest(snapshot.TranscriptPath, out var transcriptManifest, out _)
             && transcriptManifest is not null
-            && ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out var mediaManifest, out _)
-            && mediaManifest is not null
             && !ArtifactIntegrity.DurationsMatch(
                 transcriptManifest.SegmentTiming?.DurationSeconds,
-                mediaManifest.ProbedDurationSeconds))
+                mediaDuration))
         {
             error = "Transcript timing range did not match the expected media duration.";
             return false;
@@ -197,6 +201,8 @@ internal static class ArtifactIntegrityValidator
 
     public static bool ValidateTranslation(WorkflowSessionSnapshot snapshot, out string? error)
     {
+        if (!ValidateTranscript(snapshot, out error))
+            return false;
         if (string.IsNullOrWhiteSpace(snapshot.TranslationPath))
         {
             error = "Translation path was missing.";
@@ -205,47 +211,38 @@ internal static class ArtifactIntegrityValidator
 
         if (!File.Exists(snapshot.TranslationPath))
         {
-            error = $"Artifact file was missing: {snapshot.TranslationPath}";
+            error = $"Translation file was missing: {snapshot.TranslationPath}";
             return false;
         }
 
-        if (ShouldValidateTranscriptChain(snapshot) && !ValidateTranscript(snapshot, out error))
-            return false;
-
-        if (!ArtifactIntegrity.HasManifest(snapshot.TranslationPath))
+        var translationManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TranslationPath);
+        if (!File.Exists(translationManifestPath))
         {
             error = null;
             return true;
         }
 
         var translation = ArtifactJson.DeserializeTranslation(File.ReadAllText(snapshot.TranslationPath), snapshot.TranslationPath);
+        var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath!), snapshot.TranscriptPath!);
         var expectedTiming = ArtifactIntegrity.BuildTranslationTimingSummary(translation.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranslationSegmentIds(translation.Segments);
-        ArtifactSegmentTimingSummary? transcriptTiming = null;
-        if (ArtifactIntegrity.HasManifest(snapshot.TranscriptPath)
-            && !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
-            && File.Exists(snapshot.TranscriptPath))
+        var transcriptSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
+        if (!ArtifactIntegrity.SegmentIdsMatch(expectedSegmentIds, transcriptSegmentIds))
         {
-            var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath!), snapshot.TranscriptPath!);
-            var transcriptSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
-            if (!ArtifactIntegrity.SegmentIdsMatch(expectedSegmentIds, transcriptSegmentIds))
-            {
-                error = "Translation segment ids did not match transcript segment ids.";
-                return false;
-            }
-
-            if ((translation.Segments?.Count ?? 0) != (transcript.Segments?.Count ?? 0))
-            {
-                error = "Translation segment count did not match transcript segment count.";
-                return false;
-            }
-
-            transcriptTiming = ArtifactIntegrity.BuildTranscriptTimingSummary(transcript.Segments);
+            error = "Translation segment ids did not match transcript segment ids.";
+            return false;
         }
 
+        if ((translation.Segments?.Count ?? 0) != (transcript.Segments?.Count ?? 0))
+        {
+            error = "Translation segment count did not match transcript segment count.";
+            return false;
+        }
+
+        ArtifactIntegrity.TryLoadManifest(snapshot.TranscriptPath!, out var transcriptManifest, out _);
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(("transcript", snapshot.TranscriptPath));
         var provenance = ArtifactIntegrity.ComputeTranslationProvenanceDigest(
-            ArtifactIntegrity.TryGetArtifactSha256(snapshot.TranscriptPath),
+            upstream.TryGetValue("transcript", out var transcriptHash) ? transcriptHash : null,
             BuildTranslationSettings(snapshot),
             translation.SourceLanguage ?? snapshot.SourceLanguage ?? string.Empty,
             translation.TargetLanguage ?? snapshot.TargetLanguage ?? string.Empty);
@@ -264,12 +261,12 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        if (transcriptTiming is not null
+        if (transcriptManifest is not null
             && ArtifactIntegrity.TryLoadManifest(snapshot.TranslationPath, out var translationManifest, out _)
             && translationManifest is not null
             && !ArtifactIntegrity.SegmentTimingMatches(
                 translationManifest.SegmentTiming,
-                transcriptTiming))
+                transcriptManifest.SegmentTiming))
         {
             error = "Translation timing summary did not match transcript timing summary.";
             return false;
@@ -283,49 +280,34 @@ internal static class ArtifactIntegrityValidator
     {
         if (!ValidateTranslation(snapshot, out error))
             return false;
-
-        if (string.IsNullOrWhiteSpace(snapshot.TtsPath))
+        if (string.IsNullOrWhiteSpace(snapshot.TtsPath) || !File.Exists(snapshot.TtsPath))
         {
-            error = "TTS artifact path was missing.";
+            error = "TTS timeline output was missing.";
             return false;
         }
 
-        if (!File.Exists(snapshot.TtsPath))
-        {
-            error = $"Artifact file was missing: {snapshot.TtsPath}";
-            return false;
-        }
+        var ttsManifestPath = ArtifactPersistence.GetManifestPath(snapshot.TtsPath);
+        var segmentsManifestPath = string.IsNullOrWhiteSpace(snapshot.TtsSegmentsPath)
+            ? null
+            : ArtifactPersistence.GetManifestPath(snapshot.TtsSegmentsPath);
+        var hasTtsManifest = File.Exists(ttsManifestPath);
+        var hasSegmentsManifest = segmentsManifestPath is not null && File.Exists(segmentsManifestPath);
 
-        if (!ArtifactIntegrity.HasManifest(snapshot.TtsPath))
+        if (!hasTtsManifest && !hasSegmentsManifest)
         {
-            if (!string.IsNullOrWhiteSpace(snapshot.MixedDubAudioPath) && !File.Exists(snapshot.MixedDubAudioPath))
-            {
-                error = $"Artifact file was missing: {snapshot.MixedDubAudioPath}";
-                return false;
-            }
-
             if (snapshot.TtsSegmentAudioPaths is { Count: > 0 })
             {
-                foreach (var pair in snapshot.TtsSegmentAudioPaths)
-                {
-                    if (string.IsNullOrWhiteSpace(pair.Key)
-                        || string.IsNullOrWhiteSpace(pair.Value)
-                        || !File.Exists(pair.Value)
-                        || new FileInfo(pair.Value).Length <= 0)
-                    {
-                        error = $"Validated TTS clip was missing for segment '{pair.Key}'.";
-                        return false;
-                    }
-                }
+                error = "TTS segment clips require integrity manifests.";
+                return false;
             }
 
             error = null;
             return true;
         }
 
-        if (string.IsNullOrWhiteSpace(snapshot.TtsSegmentsPath))
+        if (string.IsNullOrWhiteSpace(snapshot.TtsSegmentsPath) || string.IsNullOrWhiteSpace(snapshot.TtsPath))
         {
-            error = "TTS segment directory path was missing.";
+            error = "TTS artifact paths were incomplete.";
             return false;
         }
 
@@ -356,22 +338,14 @@ internal static class ArtifactIntegrityValidator
             }
         }
 
-        var translationTiming = ArtifactIntegrity.TryLoadManifest(snapshot.TranslationPath!, out var translationManifest, out _)
-            && translationManifest is not null
-                ? translationManifest.SegmentTiming
-                : ArtifactIntegrity.BuildTranslationTimingSummary(translation.Segments);
-        var translationHash = ArtifactIntegrity.TryGetArtifactSha256(snapshot.TranslationPath!)
-            ?? throw new InvalidOperationException(
-                $"Translation artifact hash could not be resolved for TTS validation: {snapshot.TranslationPath}");
-
         if (!ValidateDirectoryArtifact(
                 snapshot.TtsSegmentsPath,
                 "tts_segment_set",
                 expectedSegmentIds,
-                translationTiming,
+                ArtifactIntegrity.BuildTranslationTimingSummary(translation.Segments),
                 ArtifactIntegrity.BuildUpstreamHashes(("translation", snapshot.TranslationPath)),
                 ArtifactIntegrity.ComputeTtsSegmentSetProvenanceDigest(
-                    translationHash,
+                    ArtifactIntegrity.LoadManifest(snapshot.TranslationPath!).Sha256,
                     snapshot,
                     BuildTtsSettings(snapshot)),
                 snapshot.TtsSegmentAudioPaths,
@@ -381,9 +355,12 @@ internal static class ArtifactIntegrityValidator
         }
 
         var segmentManifest = ArtifactIntegrity.LoadManifest(snapshot.TtsSegmentsPath);
+        var translationManifest = ArtifactIntegrity.LoadManifest(snapshot.TranslationPath!);
         var dubProvenance = ArtifactIntegrity.ComputeDubProvenanceDigest(
             segmentManifest.Sha256,
-            ArtifactIntegrity.TryGetArtifactSha256(snapshot.AmbianceAudioPath),
+            !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath)
+                ? ArtifactIntegrity.LoadManifest(snapshot.AmbianceAudioPath!).Sha256
+                : null,
             BuildTtsSettings(snapshot));
 
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(
@@ -396,7 +373,7 @@ internal static class ArtifactIntegrityValidator
                 expectedSchemaVersion: null,
                 expectedSegmentCount: expectedSegmentIds.Count,
                 expectedSegmentIds: expectedSegmentIds,
-                expectedTiming: translationTiming,
+                expectedTiming: translationManifest.SegmentTiming,
                 expectedUpstreamHashes: upstream,
                 expectedProvenanceDigest: dubProvenance,
                 out error))
@@ -404,29 +381,30 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        if (ArtifactIntegrity.TryLoadManifest(snapshot.TtsPath, out var dubManifest, out _)
-            && dubManifest is not null
-            && !ArtifactIntegrity.DurationsMatch(
+        var dubManifest = ArtifactIntegrity.LoadManifest(snapshot.TtsPath);
+        if (!ArtifactIntegrity.DurationsMatch(
                 dubManifest.ProbedDurationSeconds,
-                translationTiming?.DurationSeconds))
+                translationManifest.SegmentTiming?.DurationSeconds))
         {
             error = "Dub duration did not match the expected translation range.";
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(snapshot.MixedDubAudioPath)
-            && !ValidateFileArtifact(
-                snapshot.MixedDubAudioPath,
-                "dub_mixed",
-                expectedSchemaVersion: null,
-                expectedSegmentCount: expectedSegmentIds.Count,
-                expectedSegmentIds: expectedSegmentIds,
-                expectedTiming: translationTiming,
-                expectedUpstreamHashes: upstream,
-                expectedProvenanceDigest: dubProvenance,
-                out error))
+        if (!string.IsNullOrWhiteSpace(snapshot.MixedDubAudioPath))
         {
-            return false;
+            if (!ValidateFileArtifact(
+                    snapshot.MixedDubAudioPath,
+                    "dub_mixed",
+                    expectedSchemaVersion: null,
+                    expectedSegmentCount: expectedSegmentIds.Count,
+                    expectedSegmentIds: expectedSegmentIds,
+                    expectedTiming: translationManifest.SegmentTiming,
+                    expectedUpstreamHashes: upstream,
+                    expectedProvenanceDigest: dubProvenance,
+                    out error))
+            {
+                return false;
+            }
         }
 
         error = null;
@@ -646,10 +624,4 @@ internal static class ArtifactIntegrityValidator
             DubTimingMode = snapshot.DubTimingMode ?? SegmentTimingMode.Off,
             AmbianceMixDb = snapshot.AmbianceMixDb ?? -15.0,
         };
-
-    private static bool ShouldValidateTranscriptChain(WorkflowSessionSnapshot snapshot) =>
-        !string.IsNullOrWhiteSpace(snapshot.TranscriptPath)
-        || !string.IsNullOrWhiteSpace(snapshot.IngestedMediaPath)
-        || !string.IsNullOrWhiteSpace(snapshot.VocalsAudioPath)
-        || !string.IsNullOrWhiteSpace(snapshot.AmbianceAudioPath);
 }

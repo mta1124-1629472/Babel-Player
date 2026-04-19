@@ -1217,6 +1217,7 @@ public sealed partial class SessionWorkflowCoordinator
     public void StopPlayback()
     {
         StopTtsPlayback();
+        StopAmbiancePlayback();
         StopSourceMedia();
     }
 
@@ -1257,7 +1258,30 @@ public sealed partial class SessionWorkflowCoordinator
     /// </summary>
     public void StopSourceMedia()
     {
-        _transportManager.SourceMediaPlayer?.Pause();
+        StopAmbiancePlayback();
+        try
+        {
+            _transportManager.SourceMediaPlayer?.Pause();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown/race path: source transport was disposed during pause.
+        }
+    }
+
+    /// <summary>
+    /// Pauses separated ambiance preview playback if an ambiance player exists.
+    /// </summary>
+    public void StopAmbiancePlayback()
+    {
+        try
+        {
+            _transportManager.AmbiancePlayer?.Pause();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown/race path: ambiance transport was disposed during pause.
+        }
     }
 
     public IMediaTransport GetOrCreateSourcePlayer() =>
@@ -1274,6 +1298,12 @@ public sealed partial class SessionWorkflowCoordinator
 
     /// <summary>The TTS segment player, if it has been created. Null until first TTS playback.</summary>
     public IMediaTransport? SegmentPlayer => _transportManager.SegmentPlayer;
+
+    /// <summary>The ambiance preview player, if it has been created. Null until first separated-ambiance preview.</summary>
+    public IMediaTransport? AmbiancePlayer => _transportManager.AmbiancePlayer;
+
+    public IMediaTransport GetOrCreateAmbiancePlayer() =>
+        _transportManager.GetOrCreateAmbiancePlayer();
 
     /// <summary>
     /// Performs an orderly shutdown by flushing pending state, unsubscribing event handlers, waiting for in-flight TTS tasks, and disposing managed resources.

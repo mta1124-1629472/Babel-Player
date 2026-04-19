@@ -12,21 +12,25 @@ public sealed class MediaTransportManager : IMediaTransportManager
 {
     private readonly IMediaTransport? _injectedSegmentPlayer;
     private readonly IMediaTransport? _injectedSourcePlayer;
+    private readonly IMediaTransport? _injectedAmbiancePlayer;
     private readonly VideoPlaybackOptions? _videoOptions;
     private readonly Func<VideoPlaybackOptions>? _videoOptionsFactory;
     private readonly AppLog? _log;
     private IMediaTransport? _segmentPlayer;
     private IMediaTransport? _sourceMediaPlayer;
+    private IMediaTransport? _ambiancePlayer;
 
     public MediaTransportManager(
         IMediaTransport? segmentPlayer = null,
         IMediaTransport? sourcePlayer = null,
+        IMediaTransport? ambiancePlayer = null,
         VideoPlaybackOptions? videoOptions = null,
         Func<VideoPlaybackOptions>? videoOptionsFactory = null,
         AppLog? log = null)
     {
         _injectedSegmentPlayer = segmentPlayer;
         _injectedSourcePlayer  = sourcePlayer;
+        _injectedAmbiancePlayer = ambiancePlayer;
         _videoOptions          = videoOptions;
         _videoOptionsFactory   = videoOptionsFactory;
         _log                   = log;
@@ -46,9 +50,17 @@ public sealed class MediaTransportManager : IMediaTransportManager
         return _sourceMediaPlayer;
     }
 
+    public IMediaTransport GetOrCreateAmbiancePlayer()
+    {
+        _ambiancePlayer ??= _injectedAmbiancePlayer ?? new LibMpvHeadlessTransport(suppressAudio: false);
+        return _ambiancePlayer;
+    }
+
     public IMediaTransport? SegmentPlayer => _segmentPlayer;
 
     public IMediaTransport? SourceMediaPlayer => _sourceMediaPlayer;
+
+    public IMediaTransport? AmbiancePlayer => _ambiancePlayer;
 
     public void Dispose()
     {
@@ -58,5 +70,8 @@ public sealed class MediaTransportManager : IMediaTransportManager
 
         if (_injectedSourcePlayer is null)
             _sourceMediaPlayer?.Dispose();
+
+        if (_injectedAmbiancePlayer is null)
+            _ambiancePlayer?.Dispose();
     }
 }
