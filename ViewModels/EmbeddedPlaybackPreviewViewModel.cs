@@ -15,6 +15,7 @@ using Babel.Player.Models;
 using Babel.Player.Resources;
 using Babel.Player.Services;
 using Babel.Player.Services.Settings;
+using Babel.Player.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -192,8 +193,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     public Thickness SegmentsPaneBorderThickness => IsSegmentsPaneOnLeft ? new Thickness(0, 0, 1, 0) : new Thickness(1, 0, 0, 0);
     public string LeftPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Pipeline") : GetLocalized("Section_Segments");
     public string RightPaneRole => IsPipelinePaneOnLeft ? GetLocalized("Section_Segments") : GetLocalized("Section_Pipeline");
-    public string LeftPaneTooltip => BuildPaneTooltip(isLeftSide: true, LeftPaneRole, hotkey: "A");
-    public string RightPaneTooltip => BuildPaneTooltip(isLeftSide: false, RightPaneRole, hotkey: "S");
+    public string LeftPaneTooltip => BuildPaneTooltip(isLeftSide: true, LeftPaneRole, MainWindowShortcutDefaults.ToggleLeftPaneLabel);
+    public string RightPaneTooltip => BuildPaneTooltip(isLeftSide: false, RightPaneRole, MainWindowShortcutDefaults.ToggleRightPaneLabel);
     public string SegmentCountLabel => Segments.Count == 1
         ? GetLocalized("Label_SegmentCountSingle")
         : string.Format(
@@ -568,11 +569,13 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
     [RelayCommand]
     private void ToggleFullscreen() => IsFullscreen = !IsFullscreen;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanTogglePanesWhileNotFullscreen))]
     private void ToggleLeftPane() => TogglePaneForSide(isLeftSide: true);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanTogglePanesWhileNotFullscreen))]
     private void ToggleRightPane() => TogglePaneForSide(isLeftSide: false);
+
+    private bool CanTogglePanesWhileNotFullscreen() => !IsFullscreen;
 
     [RelayCommand]
     private void ResetLeftPaneWidth() => ResetPaneWidthForSide(isLeftSide: true);
@@ -674,6 +677,8 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             IsControlsVisible = true;
         }
 
+        ToggleLeftPaneCommand.NotifyCanExecuteChanged();
+        ToggleRightPaneCommand.NotifyCanExecuteChanged();
         NotifyPaneLayoutProjectionChanged();
     }
 
@@ -720,6 +725,9 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private void TogglePaneForSide(bool isLeftSide)
     {
+        if (IsFullscreen)
+            return;
+
         if (IsPipelineAssignedToSide(isLeftSide))
         {
             if (SetPipelinePaneVisibleCore(!GetPaneVisibilityForSide(isLeftSide)))

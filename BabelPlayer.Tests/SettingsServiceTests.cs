@@ -174,12 +174,13 @@ public sealed class SettingsServiceTests : IDisposable
     [Fact]
     public void LoadOrDefault_InvalidPaneWidths_FallBackToDefaults()
     {
+        // Valid JSON so deserialization succeeds and NormalizePaneWidth runs per field (invalid numbers, not a thrown JsonException).
         File.WriteAllText(
             _settingsPath,
             """
             {
               "PipelinePaneWidth": -1,
-              "SegmentsPaneWidth": "NaN"
+              "SegmentsPaneWidth": 0
             }
             """);
 

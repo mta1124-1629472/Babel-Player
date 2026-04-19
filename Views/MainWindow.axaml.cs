@@ -281,6 +281,12 @@ public partial class MainWindow : Window
         vm.Playback.Preview.IsCompactVideoChrome = shouldCompact;
     }
 
+    /// <summary>
+    /// Clears the cached wide-chrome width so the next measure can shrink the threshold when
+    /// intrinsic layout tightens (dub off, panes hidden, exiting fullscreen).
+    /// </summary>
+    private void InvalidateWideVideoChromeRequiredWidth() => _wideVideoChromeRequiredWidth = 0;
+
     private double CacheWideVideoChromeRequiredWidth(bool forceMeasure = false)
     {
         var wideVideoChromeLayout = this.FindControl<Control>("WideVideoChromeLayoutRoot");
@@ -364,6 +370,7 @@ public partial class MainWindow : Window
             case nameof(EmbeddedPlaybackPreviewViewModel.IsPipelinePaneVisible):
             case nameof(EmbeddedPlaybackPreviewViewModel.IsSegmentsPaneVisible):
             case nameof(EmbeddedPlaybackPreviewViewModel.SwapPaneSides):
+                InvalidateWideVideoChromeRequiredWidth();
                 UpdateVideoChromeCompactState();
                 break;
             case nameof(EmbeddedPlaybackPreviewViewModel.IsFullscreen):
@@ -378,6 +385,7 @@ public partial class MainWindow : Window
                     }
                 }
 
+                InvalidateWideVideoChromeRequiredWidth();
                 UpdateVideoChromeCompactState();
                 break;
         }
@@ -405,8 +413,8 @@ public partial class MainWindow : Window
         {
             MainWindowShortcutAction.PlayPause => TryExecuteShortcut(preview.IsSourceMediaLoaded, preview.PlayPauseSourceCommand),
             MainWindowShortcutAction.ToggleSubtitles => TryExecuteShortcut(preview.HasSegments, preview.ToggleSubtitlesCommand),
-            MainWindowShortcutAction.ToggleLeftPane => TryExecuteShortcut(true, preview.ToggleLeftPaneCommand),
-            MainWindowShortcutAction.ToggleRightPane => TryExecuteShortcut(true, preview.ToggleRightPaneCommand),
+            MainWindowShortcutAction.ToggleLeftPane => TryExecuteShortcut(!preview.IsFullscreen, preview.ToggleLeftPaneCommand),
+            MainWindowShortcutAction.ToggleRightPane => TryExecuteShortcut(!preview.IsFullscreen, preview.ToggleRightPaneCommand),
             MainWindowShortcutAction.ToggleDubMode => TryExecuteShortcut(preview.HasSegments, preview.ToggleDubModeCommand),
             MainWindowShortcutAction.ToggleFullscreen => TryExecuteShortcut(preview.IsSourceMediaLoaded, preview.ToggleFullscreenCommand),
             MainWindowShortcutAction.ExitFullscreen => TryExitFullscreen(preview),

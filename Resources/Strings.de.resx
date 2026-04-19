@@ -966,4 +966,44 @@
   <data name="Language_zh" xml:space="preserve">
     <value>Chinesisch (vereinfacht)</value>
   </data>
+
+  <data name="Automation_ToggleLeftPane" xml:space="preserve">
+    <value>Toggle left pane</value>
+  </data>
+  <data name="Automation_ToggleRightPane" xml:space="preserve">
+    <value>Toggle right pane</value>
+  </data>
+  <data name="Common_Left" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="Common_Right" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="Label_SegmentCountFormat" xml:space="preserve">
+    <value>{0} segments</value>
+  </data>
+  <data name="Label_SegmentCountSingle" xml:space="preserve">
+    <value>1 segment</value>
+  </data>
+  <data name="Settings_Check_SwapPaneSides" xml:space="preserve">
+    <value>Swap pane sides</value>
+  </data>
+  <data name="Settings_Group_Layout" xml:space="preserve">
+    <value>Layout</value>
+  </data>
+  <data name="Settings_Hint_PaneResize" xml:space="preserve">
+    <value>Double-click a pane divider to restore that pane to its default width.</value>
+  </data>
+  <data name="Settings_Hint_SwapPaneSides" xml:space="preserve">
+    <value>Moves the pipeline pane to the right and the segments pane to the left.</value>
+  </data>
+  <data name="Settings_Label_ToggleLeftPaneHotkey" xml:space="preserve">
+    <value>Toggle Left Pane:</value>
+  </data>
+  <data name="Settings_Label_ToggleRightPaneHotkey" xml:space="preserve">
+    <value>Toggle Right Pane:</value>
+  </data>
+  <data name="Tooltip_PaneSideFormat" xml:space="preserve">
+    <value>{0} pane: {1} ({2})</value>
+  </data>
 </root>
