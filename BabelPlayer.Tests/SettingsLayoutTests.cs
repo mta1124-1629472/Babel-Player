@@ -1,7 +1,5 @@
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
-using Avalonia.Controls;
 using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.Services.Registries;
@@ -54,17 +52,17 @@ public sealed class SettingsLayoutTests : IDisposable
 
         using var coordinator = CreateCoordinator(settings);
         using var playback = new EmbeddedPlaybackViewModel(coordinator);
-        using var settingsVm = new SettingsViewModel(
-            _settingsService,
-            coordinator,
-            (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
-            new ModelsTabViewModel(new ModelDownloader(_log), coordinator));
 
         Assert.False(playback.Preview.IsSegmentsPaneVisible);
         Assert.False(playback.Preview.IsRightPaneVisible);
 
-        settingsVm.ShowSegmentsPane = true;
-        settingsVm.ApplyCommand.Execute(null);
+        // Update persisted settings and sync the preview VM directly. Do not call
+        // coordinator.NotifySettingsModified() here: that runs the full playback
+        // settings handler (provider health refresh, dispatcher marshalling). In CI,
+        // another test may leave Application.Current set without a pumping UI thread,
+        // and InvokeAsync-based paths can deadlock for minutes under --blame-hang.
+        coordinator.CurrentSettings.IsSegmentsPaneVisible = true;
+        playback.Preview.SyncPaneLayoutFromSettings();
 
         Assert.True(coordinator.CurrentSettings.IsSegmentsPaneVisible);
         Assert.True(playback.Preview.IsSegmentsPaneVisible);

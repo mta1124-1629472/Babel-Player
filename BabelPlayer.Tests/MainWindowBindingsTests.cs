@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Resources;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Babel.Player.Resources;
