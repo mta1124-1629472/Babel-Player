@@ -23,7 +23,10 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        if (!ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath, out _, out _))
+        if (!TryLoadManifestWhenPresent(snapshot.IngestedMediaPath, out var hasMediaManifest, out error))
+            return false;
+
+        if (!hasMediaManifest)
         {
             error = null;
             return true;
@@ -66,9 +69,12 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        var vocalsHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.VocalsAudioPath!, out _, out _);
-        var ambianceHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.AmbianceAudioPath!, out _, out _);
-        var mediaHasManifest = ArtifactIntegrity.TryLoadManifest(snapshot.IngestedMediaPath!, out _, out _);
+        if (!TryLoadManifestWhenPresent(snapshot.VocalsAudioPath!, out var vocalsHasManifest, out error))
+            return false;
+        if (!TryLoadManifestWhenPresent(snapshot.AmbianceAudioPath!, out var ambianceHasManifest, out error))
+            return false;
+        if (!TryLoadManifestWhenPresent(snapshot.IngestedMediaPath!, out var mediaHasManifest, out error))
+            return false;
 
         if (!vocalsHasManifest || !ambianceHasManifest || !mediaHasManifest)
         {
@@ -486,6 +492,27 @@ internal static class ArtifactIntegrityValidator
 
         error = null;
         return true;
+    }
+
+    private static bool TryLoadManifestWhenPresent(string artifactPath, out bool hasManifest, out string? error)
+    {
+        var manifestPath = ArtifactPersistence.GetManifestPath(artifactPath);
+        if (!File.Exists(manifestPath))
+        {
+            hasManifest = false;
+            error = null;
+            return true;
+        }
+
+        hasManifest = true;
+        if (ArtifactIntegrity.TryLoadManifest(artifactPath, out _, out var loadError))
+        {
+            error = null;
+            return true;
+        }
+
+        error = $"Artifact manifest was unreadable: {manifestPath}. {loadError}";
+        return false;
     }
 
     private static bool ValidateDirectoryArtifact(
