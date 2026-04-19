@@ -842,7 +842,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            const string kofiUrl = "https://ko-fi.com/R5R01WOOYW";
+            const string kofiUrl = "https://ko-fi.com/babel_player";
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = kofiUrl,
@@ -860,7 +860,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            const string sponsorsUrl = "https://github.com/sponsors/mta1124-1629472";
+            const string sponsorsUrl = "https://github.com/sponsors/mta-babel";
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = sponsorsUrl,
