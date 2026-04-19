@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -11,7 +10,7 @@ using Babel.Player.ViewModels;
 
 namespace BabelPlayer.Tests;
 
-[Trait("Category", "Quarantined")]
+[Trait("Category", "Integration")]
 public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 {
     [Fact]
@@ -269,11 +268,8 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
 
         public void Pause()
         {
-            lock (_sync)
-            {
-                PauseCallCount++;
-                IsPlaying = false;
-            }
+            PauseCallCount++;
+            IsPlaying = false;
         }
 
         public void Seek(long positionMs)
@@ -299,20 +295,10 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
         private async Task WaitForCountAsync(
             int expectedCount,
             Func<int> countSelector,
-            Func<TaskCompletionSource<int>> signalSelector,
-            TimeSpan? timeout = null)
+            Func<TaskCompletionSource<int>> signalSelector)
         {
-            var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
-            var stopwatch = Stopwatch.StartNew();
-
             while (true)
             {
-                if (stopwatch.Elapsed >= effectiveTimeout)
-                {
-                    throw new TimeoutException(
-                        $"Timed out waiting for count {expectedCount}; current count was {countSelector()} after {effectiveTimeout}.");
-                }
-
                 TaskCompletionSource<int> signal;
                 lock (_sync)
                 {
@@ -322,24 +308,9 @@ public sealed class EmbeddedPlaybackPreviewDubPreviewTests
                     signal = signalSelector();
                 }
 
-                int observedCount;
-                try
-                {
-                    observedCount = await signal.Task.WaitAsync(TimeSpan.FromSeconds(1));
-                }
-                catch (TimeoutException) when (stopwatch.Elapsed < effectiveTimeout)
-                {
-                    continue;
-                }
-
+                var observedCount = await signal.Task.WaitAsync(TimeSpan.FromSeconds(1));
                 if (observedCount >= expectedCount)
                     return;
-
-                if (stopwatch.Elapsed >= effectiveTimeout)
-                {
-                    throw new TimeoutException(
-                        $"Timed out waiting for count {expectedCount}; observed count was {observedCount} after {effectiveTimeout}.");
-                }
             }
         }
 

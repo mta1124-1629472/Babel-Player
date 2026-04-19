@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using Babel.Player.ViewModels;
 
@@ -120,11 +121,13 @@ public sealed class EmbeddedPlaybackPreviewViewModelTests : IDisposable
         {
             Directory.Delete(_dir, recursive: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            throw new IOException($"Failed to clean preview VM test directory '{_dir}'.", ex);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            throw new UnauthorizedAccessException($"Failed to clean preview VM test directory '{_dir}'.", ex);
         }
     }
 
@@ -133,9 +136,9 @@ public sealed class EmbeddedPlaybackPreviewViewModelTests : IDisposable
         var registries = new RegistryBundle(
             _perSessionStore,
             _recentStore,
-            new FakeTranscriptionRegistry(),
-            new FakeTranslationRegistry(),
-            new FakeTtsRegistry());
+            new TranscriptionRegistry(_log),
+            new TranslationRegistry(_log),
+            new TtsRegistry(_log));
         var coreServices = new CoordinatorCoreServices(_store, _log, settings);
         return new SessionWorkflowCoordinator(coreServices, registries);
     }
