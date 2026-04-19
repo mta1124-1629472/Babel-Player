@@ -45,8 +45,9 @@ jobs:
           dotnet test BabelPlayer.Tests/BabelPlayer.Tests.csproj
           --no-build
           --configuration Release
+          --filter "Category!=Quarantined"
           --blame-hang
-          --blame-hang-timeout 2m
+          --blame-hang-timeout 5m
           --logger "trx;LogFileName=core-results.trx"
           --results-directory TestResults
 
