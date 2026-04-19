@@ -495,6 +495,18 @@ internal static class ArtifactIntegrityValidator
             error = $"Transcript artifact was unreadable: {ex.Message}";
             return false;
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            transcript = null;
+            error = $"Transcript artifact was unreadable: {ex.Message}";
+            return false;
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            transcript = null;
+            error = $"Transcript artifact was unreadable: {ex.Message}";
+            return false;
+        }
     }
 
     private static bool TryDeserializeTranslationArtifact(
@@ -521,6 +533,18 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
         catch (IOException ex)
+        {
+            translation = null;
+            error = $"Translation artifact was unreadable: {ex.Message}";
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            translation = null;
+            error = $"Translation artifact was unreadable: {ex.Message}";
+            return false;
+        }
+        catch (System.Security.SecurityException ex)
         {
             translation = null;
             error = $"Translation artifact was unreadable: {ex.Message}";
