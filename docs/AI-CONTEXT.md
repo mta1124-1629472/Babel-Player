@@ -238,6 +238,8 @@ dotnet build Babel-Player.sln
 dotnet run --project BabelPlayer.csproj -c Dev
 ```
 
+Use `-SkipFfmpeg` only when you intentionally want to fetch `libmpv` and `uv` without `ffmpeg`/`ffprobe`.
+
 ### Maintained verification
 
 ```powershell
