@@ -14,6 +14,8 @@ using Babel.Player.Services.Transcription;
 
 namespace BabelPlayer.Tests;
 
+[Trait("Category", "Quarantined")]
+[Trait("Category", "Orchestrator")]
 public sealed class ExtractedOrchestratorTests
 {
     [Fact]
@@ -30,7 +32,7 @@ public sealed class ExtractedOrchestratorTests
                 IngestedMediaPath = mediaPath,
             });
         var planner = new FakeStageExecutionPlanner();
-        var providers = new FakeProviderLifecycleManager();
+        using var providers = new FakeProviderLifecycleManager();
         var committer = new FakeSessionCommitter();
         var engine = new FakeInferenceExecutionEngine
         {
@@ -79,7 +81,7 @@ public sealed class ExtractedOrchestratorTests
             {
                 IngestedMediaPath = mediaPath,
             });
-        var providers = new FakeProviderLifecycleManager
+        using var providers = new FakeProviderLifecycleManager
         {
             SeparateVocalsAsyncImpl = (_, _, _) => Task.FromResult(vocalsPath),
         };
@@ -133,6 +135,7 @@ public sealed class ExtractedOrchestratorTests
             });
         var engine = new FakeInferenceExecutionEngine();
         var committer = new FakeSessionCommitter();
+        using var providers = new FakeProviderLifecycleManager();
         var callCount = 0;
         engine.TranscribeAsyncImpl = (_, request, _) =>
         {
@@ -150,7 +153,7 @@ public sealed class ExtractedOrchestratorTests
         var orchestrator = new TranscriptionOrchestrator(
             session,
             new FakeStageExecutionPlanner(),
-            new FakeProviderLifecycleManager(),
+            providers,
             committer,
             engine,
             scope.Log);
@@ -183,10 +186,11 @@ public sealed class ExtractedOrchestratorTests
             TranscribeAsyncImpl = (_, _, _) => Task.FromResult(
                 new TranscriptionResult(false, [], string.Empty, 0, "permission denied")),
         };
+        using var providers = new FakeProviderLifecycleManager();
         var orchestrator = new TranscriptionOrchestrator(
             session,
             new FakeStageExecutionPlanner(),
-            new FakeProviderLifecycleManager(),
+            providers,
             new FakeSessionCommitter(),
             engine,
             scope.Log);
@@ -212,7 +216,7 @@ public sealed class ExtractedOrchestratorTests
                 TranscriptPath = transcriptPath,
                 SourceLanguage = "ES",
             });
-        var providers = new FakeProviderLifecycleManager();
+        using var providers = new FakeProviderLifecycleManager();
         var committer = new FakeSessionCommitter();
         var engine = new FakeInferenceExecutionEngine
         {
@@ -267,7 +271,7 @@ public sealed class ExtractedOrchestratorTests
                 TranscriptPath = transcriptPath,
                 SourceLanguage = "es",
             });
-        var providers = new FakeProviderLifecycleManager
+        using var providers = new FakeProviderLifecycleManager
         {
             EnsureTranslationExecutionReadyAsyncImpl = (progress, _) =>
             {
@@ -335,7 +339,7 @@ public sealed class ExtractedOrchestratorTests
                 TranscriptPath = transcriptPath,
                 SourceLanguage = "es",
             });
-        var providers = new FakeProviderLifecycleManager();
+        using var providers = new FakeProviderLifecycleManager();
         providers.PrepareTranslationExecutionSnapshotAsyncImpl = (stagePlan, path, sourceLanguage, targetLanguage, _, _) =>
         {
             var provider = new StubTranslationProvider();
@@ -557,12 +561,21 @@ public sealed class ExtractedOrchestratorTests
         }
     }
 
-    private sealed class FakeProviderLifecycleManager : IProviderLifecycleManager
+    private sealed class FakeProviderLifecycleManager : IProviderLifecycleManager, IDisposable
     {
-        private readonly ProviderLeaseManager<ITranslationProvider> _translationLeases =
-            new(new AppLog(Path.Combine(Path.GetTempPath(), "babel-player-tests-providerlease.log")), "test-translation");
+        private readonly AppLog _leaseLog;
+        private readonly ProviderLeaseManager<ITranslationProvider> _translationLeases;
         private ITranscriptionProvider _createdTranscriptionProvider = new StubTranscriptionProvider();
         private ITranslationProvider _createdTranslationProvider = new StubTranslationProvider();
+
+        public FakeProviderLifecycleManager()
+        {
+            var leaseLogPath = Path.Combine(
+                Path.GetTempPath(),
+                $"babel-player-tests-providerlease-{Guid.NewGuid():N}.log");
+            _leaseLog = new AppLog(leaseLogPath);
+            _translationLeases = new ProviderLeaseManager<ITranslationProvider>(_leaseLog, "test-translation");
+        }
 
         public ITranscriptionProvider? TranscriptionService { get; set; }
 
@@ -674,6 +687,8 @@ public sealed class ExtractedOrchestratorTests
             CancellationToken cancellationToken) =>
             SeparateVocalsAsyncImpl?.Invoke(progress, stageContext, cancellationToken)
             ?? Task.FromException<string>(new InvalidOperationException("SeparateVocalsAsync was not configured."));
+
+        public void Dispose() => _leaseLog.Dispose();
     }
 
     private sealed class FakeSessionCommitter : ISessionCommitter
