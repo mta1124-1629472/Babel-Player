@@ -935,32 +935,17 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         _isUpdatingActiveSegment = false;
     }
 
-    private Task SeekAndPlayAsync(WorkflowSegmentState segment) =>
-        SeekAndPlayAsync(segment, seekVideoToSegmentStart: false, previewTimingOverride: null);
-
-    /// <summary>
-    /// Previews the selected segment with <see cref="SegmentTimingMode.Pause"/> timing (source pauses during TTS) without persisting a segment override.
-    /// </summary>
-    public Task PreviewSelectedSegmentWithPauseAsync()
-    {
-        if (SelectedSegment is null || !SelectedSegment.HasTtsAudio || !IsSourceMediaLoaded)
-            return Task.CompletedTask;
-
-        return SeekAndPlayAsync(SelectedSegment, seekVideoToSegmentStart: false, previewTimingOverride: SegmentTimingMode.Pause);
-    }
-
     private async Task SeekAndPlayAsync(
         WorkflowSegmentState segment,
-        bool seekVideoToSegmentStart,
-        SegmentTimingMode? previewTimingOverride = null)
+        bool seekVideoToSegmentStart = false)
     {
         var player = _coordinator.SourceMediaPlayer;
-        var needsDubOrTimingPreview = previewTimingOverride.HasValue || IsDubModeOn;
+        var needsDubOrTimingPreview = IsDubModeOn;
         if (player is null)
         {
             await PlaySourceAtSegmentAsync(segment);
             if (needsDubOrTimingPreview && !IsSourcePaused)
-                ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
+                ApplyDubForSegment(segment, seekVideoToSegmentStart);
             return;
         }
 
@@ -973,7 +958,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
             {
                 if (IsDubModeOn)
                 {
-                    ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
+                    ApplyDubForSegment(segment, seekVideoToSegmentStart);
                     appliedDubBeforeSourcePlay = true;
                 }
 
@@ -990,7 +975,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
         }
 
         if (needsDubOrTimingPreview && !IsSourcePaused && !appliedDubBeforeSourcePlay)
-            ApplyDubForSegment(segment, seekVideoToSegmentStart, previewTimingOverride);
+            ApplyDubForSegment(segment, seekVideoToSegmentStart);
     }
 
     private async Task PlaySourceAtSegmentAsync(WorkflowSegmentState? segment)
@@ -1133,8 +1118,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
     private void ApplyDubForSegment(
         WorkflowSegmentState? segment,
-        bool seekVideoToSegmentStart = false,
-        SegmentTimingMode? previewTimingOverride = null)
+        bool seekVideoToSegmentStart = false)
     {
         RestoreDucking();
         _coordinator.StopTtsPlayback();
@@ -1169,11 +1153,7 @@ public sealed partial class EmbeddedPlaybackPreviewViewModel : ViewModelBase, ID
 
         if (segment.HasTtsAudio)
         {
-            // Non-null segment while global dub is off is intentional for TTS preview flows (e.g. coordinator pause-preview).
-            // Resolve effective timing mode: one-shot preview override, then per-segment override, then session setting.
-            var effectiveMode = previewTimingOverride
-                ?? segment.TimingModeOverride
-                ?? _coordinator.CurrentSettings.DubTimingMode;
+            var effectiveMode = segment.TimingModeOverride ?? _coordinator.CurrentSettings.DubTimingMode;
             if (previewMode == DubPreviewAudioMode.DuckSource && IsDubModeOn)
                 ApplyDucking();
             else if (previewMode == DubPreviewAudioMode.SeparatedAmbiance && !IsDubModeOn)

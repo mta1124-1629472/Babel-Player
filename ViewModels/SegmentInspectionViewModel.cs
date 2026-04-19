@@ -42,14 +42,14 @@ public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
     private SegmentTimingMode? _timingModeOverride;
 
     /// <summary>True when a per-segment timing override is active (not inheriting session default).</summary>
-    public bool HasTimingOverride => TimingModeOverride is not null;
+    public bool HasTimingOverride => TimingModeOverride is not null && TimingModeOverride != SegmentTimingMode.Pause;
 
     /// <summary>Display label for the current per-segment timing mode.</summary>
     public string TimingOverrideLabel => TimingModeOverride switch
     {
         SegmentTimingMode.Off => "Off (override)",
         SegmentTimingMode.Stretch => "Stretch (override)",
-        SegmentTimingMode.Pause => "Preview pause (legacy override)",
+        SegmentTimingMode.Pause => "Inherit",
         null => "Inherit",
         _ => "Unknown",
     };
@@ -121,10 +121,6 @@ public partial class SegmentInspectionViewModel : ViewModelBase, IDisposable
         TimingModeOverride = mode;
         _preview.ApplySegmentTimingOverride(currentId, mode);
     }
-
-    [RelayCommand]
-    private Task PreviewPauseAsync() => _preview.PreviewSelectedSegmentWithPauseAsync();
-
     /// <summary>
     /// Detaches the view model's preview PropertyChanged handler and performs cleanup.
     /// </summary>

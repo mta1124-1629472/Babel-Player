@@ -1619,22 +1619,6 @@
                                            Foreground="{DynamicResource StatusTextBrush}"
                                            Opacity="0.7"
                                            TextWrapping="Wrap"/>
-
-                                <TextBlock Text="{local:Localize Label_PreviewPause}"
-                                           Classes="text-label"
-                                           Foreground="{DynamicResource StatusTextBrush}"/>
-
-                                <TextBlock Text="{local:Localize Hint_PreviewPause}"
-                                           Classes="text-caption"
-                                           Foreground="{DynamicResource StatusTextBrush}"
-                                           TextWrapping="Wrap"/>
-
-                                <Button Classes="segmentTimingButton"
-                                        HorizontalAlignment="Left"
-                                        Content="{local:Localize Option_PreviewWithPause}"
-                                        Command="{Binding Inspection.PreviewPauseCommand}"
-                                        IsEnabled="{Binding Inspection.HasTtsAudio}"
-                                        ToolTip.Tip="{local:Localize Tooltip_PreviewWithPause}"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>

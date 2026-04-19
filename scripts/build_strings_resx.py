@@ -125,7 +125,7 @@ STRINGS: Dict[str, str] = {
 
     # ----- Main window: render timing -----
     "Label_RenderTiming": "Render timing",
-    "Hint_RenderTiming": "Applies to generated dub audio and export. Pause is preview-only.",
+    "Hint_RenderTiming": "Applies to generated dub audio and export.",
     "Label_SelectedSegment": "Selected segment",
     "Option_Inherit": "Inherit",
     "Tooltip_Inherit": "Use the session render timing for this segment",
@@ -133,11 +133,6 @@ STRINGS: Dict[str, str] = {
     "Tooltip_TimingOff": "Play TTS as-is for this segment in rendered dub/export",
     "Option_Stretch": "Stretch",
     "Tooltip_TimingStretch": "Time-stretch TTS to fit this segment window in rendered dub/export",
-    "Label_PreviewPause": "Preview pause",
-    "Hint_PreviewPause": "Pauses source playback while previewing the selected segment, then resumes at the segment end.",
-    "Option_PreviewWithPause": "Preview With Pause",
-    "Tooltip_PreviewWithPause": "Preview this segment using pause behavior without changing rendered dub timing",
-
     # ----- Main window: playback controls -----
     "Tooltip_OpenMedia": "Open media file",
     "Automation_OpenMedia": "Open media",
@@ -465,4 +460,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
