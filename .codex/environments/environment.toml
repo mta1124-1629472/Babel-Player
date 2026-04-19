@@ -474,10 +474,10 @@ command = "dotnet run --project .\\BabelPlayer.csproj -c Debug"
 [[actions]]
 name = "Fetch Natives"
 icon = "tool"
-command = "pwsh .\\scripts\\fetch-win-native-deps.ps1"
+command = "pwsh .\\scripts\\fetch-win-native-deps.ps1 -IncludeFfmpeg"
 platform = "win32"
 
 [[actions]]
 name = "Kill"
 icon = "tool"
-command = "Get-Process BabelPlayer -ErrorAction SilentlyContinue | Stop-Process -Force; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'dotnet.exe' -and $_.CommandLine -match 'BabelPlayer' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+command = "$root = Join-Path $env:LOCALAPPDATA 'BabelPlayer'; Get-Process BabelPlayer -ErrorAction SilentlyContinue | Stop-Process -Force; Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'dotnet.exe' -and $_.CommandLine -match 'BabelPlayer') -or ($_.Name -eq 'python.exe' -and ($_.ExecutablePath -like \"$root*\" -or $_.CommandLine -like \"*$root*\")) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500; if (Test-Path $root) { Get-ChildItem -LiteralPath $root -Force | Remove-Item -Recurse -Force }"

@@ -24,7 +24,7 @@
                           or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe')
                           or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe')
                           or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe'))">
-    <Exec Command="$(BabelWinFetchCommand) -IncludeFfmpeg $(BabelWinFetchExtraArgs)"
+    <Exec Command="$(BabelWinFetchCommand) $(BabelWinFetchExtraArgs)"
           WorkingDirectory="$(MSBuildThisFileDirectory)"
           StandardOutputImportance="high"
           StandardErrorImportance="high" />

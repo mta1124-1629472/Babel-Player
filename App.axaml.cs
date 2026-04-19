@@ -296,7 +296,6 @@ public partial class App : Application
                 psi.ArgumentList.Add("Bypass");
                 psi.ArgumentList.Add("-File");
                 psi.ArgumentList.Add(scriptPath);
-                psi.ArgumentList.Add("-IncludeFfmpeg");
 
                 using var process = Process.Start(psi);
                 if (process is null)

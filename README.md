@@ -163,6 +163,8 @@ dotnet build Babel-Player.sln
 dotnet run --project BabelPlayer.csproj -c Dev
 ```
 
+Use `-SkipFfmpeg` only if you explicitly want just `libmpv` and `uv` without bundling `ffmpeg`/`ffprobe`.
+
 `Dev` builds append `[DEV]` to the app title.
 
 ### Maintained Verification

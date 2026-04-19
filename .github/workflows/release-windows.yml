@@ -51,9 +51,9 @@ jobs:
         run: |
           $arch = "${{ matrix.fetch_arch }}"
           if ($arch -ne "") {
-            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg -Architecture $arch
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -Architecture $arch
           } else {
-            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1 -IncludeFfmpeg
+            pwsh -NoProfile -File ./scripts/fetch-win-native-deps.ps1
           }
 
       - name: Setup .NET 10
