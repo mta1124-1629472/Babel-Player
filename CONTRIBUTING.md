@@ -24,7 +24,7 @@ Use the root helper from the repo checkout when you want an isolated branch work
 .\worktree.ps1 list
 ```
 
-The helper keeps feature work in the sibling `Babel-Player.wt` folder and rebases feature branches onto `origin/main`.
+By default, the helper keeps feature work in the sibling `Babel-Player.wt` folder (override with `BABEL_PLAYER_WORKTREE_ROOT`) and rebases feature branches onto `origin/main` (override with `-BaseRef`).
 
 ### Project Posture
 
