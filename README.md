@@ -1,11 +1,11 @@
 # Babel Player
 
 [![Sponsor](https://img.shields.io/github/sponsors/mta-babel?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta-babel)
-[![CI](https://github.com/Babelworks/Babel-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/Babelworks/Babel-Player/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/Babelworks/Babel-Player)](https://github.com/Babelworks/Babel-Player/releases/latest)
+[![CI](https://github.com/mta-babel/Babel-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/mta-babel/Babel-Player/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/mta-babel/Babel-Player)](https://github.com/mta-babel/Babel-Player/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](#requirements)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
-[![License](https://img.shields.io/github/license/Babelworks/Babel-Player)](LICENSE)
+[![License](https://img.shields.io/github/license/mta-babel/Babel-Player)](LICENSE)
 
 **Babel Player is a Windows desktop dubbing workstation built with .NET 10 and Avalonia 12. It takes local media through transcript, translation, per-segment TTS, preview, and export with explicit CPU, GPU, and cloud routing.**
 
@@ -40,6 +40,8 @@ Babel Player is not a subtitle editor with AI bolted on. The core workflow is:
 - Managed local GPU host is the default GPU path. Docker remains an advanced optional backend, not the primary runtime.
 - Local transcription, translation, and TTS paths alongside optional cloud providers.
 - Optional multi-speaker diarization with per-speaker voice assignment through the Speaker Reference Wizard.
+- Streaming overlap for transcription, translation, and per-segment TTS when the selected providers and runtime path allow it.
+- Runtime-switchable app UI language with `Auto (system)` support.
 - Embedded playback with libmpv, source/dub switching, subtitles, and segment-aware preview.
 - Export to `.srt`, dubbed `.mp3`, and muxed `.mp4`.
 - Session autosave and artifact reuse under `%LOCALAPPDATA%\BabelPlayer\`.
@@ -84,11 +86,14 @@ Babel Player is not a subtitle editor with AI bolted on. The core workflow is:
 | WeSpeaker | CPU | Managed CPU runtime |
 | NeMo | GPU | Managed local GPU host |
 
-## Language Support
+## Language Support and Localization
 
-- Local dub targets are a curated set of 16 languages: `ar`, `de`, `en`, `es`, `fr`, `hi`, `it`, `ja`, `ko`, `nl`, `pl`, `pt`, `ru`, `sv`, `tr`, `zh`.
 - Persisted settings and pipeline artifacts use lowercase canonical language codes.
-- Piper currently covers 14 of those 16 targets in the in-app catalog. For `ja` and `ko`, use Edge TTS, Qwen3-TTS, or a cloud provider.
+- Local dub targets are a curated set of 16 languages: `ar`, `de`, `en`, `es`, `fr`, `hi`, `it`, `ja`, `ko`, `nl`, `pl`, `pt`, `ru`, `sv`, `tr`, `zh`.
+- The app UI also ships localized resources for those same 16 language codes, plus an `Auto (system)` app-language mode in Settings.
+- `Auto (system)` resolves the OS locale at launch and falls back to English when the OS language is not in the shipped UI-language catalog.
+- Arabic UI uses right-to-left flow direction.
+- Piper currently covers 14 of those 16 dub targets in the in-app catalog. For `ja` and `ko`, use Edge TTS, Qwen3-TTS, or a cloud provider.
 - Transcription is broader than the curated dub list. Auto-detect remains the default.
 
 ## Playback and Preview
@@ -112,11 +117,11 @@ Babel Player is not a subtitle editor with AI bolted on. The core workflow is:
 
 ### Releases
 
-Download one of the Windows release artifacts from [GitHub Releases](https://github.com/Babelworks/Babel-Player/releases/latest):
+Download one of the Windows release artifacts from [GitHub Releases](https://github.com/mta-babel/Babel-Player/releases/latest):
 
-- `Babel-Player-<version>-win-x64-setup.exe`
-- `Babel-Player-<version>-win-x64-portable.zip`
-- `Babel-Player-<version>-win-arm64-portable.zip`
+- x64 installer: `Babel-Player-*-win-x64-setup.exe`
+- x64 portable ZIP: `Babel-Player-*-win-x64-portable.zip`
+- ARM64 portable ZIP: `Babel-Player-*-win-arm64-portable.zip`
 
 The release bundle includes:
 
@@ -156,7 +161,7 @@ Typical workflow:
 ### Build
 
 ```powershell
-git clone https://github.com/Babelworks/Babel-Player.git
+git clone https://github.com/mta-babel/Babel-Player.git
 cd Babel-Player
 pwsh ./scripts/fetch-win-native-deps.ps1
 dotnet build Babel-Player.sln
