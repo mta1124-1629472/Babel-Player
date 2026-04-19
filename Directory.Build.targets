@@ -13,14 +13,18 @@
     <BabelWinFetchExtraArgs Condition="'$(BabelWinNativeSubdir)' == 'win-x64' and '$(_BabelProcArch)' == 'ARM64'">-Architecture X64</BabelWinFetchExtraArgs>
   </PropertyGroup>
 
-  <!-- Auto-download libmpv + uv on Windows when missing (too large for Git). Runs before output staging. Set SkipFetchWinNativeDeps=true to disable (offline CI, etc.). -->
+  <!-- Auto-download Windows native/runtime tools when missing. Runs before output staging. Set SkipFetchWinNativeDeps=true to disable (offline CI, etc.). -->
   <Target Name="FetchWinNativeDepsIfNeeded"
           BeforeTargets="AssignTargetPaths"
+          Inputs="$(MSBuildThisFileDirectory)scripts\fetch-win-native-deps.ps1"
+          Outputs="$(MSBuildThisFileDirectory)native\$(BabelWinNativeSubdir)\libmpv-2.dll;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe"
           Condition="'$(OS)' == 'Windows_NT'
                      and '$(SkipFetchWinNativeDeps)' != 'true'
                      and (!Exists('$(MSBuildThisFileDirectory)native\$(BabelWinNativeSubdir)\libmpv-2.dll')
-                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe'))">
-    <Exec Command="$(BabelWinFetchCommand) $(BabelWinFetchExtraArgs)"
+                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe')
+                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe')
+                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe'))">
+    <Exec Command="$(BabelWinFetchCommand) -IncludeFfmpeg $(BabelWinFetchExtraArgs)"
           WorkingDirectory="$(MSBuildThisFileDirectory)"
           StandardOutputImportance="high"
           StandardErrorImportance="high" />
