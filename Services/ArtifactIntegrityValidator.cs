@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Babel.Player.Models;
 using Babel.Player.Services.Settings;
 
@@ -161,7 +162,12 @@ internal static class ArtifactIntegrityValidator
             return true;
         }
 
-        var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath), snapshot.TranscriptPath);
+        if (!TryDeserializeTranscriptArtifact(snapshot.TranscriptPath, out var transcript, out error)
+            || transcript is null)
+        {
+            return false;
+        }
+
         var expectedTiming = ArtifactIntegrity.BuildTranscriptTimingSummary(transcript.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
         var upstream = ArtifactIntegrity.BuildUpstreamHashes(
@@ -228,8 +234,18 @@ internal static class ArtifactIntegrityValidator
             return true;
         }
 
-        var translation = ArtifactJson.DeserializeTranslation(File.ReadAllText(snapshot.TranslationPath), snapshot.TranslationPath);
-        var transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(snapshot.TranscriptPath!), snapshot.TranscriptPath!);
+        if (!TryDeserializeTranslationArtifact(snapshot.TranslationPath, out var translation, out error)
+            || translation is null)
+        {
+            return false;
+        }
+
+        if (!TryDeserializeTranscriptArtifact(snapshot.TranscriptPath!, out var transcript, out error)
+            || transcript is null)
+        {
+            return false;
+        }
+
         var expectedTiming = ArtifactIntegrity.BuildTranslationTimingSummary(translation.Segments);
         var expectedSegmentIds = ArtifactIntegrity.BuildTranslationSegmentIds(translation.Segments);
         var transcriptSegmentIds = ArtifactIntegrity.BuildTranscriptSegmentIds(transcript.Segments);
@@ -323,14 +339,9 @@ internal static class ArtifactIntegrityValidator
             return false;
         }
 
-        TranslationArtifact translation;
-        try
+        if (!TryDeserializeTranslationArtifact(snapshot.TranslationPath!, out var translation, out error)
+            || translation is null)
         {
-            translation = ArtifactJson.DeserializeTranslation(File.ReadAllText(snapshot.TranslationPath!), snapshot.TranslationPath!);
-        }
-        catch (Exception ex)
-        {
-            error = $"Translation artifact was unreadable: {ex.Message}";
             return false;
         }
 
@@ -453,6 +464,68 @@ internal static class ArtifactIntegrityValidator
 
         error = null;
         return true;
+    }
+
+    private static bool TryDeserializeTranscriptArtifact(
+        string path,
+        out TranscriptArtifact? transcript,
+        out string? error)
+    {
+        try
+        {
+            transcript = ArtifactJson.DeserializeTranscript(File.ReadAllText(path), path);
+            error = null;
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            transcript = null;
+            error = $"Transcript artifact was unreadable: {ex.Message}";
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            transcript = null;
+            error = $"Transcript artifact was invalid: {ex.Message}";
+            return false;
+        }
+        catch (IOException ex)
+        {
+            transcript = null;
+            error = $"Transcript artifact was unreadable: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static bool TryDeserializeTranslationArtifact(
+        string path,
+        out TranslationArtifact? translation,
+        out string? error)
+    {
+        try
+        {
+            translation = ArtifactJson.DeserializeTranslation(File.ReadAllText(path), path);
+            error = null;
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            translation = null;
+            error = $"Translation artifact was unreadable: {ex.Message}";
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            translation = null;
+            error = $"Translation artifact was invalid: {ex.Message}";
+            return false;
+        }
+        catch (IOException ex)
+        {
+            translation = null;
+            error = $"Translation artifact was unreadable: {ex.Message}";
+            return false;
+        }
     }
 
     private static bool ValidateFileArtifact(

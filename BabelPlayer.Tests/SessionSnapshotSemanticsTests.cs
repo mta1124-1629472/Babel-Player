@@ -369,6 +369,36 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateArtifacts_MissingTranscript_WithDiarizationMarker_RecordsDiarization()
+    {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var now = DateTimeOffset.UtcNow;
+        var template = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            TranscriptionProvider = ProviderNames.FasterWhisper,
+            TranscriptionModel = "base",
+        };
+        await SessionSemanticsIntegrityFixture.WriteTranscriptAsync(_dir, mediaPath, template);
+        var snap = template with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = Path.Combine(_dir, "missing-transcript.json"),
+            SourceLanguage = "es",
+            DiarizationProvider = ProviderNames.NemoLocal,
+            SpeakersDetectedAtUtc = now,
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("diarization", result.ClearedArtifacts);
+        Assert.Equal(SessionWorkflowStage.MediaLoaded, result.Snapshot.Stage);
+        Assert.Null(result.Snapshot.DiarizationProvider);
+        Assert.Null(result.Snapshot.SpeakersDetectedAtUtc);
+        Assert.Null(result.Snapshot.TranscriptPath);
+    }
+
+    [Fact]
     public async Task ValidateArtifacts_MissingVocalsStem_ClearsVocalSeparationArtifacts()
     {
         var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
@@ -387,6 +417,32 @@ public sealed class SessionSnapshotSemanticsTests : IDisposable
         Assert.Contains("vocal_separation", result.ClearedArtifacts);
         Assert.Null(result.Snapshot.VocalsAudioPath);
         Assert.Null(result.Snapshot.AmbianceAudioPath);
+    }
+
+    [Fact]
+    public async Task ValidateArtifacts_MissingVocalsStem_WithDiarizationMarker_RecordsDiarization()
+    {
+        var mediaPath = await SessionSemanticsIntegrityFixture.WriteMediaCopyAsync(_dir);
+        var (_, ambiancePath) = await SessionSemanticsIntegrityFixture.WriteStemPairAsync(_dir, mediaPath);
+        var now = DateTimeOffset.UtcNow;
+        var missingVocalsPath = Path.Combine(_dir, "missing-vocals.wav");
+        var snap = WorkflowSessionSnapshot.CreateNew(now) with
+        {
+            Stage = SessionWorkflowStage.MediaLoaded,
+            IngestedMediaPath = mediaPath,
+            VocalsAudioPath = missingVocalsPath,
+            AmbianceAudioPath = ambiancePath,
+            DiarizationProvider = ProviderNames.NemoLocal,
+            SpeakersDetectedAtUtc = now,
+        };
+
+        var result = SessionSnapshotSemantics.ValidateArtifacts(snap);
+
+        Assert.Contains("diarization", result.ClearedArtifacts);
+        Assert.Null(result.Snapshot.VocalsAudioPath);
+        Assert.Null(result.Snapshot.AmbianceAudioPath);
+        Assert.Null(result.Snapshot.DiarizationProvider);
+        Assert.Null(result.Snapshot.SpeakersDetectedAtUtc);
     }
 
     [Fact]
