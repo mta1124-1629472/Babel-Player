@@ -89,6 +89,18 @@ public sealed class AppSettingsTests
         Assert.False(settings.VocalSeparationEnabled);
     }
 
+    [Fact]
+    public void PaneLayout_DefaultsMatchPlannedOpenStateAndWidths()
+    {
+        var settings = new AppSettings();
+
+        Assert.True(settings.IsPipelinePaneVisible);
+        Assert.True(settings.IsSegmentsPaneVisible);
+        Assert.Equal(AppSettings.PipelinePaneDefaultWidth, settings.PipelinePaneWidth, precision: 3);
+        Assert.Equal(AppSettings.SegmentsPaneDefaultWidth, settings.SegmentsPaneWidth, precision: 3);
+        Assert.False(settings.SwapPaneSides);
+    }
+
     [Theory]
     [InlineData(SegmentTimingMode.Pause, SegmentTimingMode.Off)]
     [InlineData(SegmentTimingMode.Off, SegmentTimingMode.Off)]
