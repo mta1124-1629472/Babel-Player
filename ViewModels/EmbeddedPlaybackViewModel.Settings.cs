@@ -486,6 +486,7 @@ public partial class EmbeddedPlaybackViewModel
     private void OnCoordinatorSettingsModified()
     {
         Preview.SyncBilingualSubtitlesFromSettings();
+        Preview.SyncPaneLayoutFromSettings();
         Preview.SyncDubMixControlFromSettings();
         SyncProviderModelFieldsFromSettings();
         NotifyActiveConfigChanged();

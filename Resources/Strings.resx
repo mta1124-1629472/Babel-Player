@@ -297,6 +297,12 @@
   <data name="Button_Export" xml:space="preserve">
     <value>Export</value>
   </data>
+  <data name="Label_SegmentCountSingle" xml:space="preserve">
+    <value>1 segment</value>
+  </data>
+  <data name="Label_SegmentCountFormat" xml:space="preserve">
+    <value>{0} segments</value>
+  </data>
   <data name="Menu_Export_Srt" xml:space="preserve">
     <value>to .srt</value>
   </data>
@@ -414,11 +420,14 @@
   <data name="Tooltip_Volume" xml:space="preserve">
     <value>Volume</value>
   </data>
-  <data name="Tooltip_ToggleSidePanes" xml:space="preserve">
-    <value>Toggle side panels (S)</value>
+  <data name="Tooltip_PaneSideFormat" xml:space="preserve">
+    <value>{0} pane: {1} ({2})</value>
   </data>
-  <data name="Automation_ToggleSidePanes" xml:space="preserve">
-    <value>Toggle side panes</value>
+  <data name="Automation_ToggleLeftPane" xml:space="preserve">
+    <value>Toggle left pane</value>
+  </data>
+  <data name="Automation_ToggleRightPane" xml:space="preserve">
+    <value>Toggle right pane</value>
   </data>
   <data name="Tooltip_ToggleFullscreen" xml:space="preserve">
     <value>Toggle fullscreen (F11)</value>
@@ -483,6 +492,18 @@
   <data name="Settings_Hint_AppLanguage" xml:space="preserve">
     <value>Changes the language of the Babel Player interface. Auto (system) follows your OS locale on each launch.</value>
   </data>
+  <data name="Settings_Group_Layout" xml:space="preserve">
+    <value>Layout</value>
+  </data>
+  <data name="Settings_Check_SwapPaneSides" xml:space="preserve">
+    <value>Swap pane sides</value>
+  </data>
+  <data name="Settings_Hint_SwapPaneSides" xml:space="preserve">
+    <value>Moves the pipeline pane to the right and the segments pane to the left.</value>
+  </data>
+  <data name="Settings_Hint_PaneResize" xml:space="preserve">
+    <value>Double-click a pane divider to restore that pane to its default width.</value>
+  </data>
   <data name="Settings_Option_AutoSystem" xml:space="preserve">
     <value>Auto (system)</value>
   </data>
@@ -543,14 +564,23 @@
   <data name="Settings_Label_PlayPauseHotkey" xml:space="preserve">
     <value>Play/Pause:</value>
   </data>
-  <data name="Settings_Label_ToggleSegmentsHotkey" xml:space="preserve">
-    <value>Toggle Segment Panel:</value>
+  <data name="Settings_Label_ToggleLeftPaneHotkey" xml:space="preserve">
+    <value>Toggle Left Pane:</value>
+  </data>
+  <data name="Settings_Label_ToggleRightPaneHotkey" xml:space="preserve">
+    <value>Toggle Right Pane:</value>
   </data>
   <data name="Settings_Label_ToggleDubHotkey" xml:space="preserve">
     <value>Toggle Dub Mode:</value>
   </data>
   <data name="Settings_Label_ToggleFullscreenHotkey" xml:space="preserve">
     <value>Toggle Fullscreen:</value>
+  </data>
+  <data name="Common_Left" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="Common_Right" xml:space="preserve">
+    <value>Right</value>
   </data>
   <data name="Settings_Group_EmbeddedPlayback" xml:space="preserve">
     <value>Embedded playback</value>

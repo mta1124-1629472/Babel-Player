@@ -41,13 +41,18 @@ public sealed class MainWindowBindingsTests
             expectedTooltipEnglish: "Toggle subtitles (C)",
             expectedAutomationKey: "Automation_ToggleSubtitles",
             expectedAutomationEnglish: "Toggle subtitles");
-        AssertCommandButtonAttributes(
+        AssertPaneButtonBindings(
             axaml,
-            "Playback.Preview.ToggleSegmentPaneCommand",
-            expectedTooltipKey: "Tooltip_ToggleSidePanes",
-            expectedTooltipEnglish: "Toggle side panels (S)",
-            expectedAutomationKey: "Automation_ToggleSidePanes",
-            expectedAutomationEnglish: "Toggle side panes");
+            commandBinding: "Playback.Preview.ToggleLeftPaneCommand",
+            tooltipBinding: "{Binding Playback.Preview.LeftPaneTooltip}",
+            expectedAutomationKey: "Automation_ToggleLeftPane",
+            expectedAutomationEnglish: "Toggle left pane");
+        AssertPaneButtonBindings(
+            axaml,
+            commandBinding: "Playback.Preview.ToggleRightPaneCommand",
+            tooltipBinding: "{Binding Playback.Preview.RightPaneTooltip}",
+            expectedAutomationKey: "Automation_ToggleRightPane",
+            expectedAutomationEnglish: "Toggle right pane");
         AssertCommandButtonAttributes(
             axaml,
             "Playback.Preview.ToggleDubModeCommand",
@@ -62,6 +67,8 @@ public sealed class MainWindowBindingsTests
             expectedTooltipEnglish: "Toggle fullscreen (F11)",
             expectedAutomationKey: "Automation_ToggleFullscreen",
             expectedAutomationEnglish: "Toggle fullscreen");
+
+        Assert.DoesNotContain("Playback.Preview.ToggleSegmentPaneCommand", axaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,9 +93,37 @@ public sealed class MainWindowBindingsTests
         var codeBehindPath = FindRepoFile("Views", "MainWindow.axaml.cs");
         var codeBehind = File.ReadAllText(codeBehindPath);
 
-        Assert.Equal(2, CountOccurrences(codeBehind, "FindControl<Control>(\"PlayerChromeWidthHost\")"));
+        Assert.Contains("FindControl<Control>(\"PlayerChromeWidthHost\")", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("FindControl<Control>(\"WideVideoChromeLayoutRoot\")", codeBehind, StringComparison.Ordinal);
         Assert.Contains("OnPlayerChromeWidthHostSizeChanged", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("CacheWideVideoChromeRequiredWidth", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("FindControl<Control>(\"VideoSegmentsChromeHost\")", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("const double thresholdPx = 540", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateCompactVideoChromeLayout()", codeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("wideVideoChromeLayout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));\r\n        var requiredWidth = Math.Max(wideVideoChromeLayout.DesiredSize.Width, wideVideoChromeLayout.Bounds.Width);", codeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainWindow_PaneLayout_UsesPhysicalSideSplitters_AndSettingsShowSeparateHotkeys()
+    {
+        var axamlPath = FindRepoFile("Views", "MainWindow.axaml");
+        var axaml = File.ReadAllText(axamlPath);
+        var settingsPath = FindRepoFile("Views", "SettingsWindow.axaml");
+        var settingsAxaml = File.ReadAllText(settingsPath);
+
+        var leftSplitterTag = FindTagByName(axaml, "LeftPaneSplitter");
+        Assert.Equal("1", GetAttributeValue(leftSplitterTag, "Grid.Column"));
+        Assert.Equal("{Binding Playback.Preview.IsLeftPaneVisible}", GetAttributeValue(leftSplitterTag, "IsVisible"));
+
+        var rightSplitterTag = FindTagByName(axaml, "RightPaneSplitter");
+        Assert.Equal("3", GetAttributeValue(rightSplitterTag, "Grid.Column"));
+        Assert.Equal("{Binding Playback.Preview.IsRightPaneVisible}", GetAttributeValue(rightSplitterTag, "IsVisible"));
+
+        Assert.Contains("Settings_Label_ToggleLeftPaneHotkey", settingsAxaml, StringComparison.Ordinal);
+        Assert.Contains("Settings_Label_ToggleRightPaneHotkey", settingsAxaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Settings_Label_ToggleSegmentsHotkey", settingsAxaml, StringComparison.Ordinal);
+        Assert.Contains("Playback.Preview.SegmentCountLabel", axaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("StringFormat='{}{0} items'", axaml, StringComparison.Ordinal);
     }
 
     private static string FindRepoFile(params string[] relativePathParts)
@@ -147,6 +182,29 @@ public sealed class MainWindowBindingsTests
         // The English resx value that ultimately renders through the markup
         // extension must still match the human-visible copy the app ships with.
         Assert.Equal(expectedTooltipEnglish, Strings.ResourceManager.GetString(expectedTooltipKey, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(expectedAutomationEnglish, Strings.ResourceManager.GetString(expectedAutomationKey, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static void AssertPaneButtonBindings(
+        string axaml,
+        string commandBinding,
+        string tooltipBinding,
+        string expectedAutomationKey,
+        string expectedAutomationEnglish)
+    {
+        var tags = FindButtonTagsByCommand(axaml, commandBinding);
+
+        Assert.Equal(2, tags.Length);
+
+        var automationMarkup = $"{{local:Localize {expectedAutomationKey}}}";
+        Assert.Equal(2, CountOccurrences(axaml, automationMarkup));
+
+        foreach (var tag in tags)
+        {
+            Assert.Equal(tooltipBinding, GetAttributeValue(tag, "ToolTip.Tip"));
+            Assert.Equal(automationMarkup, GetAttributeValue(tag, "AutomationProperties.Name"));
+        }
+
         Assert.Equal(expectedAutomationEnglish, Strings.ResourceManager.GetString(expectedAutomationKey, System.Globalization.CultureInfo.InvariantCulture));
     }
 

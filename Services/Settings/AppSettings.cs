@@ -12,6 +12,8 @@ public sealed class AppSettings
 {
     public const string InferenceServiceUrlEnvVar = "INFERENCE_SERVICE_URL";
     public const string ManagedGpuServiceUrl = "http://127.0.0.1:18000";
+    public const double PipelinePaneDefaultWidth = 260;
+    public const double SegmentsPaneDefaultWidth = 340;
 
     /// <summary>Transcription provider identifier (e.g. "faster-whisper", "openai-whisper-api").</summary>
     public string TranscriptionProvider { get; set; } = ProviderNames.FasterWhisper;
@@ -60,6 +62,31 @@ public sealed class AppSettings
     /// Enables optional vocal separation before transcription when container capability is available.
     /// </summary>
     public bool VocalSeparationEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Whether the pipeline pane is open in the main window.
+    /// </summary>
+    public bool IsPipelinePaneVisible { get; set; } = true;
+
+    /// <summary>
+    /// Whether the segments pane is open in the main window.
+    /// </summary>
+    public bool IsSegmentsPaneVisible { get; set; } = true;
+
+    /// <summary>
+    /// Persisted width of the pipeline pane.
+    /// </summary>
+    public double PipelinePaneWidth { get; set; } = PipelinePaneDefaultWidth;
+
+    /// <summary>
+    /// Persisted width of the segments pane.
+    /// </summary>
+    public double SegmentsPaneWidth { get; set; } = SegmentsPaneDefaultWidth;
+
+    /// <summary>
+    /// When true, the pipeline and segments panes swap physical sides.
+    /// </summary>
+    public bool SwapPaneSides { get; set; }
 
     /// <summary>
     /// Optional lower bound on the number of speakers to detect.

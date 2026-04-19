@@ -115,6 +115,16 @@
                             </StackPanel>
                         </Border>
 
+                        <Border Classes="settings-card">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{local:Localize Settings_Group_Layout}" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <CheckBox IsChecked="{Binding SwapPaneSides, Mode=TwoWay}"
+                                          Content="{local:Localize Settings_Check_SwapPaneSides}"/>
+                                <TextBlock Text="{local:Localize Settings_Hint_SwapPaneSides}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
+                                <TextBlock Text="{local:Localize Settings_Hint_PaneResize}" Classes="text-micro" Opacity="0.5" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- GPU Backend Card -->
                         <Border Classes="settings-card">
                             <StackPanel Spacing="12">
@@ -195,15 +205,17 @@
                             <StackPanel Spacing="12">
                                 <TextBlock Text="{local:Localize Settings_Group_Hotkeys}" Classes="text-title" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <TextBlock Text="{local:Localize Settings_Hint_Hotkeys}" Classes="text-caption" Opacity="0.5" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                                     <TextBlock Grid.Column="0" Grid.Row="0" Text="{local:Localize Settings_Label_PlayPauseHotkey}" VerticalAlignment="Center" Classes="text-secondary"/>
                                     <TextBox Grid.Column="1" Grid.Row="0" Text="{Binding PlayPauseHotkey}" IsReadOnly="True" Width="120"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="{local:Localize Settings_Label_ToggleSegmentsHotkey}" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
-                                    <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding ToggleSegmentPanelHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="{local:Localize Settings_Label_ToggleDubHotkey}" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
-                                    <TextBox Grid.Column="1" Grid.Row="2" Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
-                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="{local:Localize Settings_Label_ToggleFullscreenHotkey}" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
-                                    <TextBox Grid.Column="1" Grid.Row="3" Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="1" Text="{local:Localize Settings_Label_ToggleLeftPaneHotkey}" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="1" Text="{Binding ToggleLeftPaneHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="2" Text="{local:Localize Settings_Label_ToggleRightPaneHotkey}" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="2" Text="{Binding ToggleRightPaneHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="3" Text="{local:Localize Settings_Label_ToggleDubHotkey}" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="3" Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
+                                    <TextBlock Grid.Column="0" Grid.Row="4" Text="{local:Localize Settings_Label_ToggleFullscreenHotkey}" VerticalAlignment="Center" Classes="text-secondary" Margin="0,8,0,0"/>
+                                    <TextBox Grid.Column="1" Grid.Row="4" Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True" Width="120" Margin="0,8,0,0"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
