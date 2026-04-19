@@ -177,7 +177,7 @@ function Get-WorktreeRecords {
             continue
         }
 
-        if ($line -like "locked *") {
+        if ($line -eq "locked" -or $line -like "locked *") {
             $current["Locked"] = $true
             continue
         }
