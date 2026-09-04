@@ -29,7 +29,7 @@ onnxruntime>=1.18.0
 
 # Shared ML
 # Shared ML
-torch==2.8.0
+torch==2.13.0
 # Managed CPU providers and the GPU Qwen runtime both require this transformers pin.
 transformers==5.0.0
 # FIX: was "accelerator==1.2.0" (wrong package name); correct package is "accelerate"
