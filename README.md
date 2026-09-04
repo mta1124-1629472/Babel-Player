@@ -1,11 +1,11 @@
 # Babel Player
 
-[![Sponsor](https://img.shields.io/github/sponsors/mta-babel?label=Sponsor&logo=GitHub)](https://github.com/sponsors/mta-babel)
-[![CI](https://github.com/mta-babel/Babel-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/mta-babel/Babel-Player/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/mta-babel/Babel-Player)](https://github.com/mta-babel/Babel-Player/releases/latest)
+[![Sponsor](https://img.shields.io/github/sponsors/trackdubllc?label=Sponsor&logo=GitHub)](https://github.com/sponsors/trackdubllc)
+[![CI](https://github.com/trackdubllc/Babel-Player-Alpha/actions/workflows/ci.yml/badge.svg)](https://github.com/trackdubllc/Babel-Player-Alpha/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/trackdubllc/Babel-Player-Alpha)](https://github.com/trackdubllc/Babel-Player-Alpha/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](#requirements)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
-[![License](https://img.shields.io/github/license/mta-babel/Babel-Player)](LICENSE)
+[![License](https://img.shields.io/github/license/trackdubllc/Babel-Player-Alpha)](LICENSE)
 
 **Babel Player is a Windows desktop dubbing workstation built with .NET 10 and Avalonia 12. It takes local media through transcript, translation, per-segment TTS, preview, and export with explicit CPU, GPU, and cloud routing.**
 
@@ -117,7 +117,7 @@ Babel Player is not a subtitle editor with AI bolted on. The core workflow is:
 
 ### Releases
 
-Download one of the Windows release artifacts from [GitHub Releases](https://github.com/mta-babel/Babel-Player/releases/latest):
+Download one of the Windows release artifacts from [GitHub Releases](https://github.com/trackdubllc/Babel-Player-Alpha/releases/latest):
 
 - x64 installer: `Babel-Player-*-win-x64-setup.exe`
 - x64 portable ZIP: `Babel-Player-*-win-x64-portable.zip`
@@ -161,7 +161,7 @@ Typical workflow:
 ### Build
 
 ```powershell
-git clone https://github.com/mta-babel/Babel-Player.git
+git clone https://github.com/trackdubllc/Babel-Player-Alpha.git
 cd Babel-Player
 pwsh ./scripts/fetch-win-native-deps.ps1
 dotnet build Babel-Player.sln
