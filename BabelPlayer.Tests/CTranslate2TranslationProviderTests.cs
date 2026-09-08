@@ -87,6 +87,13 @@ public sealed class CTranslate2TranslationProviderTests : IDisposable
         Assert.Equal("en", result.TargetLanguage);
     }
 
+    [Fact]
+    public void TranslationScripts_ImportOsForModelDirectoryChecks()
+    {
+        Assert.Contains("import os", CTranslate2TranslationProvider.TranslateScript, StringComparison.Ordinal);
+        Assert.Contains("import os", CTranslate2TranslationProvider.TranslateSingleSegmentScript, StringComparison.Ordinal);
+    }
+
     private sealed class TestCTranslate2TranslationProvider(AppLog log, string model) : CTranslate2TranslationProvider(log, model)
     {
         public Func<IReadOnlyList<string>, string, string?, Task<PythonSubprocessServiceBase.ScriptResult>>? OnRun { get; set; }

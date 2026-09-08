@@ -210,17 +210,22 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
         startInfo.ArgumentList.Add(_scriptPath);
         foreach (var argument in _scriptArguments)
             startInfo.ArgumentList.Add(argument);
-        startInfo.Environment["PYTHONUNBUFFERED"] = "1";
-        startInfo.Environment["PYTHONUTF8"] = "1";
-        startInfo.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        startInfo.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        startInfo.StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        ApplyWorkerEnvironment(startInfo);
         PrependBundledToolsToPath(startInfo);
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {_poolName} worker process.");
         _log.Debug($"Started {_poolName} worker {workerIndex + 1} (pid={process.Id}).");
         return new WorkerState(workerIndex, process);
+    }
+
+    internal static void ApplyWorkerEnvironment(ProcessStartInfo startInfo)
+    {
+        startInfo.Environment["PYTHONUNBUFFERED"] = "1";
+        startInfo.Environment["PYTHONUTF8"] = "1";
+        startInfo.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        startInfo.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        startInfo.StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     }
 
     private static void PrependBundledToolsToPath(ProcessStartInfo startInfo)
