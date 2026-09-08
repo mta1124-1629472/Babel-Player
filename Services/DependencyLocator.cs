@@ -155,10 +155,14 @@ public static class DependencyLocator
     public static string? FindPiper()
     {
         var appDir = AppContext.BaseDirectory;
+        var rid = WindowsPackagingPaths.NativeRidFolder;
         var candidates = new[]
         {
             Path.Combine(appDir, $"{ProviderNames.Piper}.exe"),
             Path.Combine(appDir, ProviderNames.Piper, $"{ProviderNames.Piper}.exe"),
+            Path.Combine(appDir, "tools", rid, ProviderNames.Piper, $"{ProviderNames.Piper}.exe"),
+            Path.Combine(appDir, "tools", "win-x64", ProviderNames.Piper, $"{ProviderNames.Piper}.exe"),
+            Path.Combine(appDir, "tools", "win-arm64", ProviderNames.Piper, $"{ProviderNames.Piper}.exe"),
             ProviderNames.Piper,
         };
         return Probe(candidates, "--version");

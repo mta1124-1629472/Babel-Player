@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -209,11 +210,33 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
         foreach (var argument in _scriptArguments)
             startInfo.ArgumentList.Add(argument);
         startInfo.Environment["PYTHONUNBUFFERED"] = "1";
+        startInfo.Environment["PYTHONUTF8"] = "1";
+        startInfo.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        startInfo.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        startInfo.StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        PrependBundledToolsToPath(startInfo);
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {_poolName} worker process.");
         _log.Debug($"Started {_poolName} worker {workerIndex + 1} (pid={process.Id}).");
         return new WorkerState(workerIndex, process);
+    }
+
+    private static void PrependBundledToolsToPath(ProcessStartInfo startInfo)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var piperDir = Path.Combine(
+            AppContext.BaseDirectory, "tools", WindowsPackagingPaths.NativeRidFolder, "piper");
+        if (!File.Exists(Path.Combine(piperDir, "piper.exe")))
+            return;
+
+        var prefix = piperDir + Path.PathSeparator;
+        startInfo.Environment.TryGetValue("PATH", out var existing);
+        if (!string.IsNullOrEmpty(existing) && existing.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return;
+        startInfo.Environment["PATH"] = prefix + (existing ?? string.Empty);
     }
 
     private async Task ProcessWorkItemAsync(
