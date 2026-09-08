@@ -24,8 +24,8 @@ namespace Babel.Player.Services;
 ///
 /// Exit codes:
 ///   0    Success.
-///   1    Bad arguments or runtime error.
-///   2    Pipeline failure.
+///   1    Bad arguments.
+///   2    Pipeline or runtime failure.
 ///   130  Cancelled (Ctrl+C).
 /// </summary>
 public static class DubCli
