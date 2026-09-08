@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -38,15 +39,30 @@ jobs:
           grep "^version:" apm.yml
 
       - name: Commit updated apm.yml
+        id: commit
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add apm.yml
           # Only commit if there is an actual change
-          git diff --cached --quiet && echo "No version change, skipping commit." || \
+          if git diff --cached --quiet; then
+            echo "No version change, skipping commit."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+          else
             git commit -m "chore: sync apm.yml version to ${{ steps.version.outputs.tag }}"
+            echo "committed=true" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Push commit
-        run: git push origin HEAD:${{ github.ref_name }}
-        # Note: pushes to the tag's branch. If the tag was cut from main,
-        # this pushes to main. Adjust the target branch if your workflow differs.
+      - name: Open update PR
+        # Direct pushes are blocked by branch protection; propose the bump as a PR instead.
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          BRANCH="chore/apm-version-${TAG}"
+          git checkout -B "$BRANCH"
+          git push --force-with-lease origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore: sync apm.yml version to ${TAG}" \
+            --body "Automated version sync for tag ${TAG}." || echo "PR may already exist."
