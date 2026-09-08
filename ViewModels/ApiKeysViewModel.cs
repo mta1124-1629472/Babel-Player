@@ -137,5 +137,4 @@ public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore
             IsValidating = false;
         }
     }
-
 }

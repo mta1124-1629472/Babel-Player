@@ -1564,7 +1564,6 @@ public sealed class ContainerizedInferenceClient : IDisposable
 
         return Path.Combine(Environment.CurrentDirectory, "debug-f76224.log");
     }
-
 }
 
 public sealed record QwenBatchSegmentPayload(

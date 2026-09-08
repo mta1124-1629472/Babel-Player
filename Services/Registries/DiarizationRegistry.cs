@@ -131,5 +131,4 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
             serviceUrl,
             normalizedServiceUrl => new ContainerizedInferenceClient(normalizedServiceUrl, _log, null, _requestLeaseTracker));
     }
-
 }

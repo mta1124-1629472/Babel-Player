@@ -958,7 +958,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(VsrReasonText));
             OnPropertyChanged(nameof(VsrFilterText));
         }
-
     }
 
     internal void RefreshHdrDisplayState()

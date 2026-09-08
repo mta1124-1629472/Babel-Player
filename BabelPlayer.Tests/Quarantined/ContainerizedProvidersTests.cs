@@ -1614,5 +1614,4 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             _handler(request, cancellationToken);
     }
-
 }
