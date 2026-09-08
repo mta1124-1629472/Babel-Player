@@ -61,14 +61,12 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           BRANCH="chore/apm-version-${TAG}"
-          git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+          git checkout -B "$BRANCH"
+          # Fetch the remote branch if it exists to establish a lease reference
+          git fetch origin "$BRANCH" 2>/dev/null || true
+          # Push with lease, which will validate against the fetched ref if present
           git push --force-with-lease origin "$BRANCH"
-          
-          # Check if PR already exists before creating
-          if gh pr list --head "$BRANCH" --base main | grep -q .; then
-            echo "PR already exists for branch ${BRANCH}"
-          else
-            gh pr create --base main --head "$BRANCH" \
-              --title "chore: sync apm.yml version to ${TAG}" \
-              --body "Automated version sync for tag ${TAG}."
-          fi
+          # Create or update the PR
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore: sync apm.yml version to ${TAG}" \
+            --body "Automated version sync for tag ${TAG}."
