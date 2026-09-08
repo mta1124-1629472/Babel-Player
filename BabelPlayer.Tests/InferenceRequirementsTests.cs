@@ -260,7 +260,7 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("torch==2.5.1", lines);
         Assert.Contains("torchaudio==2.5.1", lines);
         Assert.Contains("onnxruntime==1.19.2", lines);
-        Assert.Contains("transformers==4.46.3", lines);
+        Assert.Contains("transformers==5.10.1", lines);
         Assert.Contains("silero-vad==5.1.0", lines);
         Assert.Contains("openai-whisper==20240930", lines);
     }
