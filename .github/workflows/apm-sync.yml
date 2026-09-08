@@ -58,16 +58,10 @@ jobs:
         if: steps.commit.outputs.committed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
           BRANCH="chore/apm-version-${TAG}"
-
-          # Ensure the PR branch is based on latest main, not the tag commit.
-          COMMIT_SHA="$(git rev-parse HEAD)"
-          git fetch origin main
-          git checkout -B "$BRANCH" origin/main
-          git cherry-pick "$COMMIT_SHA"
-
+          git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
           git push --force-with-lease origin "$BRANCH"
           
           # Check if PR already exists before creating
