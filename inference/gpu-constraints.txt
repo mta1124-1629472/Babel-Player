@@ -13,3 +13,5 @@ pydub==0.25.1
 soundfile>=0.12.1
 hf_xet>=0.1.0
 nemo-toolkit==2.7.2
+qwen-tts>=0.1.1
+audio-separator>=0.24.0
