@@ -86,8 +86,10 @@ public sealed class ExecutionPlannerTests : IDisposable
         var applied = coordinator.ResolveAndApplyExecutionPlan(InferenceStage.Translation);
 
         Assert.Equal(ProviderNames.CTranslate2, applied.ProviderId);
-        Assert.Equal(ProviderNames.CTranslate2, coordinator.CurrentSettings.TranslationProvider);
-        Assert.Equal(ComputeProfile.Cpu, coordinator.CurrentSettings.TranslationProfile);
+        Assert.True(applied.IsFallback);
+        // Fallback plans execute without overwriting the user's configured provider choice.
+        Assert.Equal(ProviderNames.OpenAi, coordinator.CurrentSettings.TranslationProvider);
+        Assert.Equal(ComputeProfile.Cloud, coordinator.CurrentSettings.TranslationProfile);
     }
 
     [Fact]

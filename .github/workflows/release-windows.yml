@@ -126,14 +126,22 @@ jobs:
           Copy-Item -Path "$tools/ffmpeg.exe"    -Destination "./publish/" -Force
           Copy-Item -Path "$tools/ffprobe.exe"   -Destination "./publish/" -Force
           Copy-Item -Path "$tools/uv.exe"        -Destination "./publish/" -Force
+          if ($rid -eq "win-x64") {
+            New-Item -ItemType Directory -Path "./publish/$tools/piper" -Force | Out-Null
+            Copy-Item -Path "$tools/piper/*" -Destination "./publish/$tools/piper/" -Recurse -Force
+          }
 
       - name: Verify publish output
         shell: pwsh
         run: |
           $missing = @()
+          $rid = "${{ matrix.rid }}"
 
           foreach ($f in @("BabelPlayer.exe", "ffmpeg.exe", "ffprobe.exe", "libmpv-2.dll", "uv.exe")) {
             if (-not (Test-Path "./publish/$f")) { $missing += $f }
+          }
+          if ($rid -eq "win-x64" -and -not (Test-Path "./publish/tools/win-x64/piper/piper.exe")) {
+            $missing += "tools/win-x64/piper/piper.exe"
           }
 
           foreach ($f in @(

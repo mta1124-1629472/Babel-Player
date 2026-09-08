@@ -43,7 +43,7 @@ RUN pip install --no-cache-dir -c gpu-constraints.txt \
     faster-whisper==1.2.1 \
     "numpy>=1.22.0,<2.0" \
     scipy==1.14.1 \
-    transformers==5.10.1 \
+    transformers==4.46.3 \
     sentencepiece==0.2.0 \
     safetensors==0.6.2 \
     accelerate==1.12.0 \

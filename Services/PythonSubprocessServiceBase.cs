@@ -153,13 +153,7 @@ public abstract class PythonSubprocessServiceBase
             if (environmentVariables is not null)
                 foreach (var (key, value) in environmentVariables)
                     psi.Environment[key] = value;
-            if (!psi.Environment.ContainsKey("PYTHONUTF8"))
-                psi.Environment["PYTHONUTF8"] = "1";
-            psi.Environment["PYTHONIOENCODING"] = "utf-8";
-            if (psi.RedirectStandardInput)
-                psi.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-            psi.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-            psi.StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            ApplyPythonStdioEnvironment(psi);
 
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");
@@ -297,13 +291,7 @@ public abstract class PythonSubprocessServiceBase
                 foreach (var (key, value) in environmentVariables)
                     psi.Environment[key] = value;
             }
-            if (!psi.Environment.ContainsKey("PYTHONUTF8"))
-                psi.Environment["PYTHONUTF8"] = "1";
-            psi.Environment["PYTHONIOENCODING"] = "utf-8";
-            if (psi.RedirectStandardInput)
-                psi.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-            psi.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-            psi.StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            ApplyPythonStdioEnvironment(psi);
 
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");
@@ -396,6 +384,17 @@ public abstract class PythonSubprocessServiceBase
     private static bool IsValidScriptPrefix(string prefix) =>
         !string.IsNullOrEmpty(prefix) &&
         prefix.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_');
+
+    internal static void ApplyPythonStdioEnvironment(ProcessStartInfo psi)
+    {
+        if (!psi.Environment.ContainsKey("PYTHONUTF8"))
+            psi.Environment["PYTHONUTF8"] = "1";
+        psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        if (psi.RedirectStandardInput)
+            psi.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        psi.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        psi.StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    }
 
     private static async Task WriteStandardInputAsync(
         Process process,

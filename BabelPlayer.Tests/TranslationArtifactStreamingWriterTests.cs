@@ -71,4 +71,18 @@ public sealed class TranslationArtifactStreamingWriterTests : IDisposable
             writer.ApplyTranslatedTextAsync("segment_missing", "ignored", "es", "en", CancellationToken.None));
         Assert.Contains("segment_missing", ex.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ResetJournal_RemovesPartialEventsCommitAndTempFiles()
+    {
+        var partialPath = Path.Combine(_dir, "reset.partial.json");
+        var paths = StreamingArtifactJournalPaths.FromPartialPath(partialPath);
+        foreach (var path in new[] { paths.PartialPath, paths.PartialTempPath, paths.EventsPath, paths.CommitPath })
+            File.WriteAllText(path, "stale");
+
+        var writer = new TranslationArtifactStreamingWriter(partialPath, "es", "en");
+        writer.ResetJournal();
+
+        Assert.Empty(Directory.GetFiles(_dir));
+    }
 }

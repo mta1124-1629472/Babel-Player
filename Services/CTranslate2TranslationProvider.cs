@@ -21,7 +21,7 @@ public class CTranslate2TranslationProvider : PythonSubprocessServiceBase, ITran
         _model = string.IsNullOrWhiteSpace(model) ? "nllb-200-distilled-600M" : model;
     }
 
-    private const string TranslateScriptTemplate = @"
+    internal const string TranslateScriptTemplate = @"
 import json
 import os
 import sys
@@ -78,12 +78,12 @@ with open(output_path, 'w', encoding='utf-8') as f:
 print('CTranslate2 translation complete')
 ";
 
-    private static readonly string TranslateScript = TranslateScriptTemplate.Replace(
+    internal static readonly string TranslateScript = TranslateScriptTemplate.Replace(
         "__FLORES_DICT_BODY__",
         "{" + NllbLanguageCatalog.BuildPythonDictLiteral() + "}",
         StringComparison.Ordinal);
 
-    private const string TranslateSingleSegmentScriptTemplate = @"
+    internal const string TranslateSingleSegmentScriptTemplate = @"
 import json
 import os
 import sys
@@ -118,7 +118,7 @@ else:
 print(json.dumps({'translatedText': translated_text, 'sourceLanguage': src_lang, 'targetLanguage': tgt_lang}, ensure_ascii=False))
 ";
 
-    private static readonly string TranslateSingleSegmentScript = TranslateSingleSegmentScriptTemplate.Replace(
+    internal static readonly string TranslateSingleSegmentScript = TranslateSingleSegmentScriptTemplate.Replace(
         "__FLORES_DICT_BODY__",
         "{" + NllbLanguageCatalog.BuildPythonDictLiteral() + "}",
         StringComparison.Ordinal);
