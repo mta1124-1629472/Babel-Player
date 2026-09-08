@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir -c gpu-constraints.txt \
     fastapi==0.115.4 \
     uvicorn==0.30.6 \
     "pydantic>=2.10.6,<3" \
-    python-multipart==0.0.9 \
+    python-multipart==0.0.31 \
     faster-whisper==1.2.1 \
     "numpy>=1.22.0,<2.0" \
     scipy==1.14.1 \
