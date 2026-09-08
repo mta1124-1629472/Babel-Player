@@ -227,6 +227,9 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("openai-whisper==20240930", lines);
         Assert.Contains("peft==0.13.2", lines);
         Assert.Contains("scikit-learn==1.3.2", lines);
+        // Same 4.x requirement as above: this chain imports wespeaker, which needs
+        // HubertModel from transformers (removed in v5).
+        Assert.Contains("transformers==4.46.3", lines);
     }
 
     [Fact]
@@ -260,7 +263,10 @@ public sealed class InferenceRequirementsTests
         Assert.Contains("torch==2.5.1", lines);
         Assert.Contains("torchaudio==2.5.1", lines);
         Assert.Contains("onnxruntime==1.19.2", lines);
-        Assert.Contains("transformers==5.10.1", lines);
+        // transformers must stay on 4.x: v5 removed HubertModel, which breaks the
+        // validation script's "import wespeaker" chain (via s3prl) and blocks every
+        // subprocess provider. Major bumps need a full E2E verification run first.
+        Assert.Contains("transformers==4.46.3", lines);
         Assert.Contains("silero-vad==5.1.0", lines);
         Assert.Contains("openai-whisper==20240930", lines);
     }
