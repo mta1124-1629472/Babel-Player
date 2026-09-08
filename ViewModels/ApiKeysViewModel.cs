@@ -18,8 +18,6 @@ public sealed class ApiKeysViewModel(ApiKeyStore store, ApiKeyValidationService?
     public string SecurityStatusDetail => $"{StorageProviderName}. Your keys are stored locally and never leave this machine.";
 }
 
-
-
 /// <summary>ViewModel for a single provider row in the API Keys dialog.</summary>
 public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore store, ApiKeyValidationService? validationService = null) : ViewModelBase
 {
@@ -27,7 +25,6 @@ public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore
 
     public string ProviderKey { get; } = providerKey;
     public string ProviderDisplayName { get; } = ApiKeyStore.GetDisplayName(providerKey);
-
 
     [ObservableProperty]
     private string _keyValue = "";
@@ -43,7 +40,6 @@ public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore
     [NotifyPropertyChangedFor(nameof(StatusTextColor))]
     [NotifyPropertyChangedFor(nameof(PlaceholderText))]
     private bool _isKeySet = store.HasKey(providerKey);
-
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ValidateButtonText))]
@@ -82,8 +78,6 @@ public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore
         ? (IsValidationSuccess ? "#22C55E" : "#F59E0B")
         : "#686878";
 
-
-
     [RelayCommand]
     private void SaveKey()
     {
@@ -106,7 +100,6 @@ public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore
         ValidationResultText = "";
         IsValidationSuccess = false;
     }
-
 
     [RelayCommand]
     private void ToggleReveal() => IsRevealed = !IsRevealed;

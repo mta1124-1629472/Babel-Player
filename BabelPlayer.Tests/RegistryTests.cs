@@ -195,7 +195,6 @@ public sealed class RegistryTests : IDisposable
         var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
         keyStore.SetKey(CredentialKeys.Deepl, "test-deepl-key");
 
-
         var provider = _translationRegistry.CreateProvider(ProviderNames.Deepl, new AppSettings(), keyStore);
         Assert.NotNull(provider);
     }
@@ -261,7 +260,6 @@ public sealed class RegistryTests : IDisposable
         Assert.Contains(providers, p => p.Id == ProviderNames.EdgeTts);
     }
 
-
     [Fact]
     public void TtsRegistry_CheckReadiness_UnknownProvider_ReturnsNotReady()
     {
@@ -302,7 +300,6 @@ public sealed class RegistryTests : IDisposable
         var provider = _ttsRegistry.CreateProvider(ProviderNames.EdgeTts, new AppSettings(), null);
         Assert.NotNull(provider);
     }
-
 
     [Fact]
     public void TtsRegistry_CreateProvider_ElevenLabs_DoesNotThrow()
@@ -400,7 +397,6 @@ public sealed class RegistryTests : IDisposable
         var normalized = InferenceRuntimeCatalog.NormalizeTtsProvider(ComputeProfile.Gpu, ProviderNames.Qwen);
         Assert.Equal(ProviderNames.Qwen, normalized);
     }
-
 
     [Fact]
     public void AllRegistries_ContainerizedService_CheckReadiness_RequiresConfiguredUrl()

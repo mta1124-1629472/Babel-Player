@@ -134,7 +134,6 @@ public partial class App : Application
                 appDataRoot, _startupLog, out var primaryGpuManager);
             _primaryGpuManager = primaryGpuManager;
 
-
             desktop.Exit += OnDesktopExit;
             desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;
 

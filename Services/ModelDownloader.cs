@@ -115,7 +115,6 @@ shutil.move(tmp_output_dir, output_dir)
 print('[progress] 100', flush=True)
 """;
 
-
     private async Task<bool> DownloadHuggingFaceModelAsync(string repoId, IProgress<double>? progress = null, CancellationToken token = default)
     {
         string? pythonPath = DependencyLocator.FindPython();
@@ -358,7 +357,6 @@ except Exception as e:
             && File.Exists(Path.Combine(convertedPath, "config.json"))
             && IsNllbDownloaded(model);
     }
-
 
     private static bool IsDownloadedInHfCache(string modelPath)
     {

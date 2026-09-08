@@ -275,7 +275,6 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Equal(0, tracker.ActiveRequests);
     }
 
-    
     [Fact]
     public async Task ContainerizedTranscriptionProvider_TranscribeAsync_ThrowsWhenInputMissing()
     {

@@ -9,7 +9,6 @@ namespace BabelPlayer.Tests;
 public sealed class ContainerizedProbeMetricsTests
 {
 }
-
     [Fact]
     public void ServiceMetrics_InitialState_IsZero()
     {

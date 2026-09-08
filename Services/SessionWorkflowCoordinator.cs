@@ -48,7 +48,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private long _settingsRevision;
     private long _sessionRevision;
 
-
     private readonly IInferenceExecutionEngine _inferenceEngine;
     private readonly IExecutionPlanner _executionPlanner;
     private readonly TranscriptionOrchestrator _transcriptionOrchestrator;

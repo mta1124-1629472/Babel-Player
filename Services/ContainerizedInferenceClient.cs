@@ -669,8 +669,6 @@ public sealed class ContainerizedInferenceClient : IDisposable
         return result.ReferenceId;
     }
 
-
-
     /// <summary>
     /// Generate a Qwen-segmented text-to-speech audio asset for the given text using an optional reference audio or reference ID.
     /// </summary>

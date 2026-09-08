@@ -549,7 +549,6 @@ public sealed class ContainerizedServiceProbeTests
 
         Assert.True(allAvailable, "Background probes did not reach Available state within timeout.");
 
-        
         // Verify cache works and metrics are accurate
         foreach (var url in serviceUrls)
         {

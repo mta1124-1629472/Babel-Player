@@ -58,7 +58,6 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
-
         var updatedRefs = references is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : new Dictionary<string, string>(references, StringComparer.Ordinal);
@@ -112,7 +111,6 @@ public sealed partial class SessionWorkflowCoordinator
             return;
         }
 
-
         const string providerTag = "qwen";
         var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
         Directory.CreateDirectory(refsDir);
@@ -150,7 +148,6 @@ public sealed partial class SessionWorkflowCoordinator
                 _log.Warning($"Auto-reference extraction failed for speaker '{speakerId}': {ex.Message}");
                 continue;
             }
-
 
             updated[speakerId] = outputPath;
             anyNew = true;

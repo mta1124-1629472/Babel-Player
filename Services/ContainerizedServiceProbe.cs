@@ -177,7 +177,6 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                 entry.CachedResult = null;
             }
 
-
             entry.Cts = new CancellationTokenSource();
             entry.InFlightTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
             _log.Debug($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");

@@ -204,7 +204,6 @@ public sealed partial class SessionWorkflowCoordinator
             ProviderReadiness readiness;
             IDiarizationProvider provider;
 
-
             if (usesContainerizedRuntime)
             {
                 readiness = ContainerizedProbe is not null
@@ -215,7 +214,6 @@ public sealed partial class SessionWorkflowCoordinator
                             ct)
                         .ConfigureAwait(false)
                     : DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
-
 
                 if (!readiness.IsReady)
                 {
@@ -231,7 +229,6 @@ public sealed partial class SessionWorkflowCoordinator
                 provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
                 var ensuredReady = await provider.EnsureReadyAsync(CurrentSettings, ct: ct).ConfigureAwait(false);
                 readiness = provider.CheckReadiness(CurrentSettings, KeyStore);
-
 
                 if (!readiness.IsReady)
                 {

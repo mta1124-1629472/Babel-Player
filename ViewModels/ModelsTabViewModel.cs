@@ -4,7 +4,6 @@ using System.Linq;
 using Babel.Player.Models;
 using Babel.Player.Services;
 
-
 namespace Babel.Player.ViewModels;
 
 /// <summary>

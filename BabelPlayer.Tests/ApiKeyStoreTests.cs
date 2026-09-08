@@ -32,9 +32,7 @@ public sealed class ApiKeyStoreTests : IDisposable
         var store = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "state", "api-keys.json")));
         store.SetKey(CredentialKeys.OpenAi, "test-openai-key");
 
-
         var reloaded = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "state", "api-keys.json")));
-
 
         Assert.True(reloaded.HasKey(CredentialKeys.OpenAi));
         Assert.Equal("test-openai-key", reloaded.GetKey(CredentialKeys.OpenAi));
@@ -48,9 +46,7 @@ public sealed class ApiKeyStoreTests : IDisposable
         var store = new ApiKeyStore(new FileSystemCredentialProvider(filePath));
         store.SetKey(CredentialKeys.Deepl, "test-deepl-key");
 
-
         var reloaded = new ApiKeyStore(new FileSystemCredentialProvider(filePath));
-
 
         Assert.True(reloaded.HasKey(CredentialKeys.Deepl));
         Assert.Equal("test-deepl-key", reloaded.GetKey(CredentialKeys.Deepl));

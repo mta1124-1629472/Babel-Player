@@ -923,7 +923,6 @@ public sealed class PipelineStageProgressTests() : IDisposable
             return Task.CompletedTask;
         }
 
-
         public Task ExtractAudioClipAsync(string sourcePath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken)
         {
             var outputDir = Path.GetDirectoryName(outputPath);

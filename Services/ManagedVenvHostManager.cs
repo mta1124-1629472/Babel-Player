@@ -1147,7 +1147,6 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             _log.Debug(stderr.Trim());
     }
 
-
     /// <summary>
     /// Reads lines from the given process stream until EOF and logs non-empty lines prefixed with the provided label.
     /// </summary>

@@ -134,8 +134,6 @@ public sealed class WerComputerTests
         Assert.Equal(0.0, WerComputer.ComputeCer("hello, world!", "hello world"));
     }
 
-
-
     [Fact]
     public void ComputeCer_IdenticalStrings_ReturnsZero()
     {
