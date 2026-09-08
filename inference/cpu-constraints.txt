@@ -15,4 +15,4 @@ silero-vad==5.1.0
 soundfile==0.12.1
 torch==2.5.1
 torchaudio==2.5.1
-transformers==4.46.3
+transformers==5.10.1
