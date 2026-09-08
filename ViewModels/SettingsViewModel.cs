@@ -871,7 +871,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            const string sponsorsUrl = "https://github.com/sponsors/mta-babel";
+            const string sponsorsUrl = "https://github.com/sponsors/trackdubllc";
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = sponsorsUrl,

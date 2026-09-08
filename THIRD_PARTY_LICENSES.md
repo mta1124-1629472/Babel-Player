@@ -7,7 +7,7 @@ Babel Player incorporates third-party software and pre-trained models. Their lic
 ## Bundled Native Binaries
 
 ### libmpv
-- **Version:** 2026-04-13 (git da4789c), built by [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild)
+- **Version:** 2026-09-03 (git f5bcfb1954), built by [zhongfly/mpv-winbuild](https://github.com/zhongfly/mpv-winbuild)
 - **License:** GPL-2.0-or-later
 - **Source:** https://github.com/mpv-player/mpv
 - **License text:** https://github.com/mpv-player/mpv/blob/master/LICENSE.GPL

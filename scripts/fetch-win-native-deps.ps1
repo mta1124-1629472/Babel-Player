@@ -104,6 +104,26 @@ function Get-TargetArchitecture {
     }
 }
 
+function Get-LatestLibmpvDevAssetUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $AssetPrefix
+    )
+
+    try {
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest" -Headers @{ "User-Agent" = "fetch-win-native-deps" }
+        $asset = @($release.assets | Where-Object { $_.name -like "$AssetPrefix*" })[0]
+        if ($asset) {
+            return $asset.browser_download_url
+        }
+    }
+    catch {
+        Write-Warning "Could not query latest mpv-winbuild release: $($_.Exception.Message)"
+    }
+
+    return $null
+}
+
 $targetArch = Get-TargetArchitecture
 $rid = if ($targetArch -eq "Arm64") { "win-arm64" } else { "win-x64" }
 
@@ -118,10 +138,13 @@ New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null
 $SevenZipRemote = "https://www.7-zip.org/a/7zr.exe"
 
 # Pinned libmpv dev packages (contain libmpv-2.dll). Update only after validation.
+# zhongfly/mpv-winbuild prunes old releases, so dead pins fall back to the newest
+# matching asset (with a warning) instead of hard-failing.
+$LibmpvDevAssetPrefix = if ($targetArch -eq "Arm64") { "mpv-dev-aarch64-" } else { "mpv-dev-x86_64-v3-" }
 $LibmpvDevArchiveUrl = if ($targetArch -eq "Arm64") {
-    "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-04-14-da4789c/mpv-dev-aarch64-20260414-git-da4789c.7z"
+    "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-09-03-f5bcfb1954/mpv-dev-aarch64-20260903-git-f5bcfb1954.7z"
 } else {
-    "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-04-13-da4789c/mpv-dev-x86_64-v3-20260413-git-da4789c.7z"
+    "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-09-03-f5bcfb1954/mpv-dev-x86_64-v3-20260903-git-f5bcfb1954.7z"
 }
 
 $UvZipUrl = if ($targetArch -eq "Arm64") {
@@ -142,7 +165,20 @@ try {
 
     $libmpvArc = Join-Path $scratch "mpv-dev.7z"
     Write-Host "Downloading libmpv dev archive from $LibmpvDevArchiveUrl"
-    Invoke-FileDownload -Uri $LibmpvDevArchiveUrl -OutFile $libmpvArc
+    try {
+        Invoke-FileDownload -Uri $LibmpvDevArchiveUrl -OutFile $libmpvArc
+    }
+    catch {
+        # Pinned zhongfly release was pruned or momentarily unavailable (see note above);
+        # fall back to the newest matching dev asset instead of hard-failing.
+        Write-Warning "Pinned libmpv archive unavailable ($($_.Exception.Message)). Falling back to newest matching release asset."
+        $fallbackUrl = Get-LatestLibmpvDevAssetUrl -AssetPrefix $LibmpvDevAssetPrefix
+        if (-not $fallbackUrl) {
+            throw
+        }
+        Write-Host "Downloading libmpv dev archive from $fallbackUrl"
+        Invoke-FileDownload -Uri $fallbackUrl -OutFile $libmpvArc
+    }
 
     Push-Location $scratch
     try {
