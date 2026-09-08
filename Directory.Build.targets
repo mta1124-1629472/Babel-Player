@@ -24,8 +24,7 @@
                            or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe')
                            or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe')
                            or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe')
-                           or ('$(BabelWinNativeSubdir)' != 'win-arm64'
-                               and !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\piper\piper.exe')))">
+                           or ('$(BabelWinNativeSubdir)' != 'win-arm64' and !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\piper\piper.exe')))">
     <Exec Command="$(BabelWinFetchCommand) $(BabelWinFetchExtraArgs)"
           WorkingDirectory="$(MSBuildThisFileDirectory)"
           StandardOutputImportance="high"

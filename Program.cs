@@ -33,6 +33,7 @@ sealed class Program
             if (OperatingSystem.IsWindows())
                 AttachConsole(-1);
             return DubCli.RunAsync(args).GetAwaiter().GetResult();
+        }
 
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
