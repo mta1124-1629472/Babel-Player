@@ -1,5 +1,5 @@
 name: babel-player
-version: v1.1.0
+version: v1.3.0
 description: Babel Player is a .NET 10/Avalonia 12 workstation for segment-based AI
   video dubbing. Local RTX-accelerated transcription, translation, and voice cloning
   with cloud API support. Built natively for Windows x64 and ARM.
