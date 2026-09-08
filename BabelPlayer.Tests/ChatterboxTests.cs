@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using Babel.Player.Models;
 using Babel.Player.Services.Chatterbox;
 using Xunit;
@@ -127,5 +128,87 @@ public sealed class ChatterboxTests : IDisposable
         Assert.Contains("onnx/language_model.onnx", ChatterboxModelCatalog.RequiredFiles);
         Assert.Contains("fr", ChatterboxModelCatalog.SupportedLanguages);
         Assert.DoesNotContain("zh", ChatterboxModelCatalog.SupportedLanguages);
+    }
+
+    [Fact]
+    public void DecodePcm16Mono_RejectsZeroChannelHeader()
+    {
+        var bytes = BuildWavBytes(channels: 0, frames: 4);
+        Assert.Throws<InvalidDataException>(() => ChatterboxAudio.DecodePcm16Mono(bytes));
+    }
+
+    [Fact]
+    public void DecodePcm16Mono_SkipsMetadataChunks()
+    {
+        var bytes = BuildWavBytes(channels: 1, frames: 4, extraChunk: true);
+        var (samples, rate) = ChatterboxAudio.DecodePcm16Mono(bytes);
+
+        Assert.Equal(24000, rate);
+        Assert.Equal(4, samples.Length);
+        Assert.Equal(1000 / (float)short.MaxValue, samples[1], precision: 5);
+    }
+
+    [Fact]
+    public void NormalizeTextForLanguage_DecomposesKoreanJamo()
+    {
+        Assert.Equal(string.Empty, ChatterboxTtsEngine.NormalizeTextForLanguage("　", "ko"));
+        Assert.Equal("\u1100\u1161", ChatterboxTtsEngine.NormalizeTextForLanguage("가", "ko"));
+        Assert.Equal("\u1100\u1161", ChatterboxTtsEngine.NormalizeTextForLanguage("가", "KO"));
+        Assert.Equal("hello", ChatterboxTtsEngine.NormalizeTextForLanguage("hello", "ko"));
+        Assert.Equal("Bonjour", ChatterboxTtsEngine.NormalizeTextForLanguage("Bonjour", "fr"));
+    }
+
+    [Fact]
+    public void ModelFiles_DetectsMultilingualFromTokenizerContent()
+    {
+        var multiRoot = Path.Combine(_dir, "neutral-model-name");
+        WriteFakeModel(multiRoot, withLanguageToken: true);
+        Assert.True(ChatterboxModelFiles.Resolve(multiRoot).IsMultilingual);
+
+        var singleRoot = Path.Combine(_dir, "other-neutral-name");
+        WriteFakeModel(singleRoot, withLanguageToken: false);
+        Assert.False(ChatterboxModelFiles.Resolve(singleRoot).IsMultilingual);
+    }
+
+    private static void WriteFakeModel(string root, bool withLanguageToken)
+    {
+        var onnxDir = Path.Combine(root, "onnx");
+        Directory.CreateDirectory(onnxDir);
+        foreach (var name in new[] { "speech_encoder.onnx", "embed_tokens.onnx", "language_model.onnx", "conditional_decoder.onnx" })
+            File.WriteAllText(Path.Combine(onnxDir, name), "fake");
+        var vocabEntry = withLanguageToken ? "\"[fr]\": 100, " : string.Empty;
+        File.WriteAllText(
+            Path.Combine(root, "tokenizer.json"),
+            "{\"model\":{\"vocab\":{" + vocabEntry + "\"hello\": 200},\"merges\":[]}}");
+    }
+
+    private static byte[] BuildWavBytes(int channels, int frames, bool extraChunk = false)
+    {
+        int safeChannels = Math.Max(1, channels);
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+        writer.Write(0);
+        writer.Write(Encoding.ASCII.GetBytes("WAVE"));
+        writer.Write(Encoding.ASCII.GetBytes("fmt "));
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)channels);
+        writer.Write(24000);
+        writer.Write(24000 * safeChannels * 2);
+        writer.Write((short)(safeChannels * 2));
+        writer.Write((short)16);
+        if (extraChunk)
+        {
+            writer.Write(Encoding.ASCII.GetBytes("LIST"));
+            writer.Write(4);
+            writer.Write(new byte[] { (byte)'I', (byte)'N', (byte)'F', (byte)'O' });
+        }
+        writer.Write(Encoding.ASCII.GetBytes("data"));
+        writer.Write(frames * safeChannels * 2);
+        for (int i = 0; i < frames * safeChannels; i++)
+            writer.Write((short)(i * 1000));
+        writer.Flush();
+        return stream.ToArray();
     }
 }

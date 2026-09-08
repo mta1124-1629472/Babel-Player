@@ -63,24 +63,64 @@ internal static class ChatterboxAudio
 
     internal static (float[] Samples, int SampleRate) DecodePcm16Mono(byte[] wavBytes)
     {
-        if (wavBytes.Length < 44)
+        if (wavBytes.Length < 12)
             throw new InvalidDataException("WAV file is too short to contain a valid header.");
+        if (Encoding.ASCII.GetString(wavBytes, 0, 4) != "RIFF" ||
+            Encoding.ASCII.GetString(wavBytes, 8, 4) != "WAVE")
+            throw new InvalidDataException("Not a WAV file: missing RIFF/WAVE header.");
 
-        int channelCount = BitConverter.ToUInt16(wavBytes, 22);
-        int sampleRate = BitConverter.ToInt32(wavBytes, 24);
-        int bitsPerSample = BitConverter.ToUInt16(wavBytes, 34);
+        int audioFormat = 0;
+        int channelCount = 0;
+        int sampleRate = 0;
+        int bitsPerSample = 0;
+        int dataOffset = -1;
+        int dataLength = 0;
+        int position = 12;
+        while (position + 8 <= wavBytes.Length)
+        {
+            string chunkId = Encoding.ASCII.GetString(wavBytes, position, 4);
+            int chunkSize = BitConverter.ToInt32(wavBytes, position + 4);
+            if (chunkSize < 0 || position + 8 + chunkSize > wavBytes.Length)
+                break;
+
+            if (chunkId == "fmt ")
+            {
+                if (chunkSize < 16)
+                    throw new InvalidDataException("WAV fmt chunk is too short.");
+                audioFormat = BitConverter.ToUInt16(wavBytes, position + 8);
+                channelCount = BitConverter.ToUInt16(wavBytes, position + 10);
+                sampleRate = BitConverter.ToInt32(wavBytes, position + 12);
+                bitsPerSample = BitConverter.ToUInt16(wavBytes, position + 22);
+            }
+            else if (chunkId == "data" && dataOffset < 0)
+            {
+                dataOffset = position + 8;
+                dataLength = chunkSize;
+            }
+
+            position += 8 + chunkSize + (chunkSize & 1);
+        }
+
+        if (audioFormat != 1)
+            throw new InvalidDataException($"Only PCM WAV is supported, got format {audioFormat}.");
+        if (channelCount <= 0)
+            throw new InvalidDataException("WAV file must contain at least one channel.");
         if (bitsPerSample != 16)
             throw new InvalidDataException($"Only 16-bit PCM WAV is supported, got {bitsPerSample}-bit.");
+        if (sampleRate <= 0)
+            throw new InvalidDataException("WAV file has an invalid sample rate.");
+        if (dataOffset < 0)
+            throw new InvalidDataException("WAV file contains no data chunk.");
 
-        const int headerSize = 44;
-        int frameCount = (wavBytes.Length - headerSize) / (2 * Math.Max(1, channelCount));
+        int bytesPerFrame = 2 * channelCount;
+        int frameCount = Math.Min(dataLength, wavBytes.Length - dataOffset) / bytesPerFrame;
         var samples = new float[frameCount];
         for (int frame = 0; frame < frameCount; frame++)
         {
             float sum = 0f;
             for (int channel = 0; channel < channelCount; channel++)
             {
-                int offset = headerSize + (frame * channelCount + channel) * 2;
+                int offset = dataOffset + (frame * channelCount + channel) * 2;
                 sum += BitConverter.ToInt16(wavBytes, offset) / (float)short.MaxValue;
             }
 

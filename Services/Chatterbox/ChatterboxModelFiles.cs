@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json;
 
 namespace Babel.Player.Services.Chatterbox;
 
@@ -28,7 +29,7 @@ internal sealed record ChatterboxModelFiles(
         }
 
         bool isTurbo = rootDirectory.Contains("turbo", StringComparison.OrdinalIgnoreCase);
-        bool isMultilingual = rootDirectory.Contains("multilingual", StringComparison.OrdinalIgnoreCase);
+        bool isMultilingual = DetectMultilingualFromTokenizer(tokenizerPath, rootDirectory);
         return new ChatterboxModelFiles(
             rootDirectory,
             speechEncoderPath,
@@ -38,6 +39,34 @@ internal sealed record ChatterboxModelFiles(
             tokenizerPath,
             isTurbo,
             isMultilingual);
+    }
+
+    private static bool DetectMultilingualFromTokenizer(string tokenizerPath, string rootDirectory)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(tokenizerPath));
+            if (document.RootElement.TryGetProperty("model", out var model) &&
+                model.TryGetProperty("vocab", out var vocab))
+            {
+                foreach (var entry in vocab.EnumerateObject())
+                {
+                    var name = entry.Name;
+                    if (name.Length == 4 && name[0] == '[' && name[3] == ']' &&
+                        char.IsLower(name[1]) && char.IsLower(name[2]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+        catch
+        {
+        }
+
+        return rootDirectory.Contains("multilingual", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveGraphPath(string modelRootPath, string graphName, string? variant)

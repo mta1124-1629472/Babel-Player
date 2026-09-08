@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.ML.OnnxRuntime;
@@ -61,7 +62,8 @@ internal sealed class ChatterboxTtsEngine : IDisposable
             ThrowIfDisposed();
             var sessions = GetOrCreateSessions(modelFiles);
 
-            var conditionedText = ApplyMultilingualLanguagePrefix(text, languageCode, modelFiles.IsMultilingual);
+            var normalizedText = NormalizeTextForLanguage(text, languageCode);
+            var conditionedText = ApplyMultilingualLanguagePrefix(normalizedText, languageCode, modelFiles.IsMultilingual);
             var inputIds = BuildTextInputIds(conditionedText, sessions.Tokenizer, modelFiles.IsTurbo);
             var generation = GenerateSpeechTokens(
                 inputIds,
@@ -88,18 +90,19 @@ internal sealed class ChatterboxTtsEngine : IDisposable
         if (Interlocked.Exchange(ref _disposeSignaled, 1) == 1)
             return;
 
-        if (!_sessionGate.Wait(TimeSpan.FromSeconds(10)))
+        if (_sessionGate.Wait(TimeSpan.FromSeconds(10)))
         {
-            _log.Warning("Chatterbox engine disposal timed out waiting for the session gate; disposing anyway.");
+            try
+            {
+                _sessions?.Dispose();
+            }
+            finally
+            {
+                _sessions = null;
+                _sessionGate.Release();
+                _sessionGate.Dispose();
+            }
         }
-        else
-        {
-            _sessionGate.Release();
-        }
-
-        _sessions?.Dispose();
-        _sessions = null;
-        _sessionGate.Dispose();
     }
 
     private void ThrowIfDisposed()
@@ -322,6 +325,35 @@ internal sealed class ChatterboxTtsEngine : IDisposable
         }
 
         return $"[{normalized}]{text}";
+    }
+
+    internal static string NormalizeTextForLanguage(string text, string languageCode)
+    {
+        if (!string.Equals(languageCode?.Trim(), "ko", StringComparison.OrdinalIgnoreCase))
+            return text;
+
+        // Korean Jamo decomposition, mirroring korean_normalize in the upstream reference
+        // script. Japanese (pykakasi), Hebrew (dicta) and Chinese (Cangjie + pkuseg) need
+        // data-driven preprocessing that is not ported yet; those languages synthesize
+        // without normalization until their pipelines land.
+        var builder = new StringBuilder(text.Length * 2);
+        foreach (char c in text)
+        {
+            if (c < '\uAC00' || c > '\uD7AF')
+            {
+                builder.Append(c);
+                continue;
+            }
+
+            int syllable = c - 0xAC00;
+            builder.Append((char)(0x1100 + syllable / (21 * 28)));
+            builder.Append((char)(0x1161 + (syllable % (21 * 28)) / 28));
+            int tail = syllable % 28;
+            if (tail > 0)
+                builder.Append((char)(0x11A7 + tail));
+        }
+
+        return builder.ToString().Trim();
     }
 
     internal static long[] BuildTextInputIds(long[] tokenIds, bool isTurbo) =>

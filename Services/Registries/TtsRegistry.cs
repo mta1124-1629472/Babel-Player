@@ -58,14 +58,7 @@ public sealed class TtsRegistry : ITtsRegistry
         {
             return
             [
-                new(
-                    ProviderNames.Piper,
-                    "Piper (Local)",
-                    false,
-                    null,
-                    PiperTtsCatalog.VoiceIds,
-                    SupportedRuntimes: [InferenceRuntime.Local],
-                    DefaultRuntime: InferenceRuntime.Local),
+                .. GetAvailableProviders(ComputeProfile.Cpu),
                 .. GetAvailableProviders(ComputeProfile.Gpu),
                 .. GetAvailableProviders(ComputeProfile.Cloud),
             ];

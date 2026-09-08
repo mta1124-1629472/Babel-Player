@@ -294,9 +294,17 @@ except Exception as e:
 
     private async Task<bool> DownloadFileAsync(string url, string destinationPath, IProgress<double>? progress = null, CancellationToken token = default)
     {
-        var destinationDir = Path.GetDirectoryName(destinationPath);
-        if (!string.IsNullOrWhiteSpace(destinationDir))
-            Directory.CreateDirectory(destinationDir);
+        try
+        {
+            var destinationDir = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrWhiteSpace(destinationDir))
+                Directory.CreateDirectory(destinationDir);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Could not create download directory for '{destinationPath}': {ex.Message}");
+            return false;
+        }
 
         string tmpPath = destinationPath + ".tmp";
         try
@@ -462,7 +470,15 @@ except Exception as e:
     public async Task<bool> DownloadChatterboxModelAsync(string? modelDir, IProgress<double>? progress = null, CancellationToken token = default)
     {
         var resolvedDir = ResolveChatterboxModelDir(modelDir);
-        Directory.CreateDirectory(resolvedDir);
+        try
+        {
+            Directory.CreateDirectory(resolvedDir);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Could not create Chatterbox model directory '{resolvedDir}': {ex.Message}");
+            return false;
+        }
 
         var files = ChatterboxModelCatalog.RequiredFiles;
         for (int index = 0; index < files.Count; index++)

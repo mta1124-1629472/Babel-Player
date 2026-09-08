@@ -25,6 +25,9 @@ internal static class ChatterboxModelCatalog
         "onnx/conditional_decoder.onnx_data",
     };
 
+    // Chinese is supported by the upstream model only with the Cangjie preprocessing
+    // pipeline (Cangjie5 mapping + segmentation); until that lands, zh stays rejected
+    // by ApplyMultilingualLanguagePrefix rather than synthesizing degraded output.
     public static IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string>(
         new[] { "ar", "da", "de", "el", "en", "es", "fi", "fr", "he", "hi", "it", "ja", "ko", "ms", "nl", "no", "pl", "pt", "ru", "sv", "sw", "tr" },
         System.StringComparer.OrdinalIgnoreCase);

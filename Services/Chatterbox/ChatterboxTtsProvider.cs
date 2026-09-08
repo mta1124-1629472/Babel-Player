@@ -20,6 +20,7 @@ public sealed class ChatterboxTtsProvider : ITtsProvider, IDisposable, IAsyncDis
     private readonly Lock _gate = new();
     private ChatterboxTtsEngine? _engine;
     private string? _autoExtractedReferencePath;
+    private string? _autoExtractedReferenceSourcePath;
     private int _disposed;
 
     public ChatterboxTtsProvider(AppLog log, string modelDir, bool consentGranted, TtsReferenceExtractor? extractor = null)
@@ -181,14 +182,18 @@ public sealed class ChatterboxTtsProvider : ITtsProvider, IDisposable, IAsyncDis
 
     private async Task<string?> EnsureAutoExtractedReferenceAsync(string? sourceVideoPath, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
+        if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath) &&
+            string.Equals(_autoExtractedReferenceSourcePath, sourceVideoPath, StringComparison.OrdinalIgnoreCase))
+        {
             return _autoExtractedReferencePath;
+        }
 
         if (string.IsNullOrWhiteSpace(sourceVideoPath) || !File.Exists(sourceVideoPath))
             return null;
 
         _log.Debug($"Chatterbox auto-extracting reference audio from: {sourceVideoPath}");
         _autoExtractedReferencePath = await _extractor.ExtractReferenceAsync(sourceVideoPath, cancellationToken).ConfigureAwait(false);
+        _autoExtractedReferenceSourcePath = sourceVideoPath;
         return _autoExtractedReferencePath;
     }
 
@@ -200,9 +205,6 @@ public sealed class ChatterboxTtsProvider : ITtsProvider, IDisposable, IAsyncDis
 
     private static string? ResolveReferenceAudioPath(TtsRequest request, string? speakerId)
     {
-        if (!string.IsNullOrWhiteSpace(request.DefaultVoiceFallback) && File.Exists(request.DefaultVoiceFallback))
-            return request.DefaultVoiceFallback;
-
         if (speakerId is not null &&
             request.SpeakerReferenceAudioPaths is not null &&
             request.SpeakerReferenceAudioPaths.TryGetValue(speakerId, out var path) &&
@@ -210,6 +212,9 @@ public sealed class ChatterboxTtsProvider : ITtsProvider, IDisposable, IAsyncDis
         {
             return path;
         }
+
+        if (!string.IsNullOrWhiteSpace(request.DefaultVoiceFallback) && File.Exists(request.DefaultVoiceFallback))
+            return request.DefaultVoiceFallback;
 
         return null;
     }
