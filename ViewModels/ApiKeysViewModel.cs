@@ -129,6 +129,10 @@ public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore
         try
         {
             var result = await validationService.ValidateAsync(ProviderKey, candidateKey);
+            var currentKey = !string.IsNullOrWhiteSpace(KeyValue)
+                ? KeyValue.Trim()
+                : store.GetKey(ProviderKey);
+            if (candidateKey != currentKey) return;
             ValidationResultText = result.Message;
             IsValidationSuccess = result.IsValid;
         }
@@ -137,5 +141,4 @@ public sealed partial class ApiKeyEntryViewModel(string providerKey, ApiKeyStore
             IsValidating = false;
         }
     }
-
 }

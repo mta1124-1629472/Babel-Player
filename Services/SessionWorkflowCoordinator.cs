@@ -1295,5 +1295,4 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
     private static bool HasDiarizationMarker(WorkflowSessionSnapshot snapshot) =>
         SessionSnapshotSemantics.HasDiarizationMarker(snapshot);
-
 }

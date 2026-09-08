@@ -508,6 +508,4 @@ public sealed class QwenContainerTtsProvider(
         var chars = value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
         return new string(chars);
     }
-
-
 }
