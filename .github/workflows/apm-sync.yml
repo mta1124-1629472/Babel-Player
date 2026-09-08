@@ -78,5 +78,3 @@ jobs:
               --title "chore: sync apm.yml version to ${TAG}" \
               --body "Automated version sync for tag ${TAG}."
           fi
-            --title "chore: sync apm.yml version to ${TAG}" \
-            --body "Automated version sync for tag ${TAG}." || echo "PR may already exist."
