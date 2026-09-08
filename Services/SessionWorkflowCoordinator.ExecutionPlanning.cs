@@ -77,6 +77,10 @@ public sealed partial class SessionWorkflowCoordinator
 
     private void ApplyStagePlan(StageExecutionPlan plan)
     {
+        // Do not modify CurrentSettings when applying a fallback plan,
+        // as this would overwrite the user's configuration choice.
+        var shouldUpdateSettings = !plan.IsFallback;
+
         switch (plan.Stage)
         {
             case InferenceStage.Transcription:
@@ -85,8 +89,8 @@ public sealed partial class SessionWorkflowCoordinator
                 {
                     _transcriptionService = null;
                 }
-                CurrentSettings.TranscriptionProvider = plan.ProviderId;
-                CurrentSettings.TranscriptionProfile = plan.Profile;
+                if (shouldUpdateSettings) CurrentSettings.TranscriptionProvider = plan.ProviderId;
+                if (shouldUpdateSettings) CurrentSettings.TranscriptionProfile = plan.Profile;
                 break;
 
             case InferenceStage.Translation:
@@ -95,8 +99,8 @@ public sealed partial class SessionWorkflowCoordinator
                 {
                     RetireTranslationProviderCache("execution planner selected different translation provider");
                 }
-                CurrentSettings.TranslationProvider = plan.ProviderId;
-                CurrentSettings.TranslationProfile = plan.Profile;
+                if (shouldUpdateSettings) CurrentSettings.TranslationProvider = plan.ProviderId;
+                if (shouldUpdateSettings) CurrentSettings.TranslationProfile = plan.Profile;
                 break;
 
             case InferenceStage.Tts:
@@ -105,12 +109,12 @@ public sealed partial class SessionWorkflowCoordinator
                 {
                     RetireTtsProviderCache("execution planner selected different tts provider");
                 }
-                CurrentSettings.TtsProvider = plan.ProviderId;
-                CurrentSettings.TtsProfile = plan.Profile;
+                if (shouldUpdateSettings) CurrentSettings.TtsProvider = plan.ProviderId;
+                if (shouldUpdateSettings) CurrentSettings.TtsProfile = plan.Profile;
                 break;
 
             case InferenceStage.Diarization:
-                CurrentSettings.DiarizationProvider = plan.ProviderId;
+                if (shouldUpdateSettings) CurrentSettings.DiarizationProvider = plan.ProviderId;
                 break;
         }
     }

@@ -1394,7 +1394,7 @@ public sealed class ContainerizedInferenceClient : IDisposable
 
         var normalized = new Dictionary<string, ContainerProviderHealthSnapshot>(StringComparer.Ordinal);
         foreach (var pair in providerHealth)
-            normalized[InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(pair.Key)] = ToProviderHealthSnapshot(pair.Value);
+            normalized[InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(pair.Key ?? string.Empty)] = ToProviderHealthSnapshot(pair.Value);
         return normalized;
     }
 
