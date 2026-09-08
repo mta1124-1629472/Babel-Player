@@ -115,7 +115,6 @@ shutil.move(tmp_output_dir, output_dir)
 print('[progress] 100', flush=True)
 """;
 
-
     private async Task<bool> DownloadHuggingFaceModelAsync(string repoId, IProgress<double>? progress = null, CancellationToken token = default)
     {
         string? pythonPath = DependencyLocator.FindPython();
@@ -259,7 +258,7 @@ except Exception as e:
         {
             // Report fake progress to show something since piper downloads two files. 0 to 90% for onnx, 90 to 100% for json.
             var onnxProgress = new Progress<double>(p => progress?.Report(p * 0.90));
-            var jsonProgress = new Progress<double>(p => progress?.Report(0.90 + p * 0.10));
+            var jsonProgress = new Progress<double>(p => progress?.Report(0.90 + (p * 0.10)));
 
             bool onnxOk = await DownloadFileAsync($"{baseUrl}.onnx", onnxPath, onnxProgress, token);
             bool jsonOk = await DownloadFileAsync($"{baseUrl}.onnx.json", jsonPath, jsonProgress, token);
@@ -308,7 +307,7 @@ except Exception as e:
             long totalRead = 0;
             int bytesRead;
 
-            while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
+            while ((bytesRead = await stream.ReadAsync(buffer, token)) > 0)
             {
                 await fs.WriteAsync(buffer, 0, bytesRead, token);
                 totalRead += bytesRead;
@@ -358,7 +357,6 @@ except Exception as e:
             && File.Exists(Path.Combine(convertedPath, "config.json"))
             && IsNllbDownloaded(model);
     }
-
 
     private static bool IsDownloadedInHfCache(string modelPath)
     {
