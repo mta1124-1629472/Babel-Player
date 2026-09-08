@@ -65,4 +65,4 @@ jobs:
           git push --force-with-lease origin "$BRANCH"
           gh pr create --base main --head "$BRANCH" \
             --title "chore: sync apm.yml version to ${TAG}" \
-            --body "Automated version sync for tag ${TAG}." || echo "PR may already exist."
+            --body "Automated version sync for tag ${TAG}."
