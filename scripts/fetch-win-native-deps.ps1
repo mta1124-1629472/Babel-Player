@@ -8,6 +8,8 @@
   - uv.exe: astral-sh/uv Windows zip (x86_64 or aarch64)
   - ffmpeg.exe / ffprobe.exe: fetched by default from the same archives as below
     (essentials/LGPL zips ship both). Use -SkipFfmpeg to opt out.
+  - piper.exe (+ espeak-ng data): rhasspy/piper Windows release for local Piper TTS.
+    x64 only; rhasspy publishes no official Windows ARM64 build.
 
   On ARM64 Windows, artifacts go under native/win-arm64 and tools/win-arm64.
   On x64 Windows, under native/win-x64 and tools/win-x64.
@@ -233,6 +235,32 @@ try {
         }
         Move-Item -Path $ffprobeExe.FullName -Destination (Join-Path $ToolsDir "ffprobe.exe") -Force
         Write-Host "Wrote $(Join-Path $ToolsDir 'ffprobe.exe')"
+    }
+
+    if ($targetArch -eq "Arm64") {
+        Write-Warning "Skipping Piper: rhasspy/piper publishes no official Windows ARM64 build. Install piper.exe manually and ensure it is on PATH for local Piper TTS."
+    }
+    else {
+        # Pinned rhasspy/piper release (project is archived; this pin is stable).
+        # The archive's inner piper/ directory (piper.exe + espeak-ng data) is staged
+        # whole under tools/<rid>/piper so the engine finds its data next to the exe.
+        $PiperVersion = "2023.11.14-2"
+        $piperUrl = "https://github.com/rhasspy/piper/releases/download/$PiperVersion/piper_windows_amd64.zip"
+        Write-Host "Downloading Piper $PiperVersion from $piperUrl"
+        $piperZip = Join-Path $scratch "piper.zip"
+        Invoke-FileDownload -Uri $piperUrl -OutFile $piperZip
+        $piperTemp = Join-Path $scratch "piper_temp"
+        Expand-Archive -Path $piperZip -DestinationPath $piperTemp -Force
+        $piperDir = Get-ChildItem -Path $piperTemp -Directory | Where-Object { $_.Name -eq "piper" } | Select-Object -First 1
+        if (-not $piperDir) {
+            throw "Could not find piper directory in Piper archive"
+        }
+        $piperDest = Join-Path $ToolsDir "piper"
+        if (Test-Path $piperDest) {
+            Remove-Item -LiteralPath $piperDest -Recurse -Force
+        }
+        Move-Item -Path $piperDir.FullName -Destination $piperDest
+        Write-Host "Wrote $piperDest"
     }
 }
 finally {

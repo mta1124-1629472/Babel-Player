@@ -111,6 +111,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 translationPartialPath,
                 _c.CurrentSession.SourceLanguage ?? "unknown",
                 targetLanguage);
+            translationWriter.ResetJournal();
             await translationWriter.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
             var translationStagePlan = _c.ResolveAndApplyExecutionPlan(Planning.InferenceStage.Translation);
@@ -206,6 +207,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
 
                 var translationResult = await translationTask.ConfigureAwait(false);
                 await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
+                await PersistStreamingTranslationWorkingArtifactAsync(
+                    translationSnapshot,
+                    translationResult,
+                    translationWriter,
+                    pipelineToken).ConfigureAwait(false);
                 await _c.CommitTranslationSessionStateAsync(
                     translationSnapshot,
                     translationResult).ConfigureAwait(false);
@@ -348,6 +354,7 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 translationPartialPath,
                 _c.CurrentSession.SourceLanguage ?? transcript.Language ?? "unknown",
                 targetLanguage);
+            translationWriter.ResetJournal();
             await translationWriter.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
             ReportStage(
@@ -398,6 +405,11 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 await producerTask.ConfigureAwait(false);
                 var translationResult = await translationTask.ConfigureAwait(false);
                 await translationWriter.CompleteAsync(translationPath, pipelineToken).ConfigureAwait(false);
+                await PersistStreamingTranslationWorkingArtifactAsync(
+                    translationSnapshot,
+                    translationResult,
+                    translationWriter,
+                    pipelineToken).ConfigureAwait(false);
                 await _c.CommitTranslationSessionStateAsync(
                     translationSnapshot,
                     translationResult).ConfigureAwait(false);
@@ -785,6 +797,24 @@ internal StreamingPipelineOrchestrator(SessionWorkflowCoordinator coordinator) =
                 sourceLanguage,
                 targetLanguage,
                 null);
+
+        private static async Task PersistStreamingTranslationWorkingArtifactAsync(
+            TranslationExecutionSnapshot translationSnapshot,
+            TranslationResult translationResult,
+            TranslationArtifactStreamingWriter translationWriter,
+            CancellationToken cancellationToken)
+        {
+            var workingArtifact = new TranslationArtifact
+            {
+                SourceLanguage = translationResult.SourceLanguage,
+                TargetLanguage = translationResult.TargetLanguage,
+                Segments = [.. translationWriter.OrderedSegments],
+            };
+            await ArtifactPersistence.AtomicWriteTextAsync(
+                translationSnapshot.WorkingTranslationPath,
+                ArtifactJson.SerializeTranslation(workingArtifact),
+                cancellationToken).ConfigureAwait(false);
+        }
 
         private string ResolveTranslatedText(
             TranslationResult result,

@@ -15,15 +15,16 @@
 
   <!-- Auto-download Windows native/runtime tools when missing. Runs before output staging. Set SkipFetchWinNativeDeps=true to disable (offline CI, etc.). -->
   <Target Name="FetchWinNativeDepsIfNeeded"
-          BeforeTargets="AssignTargetPaths"
-          Inputs="$(MSBuildThisFileDirectory)scripts\fetch-win-native-deps.ps1"
-          Outputs="$(MSBuildThisFileDirectory)native\$(BabelWinNativeSubdir)\libmpv-2.dll;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe"
-          Condition="'$(OS)' == 'Windows_NT'
-                     and '$(SkipFetchWinNativeDeps)' != 'true'
-                     and (!Exists('$(MSBuildThisFileDirectory)native\$(BabelWinNativeSubdir)\libmpv-2.dll')
-                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe')
-                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe')
-                          or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe'))">
+           BeforeTargets="AssignTargetPaths"
+           Inputs="$(MSBuildThisFileDirectory)scripts\fetch-win-native-deps.ps1"
+           Outputs="$(MSBuildThisFileDirectory)native\$(BabelWinNativeSubdir)\libmpv-2.dll;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe;$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\piper\piper.exe"
+           Condition="'$(OS)' == 'Windows_NT'
+                      and '$(SkipFetchWinNativeDeps)' != 'true'
+                      and (!Exists('$(MSBuildThisFileDirectory)native\$(BabelWinNativeSubdir)\libmpv-2.dll')
+                           or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\uv.exe')
+                           or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffmpeg.exe')
+                           or !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\ffprobe.exe')
+                           or ('$(BabelWinNativeSubdir)' != 'win-arm64' and !Exists('$(MSBuildThisFileDirectory)tools\$(BabelWinNativeSubdir)\piper\piper.exe')))">
     <Exec Command="$(BabelWinFetchCommand) $(BabelWinFetchExtraArgs)"
           WorkingDirectory="$(MSBuildThisFileDirectory)"
           StandardOutputImportance="high"
