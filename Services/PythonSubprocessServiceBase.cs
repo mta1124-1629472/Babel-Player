@@ -155,6 +155,7 @@ public abstract class PythonSubprocessServiceBase
                     psi.Environment[key] = value;
             if (!psi.Environment.ContainsKey("PYTHONUTF8"))
                 psi.Environment["PYTHONUTF8"] = "1";
+            psi.Environment["PYTHONIOENCODING"] = "utf-8";
             if (psi.RedirectStandardInput)
                 psi.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
             psi.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -298,6 +299,7 @@ public abstract class PythonSubprocessServiceBase
             }
             if (!psi.Environment.ContainsKey("PYTHONUTF8"))
                 psi.Environment["PYTHONUTF8"] = "1";
+            psi.Environment["PYTHONIOENCODING"] = "utf-8";
             if (psi.RedirectStandardInput)
                 psi.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
             psi.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);

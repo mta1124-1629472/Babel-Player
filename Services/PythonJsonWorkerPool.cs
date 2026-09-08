@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
@@ -228,7 +229,7 @@ internal sealed class PythonJsonWorkerPool<TRequest, TResponse> : IDisposable
             return;
 
         var piperDir = Path.Combine(
-            AppContext.BaseDirectory, "tools", WindowsPackagingPaths.NativeRidFolder, "piper");
+            AppContext.BaseDirectory, "tools", WindowsPackagingPaths.NativeRidFolder, ProviderNames.Piper);
         if (!File.Exists(Path.Combine(piperDir, "piper.exe")))
             return;
 

@@ -24,8 +24,8 @@ namespace Babel.Player.Services;
 ///
 /// Exit codes:
 ///   0    Success.
-///   1    Bad arguments or runtime error.
-///   2    Pipeline failure.
+///   1    Bad arguments.
+///   2    Pipeline or runtime failure.
 ///   130  Cancelled (Ctrl+C).
 /// </summary>
 public static class DubCli
@@ -78,7 +78,6 @@ public static class DubCli
         string outputDir = string.IsNullOrWhiteSpace(outDir)
             ? Path.GetDirectoryName(media) ?? Environment.CurrentDirectory
             : Path.GetFullPath(outDir);
-        Directory.CreateDirectory(outputDir);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Console.CancelKeyPress += (_, e) =>
@@ -86,6 +85,8 @@ public static class DubCli
             e.Cancel = true;
             cts.Cancel();
         };
+
+        ConsoleCancelEventHandler? cancelHandler = null;
 
         var appDataRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -107,6 +108,14 @@ public static class DubCli
         SessionWorkflowCoordinator? coordinator = null;
         try
         {
+            Directory.CreateDirectory(outputDir);
+
+            cancelHandler = (_, e) =>
+            {
+                e.Cancel = true;
+                cts.Cancel();
+            };
+            Console.CancelKeyPress += cancelHandler;
             var settingsService = new SettingsService(
                 Path.Combine(appDataRoot, "settings", "app-settings.json"), log);
             var settings = settingsService.LoadOrDefault();
@@ -155,14 +164,7 @@ public static class DubCli
             coordinator.LoadMedia(media);
             Console.WriteLine($"[dub] session {coordinator.CurrentSession.SessionId} at stage {coordinator.CurrentSession.Stage}");
 
-            if (coordinator.CurrentSession.Stage >= SessionWorkflowStage.TtsGenerated)
-            {
-                Console.WriteLine("[dub] session already complete; skipping pipeline, exporting only.");
-            }
-            else
-            {
-                await RunPipelineAsync(coordinator, cts.Token).ConfigureAwait(false);
-            }
+            await RunPipelineAsync(coordinator, cts.Token).ConfigureAwait(false);
 
             var stem = Path.GetFileNameWithoutExtension(media);
             var segments = await coordinator.GetSegmentWorkflowListAsync().ConfigureAwait(false);
@@ -171,7 +173,7 @@ public static class DubCli
             File.WriteAllText(srtPath, SrtGenerator.Generate(segments));
             Console.WriteLine($"[dub] wrote {srtPath}");
 
-            var render = await coordinator.TryRenderDubAudioForExportAsync().ConfigureAwait(false);
+            var render = await coordinator.TryRenderDubAudioForExportAsync(cts.Token).ConfigureAwait(false);
             if (render is null)
             {
                 Console.Error.WriteLine("[dub] Dub render returned no output (need translation + TTS clips).");
@@ -180,7 +182,14 @@ public static class DubCli
 
             var mp3Path = Path.Combine(outputDir, $"{stem}-dub.mp3");
             File.Copy(render.MixedWithAmbiancePath ?? render.DubTimelinePath, mp3Path, overwrite: true);
+            if (Path.GetFullPath(mp3Path).Equals(Path.GetFullPath(media), StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine("[dub] Cannot overwrite source media. Output would overwrite input file.");
+                return ExitPipelineFailure;
+            }
             Console.WriteLine($"[dub] wrote {mp3Path}");
+
+            var exitCode = ExitSuccess;
 
             if (!noMp4)
             {
@@ -201,11 +210,12 @@ public static class DubCli
                 if (!validation.CanExport)
                 {
                     Console.Error.WriteLine($"[dub] MP4 export rejected: {string.Join(" ", validation.Issues)}");
+                    exitCode = ExitPipelineFailure;
                 }
                 else
                 {
                     var plan = planner.BuildPlan(session, segments, options);
-                    await FfmpegVideoExportRunner.RunPlanAsync(plan, coordinator.Log).ConfigureAwait(false);
+                    await FfmpegVideoExportRunner.RunPlanAsync(plan, coordinator.Log, cts.Token).ConfigureAwait(false);
                     Console.WriteLine($"[dub] wrote {mp4Path}");
                 }
             }
@@ -214,10 +224,13 @@ public static class DubCli
             if (!string.Equals(render.MixedWithAmbiancePath, render.DubTimelinePath, StringComparison.OrdinalIgnoreCase))
                 TryDeleteQuiet(render.MixedWithAmbiancePath);
 
+            if (exitCode != ExitSuccess)
+                return exitCode;
+
             stopwatch.Stop();
             Console.WriteLine();
             Console.WriteLine($"[dub] complete in {stopwatch.Elapsed:mm\\:ss}. log: {logPath}");
-            return ExitSuccess;
+            return exitCode;
         }
         catch (OperationCanceledException)
         {
@@ -233,6 +246,11 @@ public static class DubCli
         }
         finally
         {
+            if (cancelHandler is not null)
+            {
+                Console.CancelKeyPress -= cancelHandler;
+            }
+
             try
             {
                 coordinator?.Dispose();

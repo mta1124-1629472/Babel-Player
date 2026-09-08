@@ -32,3 +32,6 @@
 - `BabelPlayer.Tests` must stay fast and deterministic. Do not add real Python, ffmpeg, container, libmpv, manual, or performance-dependent tests to the compiled suite.
 - If a test is flaky, slow, or runtime-heavy, prefer deleting or quarantining it over preserving short-term nominal coverage.
 - Do not add broad UI/workflow tests to compiled `BabelPlayer.Tests` just because they use fakes. `SessionWorkflowCoordinator*`, `*Orchestrator*`, `EmbeddedPlaybackPreview*`, and similar harness-style suites should default to `BabelPlayer.Tests/Quarantined/` unless they are unusually small, deterministic seam tests.
+
+## Conventions
+- Use `using` directives at the top of source files.

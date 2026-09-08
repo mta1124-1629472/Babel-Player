@@ -30,7 +30,8 @@ sealed class Program
         if (Array.Exists(args, a =>
                 string.Equals(a, "--dub", StringComparison.OrdinalIgnoreCase)))
         {
-            AttachConsole(-1);
+            if (OperatingSystem.IsWindows())
+                AttachConsole(-1);
             return DubCli.RunAsync(args).GetAwaiter().GetResult();
         }
 
