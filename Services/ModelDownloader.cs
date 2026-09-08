@@ -460,7 +460,8 @@ except Exception as e:
 
         foreach (var relativePath in ChatterboxModelCatalog.RequiredFiles)
         {
-            if (!File.Exists(Path.Combine(resolvedDir, relativePath)))
+            var info = new FileInfo(Path.Combine(resolvedDir, relativePath));
+            if (!info.Exists || info.Length == 0)
                 return false;
         }
 
@@ -485,10 +486,17 @@ except Exception as e:
         {
             var relativePath = files[index];
             var destinationPath = Path.Combine(resolvedDir, relativePath);
-            if (File.Exists(destinationPath))
+            var existingInfo = new FileInfo(destinationPath);
+            if (existingInfo.Exists)
             {
-                progress?.Report((double)(index + 1) / files.Count);
-                continue;
+                if (existingInfo.Length > 0)
+                {
+                    progress?.Report((double)(index + 1) / files.Count);
+                    continue;
+                }
+
+                try { existingInfo.Delete(); }
+                catch { /* re-download below */ }
             }
 
             var fileProgress = new Progress<double>(p =>

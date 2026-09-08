@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using Babel.Player.Models;
+using Babel.Player.Services;
 using Babel.Player.Services.Chatterbox;
 using Xunit;
 
@@ -128,6 +129,24 @@ public sealed class ChatterboxTests : IDisposable
         Assert.Contains("onnx/language_model.onnx", ChatterboxModelCatalog.RequiredFiles);
         Assert.Contains("fr", ChatterboxModelCatalog.SupportedLanguages);
         Assert.DoesNotContain("zh", ChatterboxModelCatalog.SupportedLanguages);
+    }
+
+    [Fact]
+    public void IsChatterboxModelDownloaded_RejectsZeroByteFiles()
+    {
+        var modelDir = Path.Combine(_dir, "chatterbox-partial");
+        foreach (var relativePath in ChatterboxModelCatalog.RequiredFiles)
+        {
+            var fullPath = Path.Combine(modelDir, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            File.WriteAllText(fullPath, "x");
+        }
+
+        Assert.True(ModelDownloader.IsChatterboxModelDownloaded(modelDir));
+
+        var first = Path.Combine(modelDir, ChatterboxModelCatalog.RequiredFiles[0]);
+        File.WriteAllBytes(first, []);
+        Assert.False(ModelDownloader.IsChatterboxModelDownloaded(modelDir));
     }
 
     [Fact]
