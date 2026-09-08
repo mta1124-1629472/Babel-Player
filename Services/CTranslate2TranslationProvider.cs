@@ -85,6 +85,7 @@ print('CTranslate2 translation complete')
 
     private const string TranslateSingleSegmentScriptTemplate = @"
 import json
+import os
 import sys
 
 import ctranslate2

@@ -463,6 +463,15 @@ internal sealed class TranslationArtifactStreamingWriter
         _processorTask = Task.Run(ProcessOperationsAsync, CancellationToken.None);
     }
 
+public void ResetJournal()
+{
+    foreach (var path in new[] { _paths.PartialPath, _paths.PartialTempPath, _paths.EventsPath, _paths.CommitPath })
+    {
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+}
+
     public Task AppendPendingSegmentAsync(
         TranscriptChannelItem item,
         CancellationToken cancellationToken)

@@ -118,6 +118,11 @@
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       </None>
     </ItemGroup>
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\piper.exe')">
+      <BabelPiperFile Include="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(OutDir)tools\$(BabelWinNativeSubdir)\piper" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\piper.exe')" />
+    <Copy SourceFiles="@(BabelPiperFile)" DestinationFiles="@(BabelPiperFile->'$(OutDir)tools\$(BabelWinNativeSubdir)\piper\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\piper.exe')" />
     <MakeDir Directories="$(OutDir)tools\$(BabelWinNativeSubdir)" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')&#xA;                        or Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe" DestinationFiles="$(OutDir)tools\$(BabelWinNativeSubdir)\ffmpeg.exe" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe" DestinationFiles="$(OutDir)tools\$(BabelWinNativeSubdir)\ffprobe.exe" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
@@ -127,6 +132,11 @@
     <MakeDir Directories="$(PublishDir)tools\$(BabelWinNativeSubdir)" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')&#xA;                        or Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe" DestinationFiles="$(PublishDir)tools\$(BabelWinNativeSubdir)\ffmpeg.exe" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffmpeg.exe')" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe" DestinationFiles="$(PublishDir)tools\$(BabelWinNativeSubdir)\ffprobe.exe" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\ffprobe.exe')" />
+    <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\piper.exe')">
+      <BabelPiperFile Include="$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)tools\$(BabelWinNativeSubdir)\piper" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\piper.exe')" />
+    <Copy SourceFiles="@(BabelPiperFile)" DestinationFiles="@(BabelPiperFile->'$(PublishDir)tools\$(BabelWinNativeSubdir)\piper\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildProjectDirectory)\tools\$(BabelWinNativeSubdir)\piper\piper.exe')" />
   </Target>
 
 <ItemGroup>

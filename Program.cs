@@ -26,6 +26,15 @@ sealed class Program
             return BenchmarkCli.RunAsync(args).GetAwaiter().GetResult();
         }
 
+        // Intercept --dub before Avalonia sees the args (headless E2E pipeline).
+        if (Array.Exists(args, a =>
+                string.Equals(a, "--dub", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (OperatingSystem.IsWindows())
+                AttachConsole(-1);
+            return DubCli.RunAsync(args).GetAwaiter().GetResult();
+        }
+
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
