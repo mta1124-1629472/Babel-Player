@@ -61,8 +61,13 @@ jobs:
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           BRANCH="chore/apm-version-${TAG}"
-          git checkout -B "$BRANCH"
+
+          # Ensure the PR branch is based on latest main, not the tag commit.
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+          git cherry-pick "$COMMIT_SHA"
+
           git push --force-with-lease origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" \
             --title "chore: sync apm.yml version to ${TAG}" \
             --body "Automated version sync for tag ${TAG}." || echo "PR may already exist."
