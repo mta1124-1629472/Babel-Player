@@ -182,6 +182,11 @@ public static class DubCli
 
             var mp3Path = Path.Combine(outputDir, $"{stem}-dub.mp3");
             File.Copy(render.MixedWithAmbiancePath ?? render.DubTimelinePath, mp3Path, overwrite: true);
+            if (Path.GetFullPath(mp3Path).Equals(Path.GetFullPath(media), StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine("[dub] Cannot overwrite source media. Output would overwrite input file.");
+                return ExitPipelineFailure;
+            }
             Console.WriteLine($"[dub] wrote {mp3Path}");
 
             var exitCode = ExitSuccess;

@@ -299,8 +299,8 @@ public abstract class PythonSubprocessServiceBase
             }
             if (!psi.Environment.ContainsKey("PYTHONUTF8"))
                 psi.Environment["PYTHONUTF8"] = "1";
-            if (psi.RedirectStandardInput)
             psi.Environment["PYTHONIOENCODING"] = "utf-8";
+            if (psi.RedirectStandardInput)
                 psi.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
             psi.StandardOutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
             psi.StandardErrorEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
