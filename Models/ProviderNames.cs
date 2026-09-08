@@ -45,6 +45,7 @@ public static class ProviderNames
     public const string GoogleCloudTts = "google-cloud-tts";
     public const string OpenAiTts      = "openai-tts";
     public const string Qwen           = "qwen-tts";
+    public const string Chatterbox     = "chatterbox";
 
     // ── Diarization ─────────────────────────────────────────────────────
     public const string Manual = "manual";

@@ -135,6 +135,19 @@ public sealed class AppSettings
     public string PiperModelDir { get; set; } = "";
 
     /// <summary>
+    /// Directory where Chatterbox ONNX model files are stored.
+    /// Empty string = use platform default (%LOCALAPPDATA%\BabelPlayer\models\chatterbox on Windows).
+    /// </summary>
+    public string ChatterboxModelDir { get; set; } = "";
+
+    /// <summary>
+    /// Explicit user consent for Chatterbox voice cloning. Cloning never runs unless
+    /// this is true (Settings checkbox or explicit headless opt-in). Mandatory and
+    /// non-bypassable by design.
+    /// </summary>
+    public bool ChatterboxVoiceCloneConsent { get; set; } = false;
+
+    /// <summary>
     /// Preferred local GPU hosting backend when a stage uses the GPU compute profile.
     /// </summary>
     public GpuHostBackend PreferredLocalGpuBackend { get; set; } = GpuHostBackend.ManagedVenv;
