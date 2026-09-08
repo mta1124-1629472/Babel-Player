@@ -136,12 +136,13 @@ jobs:
         run: |
           $missing = @()
           $rid = "${{ matrix.rid }}"
+          $tools  = if ($rid -eq "win-arm64") { "tools/win-arm64" } else { "tools/win-x64" }
 
           foreach ($f in @("BabelPlayer.exe", "ffmpeg.exe", "ffprobe.exe", "libmpv-2.dll", "uv.exe")) {
             if (-not (Test-Path "./publish/$f")) { $missing += $f }
           }
-          if ($rid -eq "win-x64" -and -not (Test-Path "./publish/tools/win-x64/piper/piper.exe")) {
-            $missing += "tools/win-x64/piper/piper.exe"
+          if ($rid -eq "win-x64" -and -not (Test-Path "./publish/$tools/piper/piper.exe")) {
+            $missing += "$tools/piper/piper.exe"
           }
 
           foreach ($f in @(
