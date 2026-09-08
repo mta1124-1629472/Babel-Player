@@ -69,5 +69,14 @@ jobs:
           git cherry-pick "$COMMIT_SHA"
 
           git push --force-with-lease origin "$BRANCH"
+          
+          # Check if PR already exists before creating
+          if gh pr list --head "$BRANCH" --base main | grep -q .; then
+            echo "PR already exists for branch ${BRANCH}"
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore: sync apm.yml version to ${TAG}" \
+              --body "Automated version sync for tag ${TAG}."
+          fi
             --title "chore: sync apm.yml version to ${TAG}" \
             --body "Automated version sync for tag ${TAG}." || echo "PR may already exist."
