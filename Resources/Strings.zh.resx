@@ -619,7 +619,7 @@
     <value>巴别球员</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>AGPL-3.0 许可</value>
+    <value>Apache-2.0 许可</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
     <value>支持该项目：</value>

@@ -204,7 +204,9 @@ dotnet run --project Tools/LocaleGenerator -c Release -- --api-key "<your-deepl-
 
 ## License
 
-Babel Player is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+Babel Player is licensed under the [Apache License 2.0](LICENSE).
+
+Releases v1.3.0 and earlier were licensed under AGPL-3.0.
 
 Third-party libraries and pre-trained models are used under their respective licenses. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for the full list.
 
@@ -274,7 +276,7 @@ load media -> transcript -> translated dialogue -> spoken output -> preview/refi
 
 ## License
 
-Babel Player is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+Babel Player is licensed under the [Apache License 2.0](LICENSE).
 
 Third-party libraries and model licenses vary. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 

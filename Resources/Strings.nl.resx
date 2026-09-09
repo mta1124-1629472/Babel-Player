@@ -619,7 +619,7 @@
     <value>Babel speler</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>AGPL-3.0 Licentie</value>
+    <value>Apache-2.0 Licentie</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
     <value>Ondersteun het project:</value>

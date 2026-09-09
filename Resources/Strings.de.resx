@@ -643,7 +643,7 @@
     <value>Babel-Spieler</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>AGPL-3.0-Lizenz</value>
+    <value>Apache-2.0-Lizenz</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
     <value>Unterstützen Sie das Projekt:</value>
