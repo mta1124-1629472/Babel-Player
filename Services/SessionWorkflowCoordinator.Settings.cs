@@ -92,6 +92,8 @@ public sealed partial class SessionWorkflowCoordinator
             || settings.TtsProvider != CurrentSettings.TtsProvider
             || settings.TtsVoice != CurrentSettings.TtsVoice
             || settings.PiperModelDir != CurrentSettings.PiperModelDir
+            || settings.ChatterboxVoiceCloneConsent != CurrentSettings.ChatterboxVoiceCloneConsent
+            || settings.ChatterboxModelDir != CurrentSettings.ChatterboxModelDir
             || (settings.TtsProfile == ComputeProfile.Gpu
                 && (settings.PreferredLocalGpuBackend != CurrentSettings.PreferredLocalGpuBackend
                     || !string.Equals(settings.EffectiveGpuServiceUrl, CurrentSettings.EffectiveGpuServiceUrl, StringComparison.Ordinal)));

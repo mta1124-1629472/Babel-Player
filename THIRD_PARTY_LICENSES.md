@@ -26,6 +26,12 @@ Babel Player incorporates third-party software and pre-trained models. Their lic
 - **Source:** https://github.com/astral-sh/uv
 - **License text:** https://github.com/astral-sh/uv/blob/main/LICENSE-MIT
 
+### Chatterbox multilingual voice cloning (ONNX)
+- **Version:** revision 452d3f434aa592098f1eedac9099f33642ab2da5
+- **Source:** [onnx-community/chatterbox-multilingual-ONNX](https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX)
+- **License:** MIT
+- **Note:** voice cloning requires explicit user consent (Settings or explicit headless opt-in); cloning never runs by default.
+
 ---
 
 ## .NET / NuGet Packages

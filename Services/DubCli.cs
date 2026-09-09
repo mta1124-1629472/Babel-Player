@@ -49,10 +49,12 @@ public static class DubCli
         string? media = BenchmarkCli.GetArg(args, "--media");
         string? lang = BenchmarkCli.GetArg(args, "--lang");
         string? outDir = BenchmarkCli.GetArg(args, "--out");
+        string? ttsOverride = BenchmarkCli.GetArg(args, "--tts");
         bool noDiarization = HasFlag(args, "--no-diarization");
         bool noMp4 = HasFlag(args, "--no-mp4");
+        bool consentClone = HasFlag(args, "--consent-clone");
 
-        var known = new[] { "--dub", "--media", "--lang", "--out", "--no-diarization", "--no-mp4", "--help", "-h" };
+        var known = new[] { "--dub", "--media", "--lang", "--out", "--tts", "--no-diarization", "--no-mp4", "--consent-clone", "--help", "-h" };
         var unknown = args.Where(a => a.StartsWith('-') && !known.Contains(a, StringComparer.OrdinalIgnoreCase)).ToArray();
         if (unknown.Length > 0)
         {
@@ -80,11 +82,6 @@ public static class DubCli
             : Path.GetFullPath(outDir);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Console.CancelKeyPress += (_, e) =>
-        {
-            e.Cancel = true;
-            cts.Cancel();
-        };
 
         ConsoleCancelEventHandler? cancelHandler = null;
 
@@ -124,6 +121,14 @@ public static class DubCli
                 settings.TargetLanguage = lang.Trim().ToLowerInvariant();
             if (noDiarization)
                 settings.DiarizationProvider = string.Empty;
+            if (!string.IsNullOrWhiteSpace(ttsOverride))
+            {
+                settings.TtsProvider = ttsOverride.Trim().ToLowerInvariant();
+                settings.TtsProfile = InferenceRuntimeCatalog.InferTtsProfile(settings.TtsProvider);
+            }
+
+            if (consentClone)
+                settings.ChatterboxVoiceCloneConsent = true;
 
             Console.WriteLine($"[dub] transcription : {settings.TranscriptionProvider} ({settings.TranscriptionModel})");
             Console.WriteLine($"[dub] translation  : {settings.TranslationProvider} -> {settings.TargetLanguage}");
@@ -163,6 +168,13 @@ public static class DubCli
             Console.WriteLine("[dub] loading media…");
             coordinator.LoadMedia(media);
             Console.WriteLine($"[dub] session {coordinator.CurrentSession.SessionId} at stage {coordinator.CurrentSession.Stage}");
+
+            if (!string.IsNullOrWhiteSpace(ttsOverride) &&
+                coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated)
+            {
+                Console.WriteLine("[dub] re-running TTS under the requested provider.");
+                coordinator.ResetPipelineToTranslated();
+            }
 
             await RunPipelineAsync(coordinator, cts.Token).ConfigureAwait(false);
 
@@ -341,13 +353,16 @@ public static class DubCli
         Console.WriteLine("  --media <path>          Source media file (required)");
         Console.WriteLine("  --lang <code>           Translation target language (default: settings)");
         Console.WriteLine("  --out <dir>             Output directory (default: alongside media)");
+        Console.WriteLine("  --tts <provider>        TTS provider override (e.g. chatterbox)");
         Console.WriteLine("  --no-diarization        Skip diarization for this run");
         Console.WriteLine("  --no-mp4                Skip MP4 export (SRT + MP3 only)");
+        Console.WriteLine("  --consent-clone         Grant voice-cloning consent for this run");
         Console.WriteLine("  --help, -h              Show this help");
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine("  BabelPlayer.exe --dub --media clip.mp4 --lang es");
         Console.WriteLine("  BabelPlayer.exe --dub --media clip.mp4 --no-diarization --no-mp4");
+        Console.WriteLine("  BabelPlayer.exe --dub --media clip.mp4 --tts chatterbox --consent-clone");
         Console.WriteLine();
     }
 }

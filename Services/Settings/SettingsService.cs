@@ -166,6 +166,8 @@ public sealed class SettingsService
         public string? TranscriptionLanguageHint { get; set; }
         public string? TargetLanguage { get; set; }
         public string? PiperModelDir { get; set; }
+        public string? ChatterboxModelDir { get; set; }
+        public bool? ChatterboxVoiceCloneConsent { get; set; }
         public GpuHostBackend? PreferredLocalGpuBackend { get; set; }
         public bool? AlwaysStartLocalGpuRuntimeAtAppStart { get; set; }
         public string? AdvancedGpuServiceUrl { get; set; }
@@ -255,6 +257,8 @@ public sealed class SettingsService
                     : TranscriptionLanguageHint;
             settings.TargetLanguage = TargetLanguage ?? settings.TargetLanguage;
             settings.PiperModelDir = PiperModelDir ?? settings.PiperModelDir;
+            settings.ChatterboxModelDir = ChatterboxModelDir ?? settings.ChatterboxModelDir;
+            settings.ChatterboxVoiceCloneConsent = ChatterboxVoiceCloneConsent ?? settings.ChatterboxVoiceCloneConsent;
 
             settings.PreferredLocalGpuBackend = PreferredLocalGpuBackend
                 ?? ResolveLegacyGpuBackend();
@@ -328,6 +332,8 @@ public sealed class SettingsService
             TtsVoiceAssignmentMode = settings.TtsVoiceAssignmentMode,
             TargetLanguage = settings.TargetLanguage,
             PiperModelDir = settings.PiperModelDir,
+            ChatterboxModelDir = settings.ChatterboxModelDir,
+            ChatterboxVoiceCloneConsent = settings.ChatterboxVoiceCloneConsent,
             PreferredLocalGpuBackend = settings.PreferredLocalGpuBackend,
             AlwaysStartLocalGpuRuntimeAtAppStart = settings.AlwaysStartLocalGpuRuntimeAtAppStart,
             AdvancedGpuServiceUrl = settings.AdvancedGpuServiceUrl,
