@@ -21,7 +21,8 @@ categories:
 # Map conventional-commit PR titles to labels so unlabelled PRs still categorize.
 autolabeler:
   - label: feature
-    title: '/^feat(\(.*\))?[!:]?/'
+  - label: feature
+    title: '/^feat(\(.*\))?(!:|[!:])?/'
   - label: fix
     title: '/^fix(\(.*\))?[!:]?/'
   - label: chore
