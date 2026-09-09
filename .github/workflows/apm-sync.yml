@@ -63,6 +63,8 @@ jobs:
           BRANCH="chore/apm-version-${TAG}"
           git checkout -B "$BRANCH"
           git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+          # Merge the remote branch if it exists to preserve existing commits
+          git merge "origin/${BRANCH}" --no-edit || true
           git push --force-with-lease origin "$BRANCH"
 
           # Check if PR already exists before creating
