@@ -136,7 +136,7 @@ public sealed class AppSettings
 
     /// <summary>
     /// Directory where Chatterbox ONNX model files are stored.
-    /// Empty string = use platform default (%LOCALAPPDATA%\BabelPlayer\models\chatterbox on Windows).
+    /// Empty string = use platform default (%LOCALAPPDATA%\BabelPlayer\models\chatterbox-multilingual on Windows).
     /// </summary>
     public string ChatterboxModelDir { get; set; } = "";
 

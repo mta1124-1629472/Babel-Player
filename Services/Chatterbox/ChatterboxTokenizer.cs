@@ -60,8 +60,13 @@ internal sealed class ChatterboxTokenizer
     public long[] Encode(string text)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        // Apply Unicode normalization (NFC) to ensure consistent character representation
+        // before tokenization, matching the preprocessing used during model training.
+        // This is particularly important for multilingual text with accents, diacritics,
+        // and non-ASCII characters.
+        var normalized = text.Trim().Normalize(System.Text.NormalizationForm.FormC);
         return _tokenizer
-            .EncodeToIds(text.Trim(), false, false)
+            .EncodeToIds(normalized, false, false)
             .Select(static tokenId => (long)tokenId)
             .ToArray();
     }

@@ -117,7 +117,7 @@ public sealed class ChatterboxTtsProvider : ITtsProvider, IDisposable, IAsyncDis
                 ModelDownloadDescription: "Download Chatterbox multilingual voice cloning model");
         }
 
-        if (!settings.ChatterboxVoiceCloneConsent && !_consentGranted)
+        if (!_consentGranted && !settings.ChatterboxVoiceCloneConsent)
         {
             return new ProviderReadiness(
                 false,
