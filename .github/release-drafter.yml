@@ -24,9 +24,11 @@ autolabeler:
   - label: feature
     title: '/^feat(\(.*\))?(!:|[!:])?/'
   - label: fix
-    title: '/^fix(\(.*\))?[!:]?/'
+  - label: fix
+    title: '/^fix(\(.*\))?(!:|[!:])?/'
   - label: chore
-    title: '/^(chore|docs|ci|build|test|refactor)(\(.*\))?[!:]?/'
+  - label: chore
+    title: '/^(chore|docs|ci|build|test|refactor)(\(.*\))?(!:|[!:])?/'
 
 exclude-labels:
   - skip-ci
