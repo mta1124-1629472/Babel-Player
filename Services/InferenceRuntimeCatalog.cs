@@ -44,6 +44,7 @@ public static class InferenceRuntimeCatalog
     public static ComputeProfile InferTtsProfile(string? providerId) => providerId switch
     {
         ProviderNames.Piper => ComputeProfile.Cpu,
+        ProviderNames.Chatterbox => ComputeProfile.Cpu,
         ProviderNames.Qwen => ComputeProfile.Gpu,
         _ => ComputeProfile.Cloud,
     };
@@ -195,7 +196,11 @@ public static class InferenceRuntimeCatalog
 
         return profile switch
         {
-            ComputeProfile.Cpu => ProviderNames.Piper,
+            ComputeProfile.Cpu => providerId switch
+            {
+                ProviderNames.Chatterbox => ProviderNames.Chatterbox,
+                _ => ProviderNames.Piper,
+            },
             ComputeProfile.Gpu => ProviderNames.Qwen,
             _ => providerId switch
             {
@@ -365,6 +370,7 @@ public static class InferenceRuntimeCatalog
     public static bool IsKnownTtsProvider(string? providerId) => providerId switch
     {
         ProviderNames.Piper
+            or ProviderNames.Chatterbox
             or ProviderNames.EdgeTts
             or ProviderNames.ElevenLabs
             or ProviderNames.GoogleCloudTts

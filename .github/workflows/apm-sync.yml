@@ -64,7 +64,7 @@ jobs:
           git checkout -B "$BRANCH"
           git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
           git push --force-with-lease origin "$BRANCH"
-          
+
           # Check if PR already exists before creating
           if gh pr list --head "$BRANCH" --base main | grep -q .; then
             echo "PR already exists for branch ${BRANCH}"

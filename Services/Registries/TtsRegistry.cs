@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Models.LanguageSupport;
+using Babel.Player.Services.Chatterbox;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Settings;
 
@@ -57,14 +58,7 @@ public sealed class TtsRegistry : ITtsRegistry
         {
             return
             [
-                new(
-                    ProviderNames.Piper,
-                    "Piper (Local)",
-                    false,
-                    null,
-                    PiperTtsCatalog.VoiceIds,
-                    SupportedRuntimes: [InferenceRuntime.Local],
-                    DefaultRuntime: InferenceRuntime.Local),
+                .. GetAvailableProviders(ComputeProfile.Cpu),
                 .. GetAvailableProviders(ComputeProfile.Gpu),
                 .. GetAvailableProviders(ComputeProfile.Cloud),
             ];
@@ -80,6 +74,14 @@ public sealed class TtsRegistry : ITtsRegistry
                     false,
                     null,
                     PiperTtsCatalog.VoiceIds,
+                    SupportedRuntimes: [InferenceRuntime.Local],
+                    DefaultRuntime: InferenceRuntime.Local),
+                new(
+                    ProviderNames.Chatterbox,
+                    "Chatterbox (Voice Cloning, Local)",
+                    false,
+                    null,
+                    [],
                     SupportedRuntimes: [InferenceRuntime.Local],
                     DefaultRuntime: InferenceRuntime.Local),
             ];
@@ -208,6 +210,10 @@ public sealed class TtsRegistry : ITtsRegistry
         return normalizedProviderId switch
         {
             ProviderNames.Piper => new PiperTtsProvider(_log, settings.PiperModelDir),
+            ProviderNames.Chatterbox => new ChatterboxTtsProvider(
+                _log,
+                ModelDownloader.ResolveChatterboxModelDir(settings.ChatterboxModelDir),
+                settings.ChatterboxVoiceCloneConsent),
             ProviderNames.EdgeTts => new EdgeTtsProvider(_log),
             ProviderNames.ElevenLabs => new ElevenLabsTtsProvider(
                 _log, keyStore?.GetKey(CredentialKeys.ElevenLabs) ?? string.Empty, audioProcessingService: _audioProcessingService),

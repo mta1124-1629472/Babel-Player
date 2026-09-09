@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Chatterbox;
 
 namespace Babel.Player.Services;
 
@@ -293,6 +294,18 @@ except Exception as e:
 
     private async Task<bool> DownloadFileAsync(string url, string destinationPath, IProgress<double>? progress = null, CancellationToken token = default)
     {
+        try
+        {
+            var destinationDir = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrWhiteSpace(destinationDir))
+                Directory.CreateDirectory(destinationDir);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Could not create download directory for '{destinationPath}': {ex.Message}");
+            return false;
+        }
+
         string tmpPath = destinationPath + ".tmp";
         try
         {
@@ -428,6 +441,73 @@ except Exception as e:
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return Path.Combine(home, ".local", "share", ProviderNames.Piper, "voices");
+    }
+
+    public static string ResolveChatterboxModelDir(string? modelDir)
+    {
+        if (!string.IsNullOrEmpty(modelDir))
+            return modelDir;
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(localAppData, "BabelPlayer", "models", "chatterbox-multilingual");
+    }
+
+    public static bool IsChatterboxModelDownloaded(string? modelDir)
+    {
+        var resolvedDir = ResolveChatterboxModelDir(modelDir);
+        if (!Directory.Exists(resolvedDir))
+            return false;
+
+        foreach (var relativePath in ChatterboxModelCatalog.RequiredFiles)
+        {
+            var info = new FileInfo(Path.Combine(resolvedDir, relativePath));
+            if (!info.Exists || info.Length == 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> DownloadChatterboxModelAsync(string? modelDir, IProgress<double>? progress = null, CancellationToken token = default)
+    {
+        var resolvedDir = ResolveChatterboxModelDir(modelDir);
+        try
+        {
+            Directory.CreateDirectory(resolvedDir);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Could not create Chatterbox model directory '{resolvedDir}': {ex.Message}");
+            return false;
+        }
+
+        var files = ChatterboxModelCatalog.RequiredFiles;
+        for (int index = 0; index < files.Count; index++)
+        {
+            var relativePath = files[index];
+            var destinationPath = Path.Combine(resolvedDir, relativePath);
+            var existingInfo = new FileInfo(destinationPath);
+            if (existingInfo.Exists)
+            {
+                if (existingInfo.Length > 0)
+                {
+                    progress?.Report((double)(index + 1) / files.Count);
+                    continue;
+                }
+
+                try { existingInfo.Delete(); }
+                catch { /* re-download below */ }
+            }
+
+            var fileProgress = new Progress<double>(p =>
+                progress?.Report(((double)index + p) / files.Count));
+            _log.Info($"Downloading Chatterbox model file {index + 1}/{files.Count}: {relativePath}");
+            if (!await DownloadFileAsync(ChatterboxModelCatalog.ModelDownloadUrl(relativePath), destinationPath, fileProgress, token))
+                return false;
+        }
+
+        _log.Info("Chatterbox model downloaded successfully.");
+        return true;
     }
 
     private static string GetHuggingFaceCacheDir()
