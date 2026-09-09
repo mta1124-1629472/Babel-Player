@@ -245,7 +245,7 @@ STRINGS: Dict[str, str] = {
     "Settings_Group_Models": "Models",
     "Settings_Hint_Models": "Manage locally-hosted models. Cloud providers do not require downloads.",
     "Settings_About_AppName": "Babel Player",
-    "Settings_About_License": "AGPL-3.0 License",
+    "Settings_About_License": "Apache-2.0 License",
     "Settings_About_Support": "Support the project:",
     "Settings_About_Kofi": "Ko-fi",
     "Settings_About_GitHubSponsors": "GitHub Sponsors",

@@ -619,7 +619,7 @@
     <value>مشغل بابل</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>رخصة AGPL-3.0 ترخيص</value>
+    <value>رخصة Apache-2.0 ترخيص</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
     <value>دعم المشروع:</value>
