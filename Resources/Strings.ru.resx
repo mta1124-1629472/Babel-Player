@@ -619,7 +619,7 @@
     <value>Babel Player</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>Лицензия AGPL-3.0</value>
+    <value>Лицензия Apache-2.0</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
     <value>Поддержите проект:</value>
