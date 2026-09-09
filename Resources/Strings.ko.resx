@@ -619,7 +619,7 @@
     <value>바벨 플레이어</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>AGPL-3.0 라이선스</value>
+    <value>Apache-2.0 라이선스</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
     <value>프로젝트를 지원하세요:</value>

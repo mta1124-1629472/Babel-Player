@@ -619,7 +619,7 @@
     <value>Jogador Babel</value>
   </data>
   <data name="Settings_About_License" xml:space="preserve">
-    <value>Licença AGPL-3.0</value>
+    <value>Licença Apache-2.0</value>
   </data>
   <data name="Settings_About_Support" xml:space="preserve">
     <value>Apoiar o projeto:</value>

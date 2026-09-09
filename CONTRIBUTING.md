@@ -143,3 +143,10 @@ A bad PR:
 ### Definition of a Good Contribution
 
 A good contribution leaves the repo more truthful, more verifiable, and more usable for the actual dubbing workflow.
+
+## License Agreement
+
+Babel Player is licensed under the Apache License 2.0 (see [LICENSE](LICENSE)).
+By contributing, you agree that your contributions will be licensed under the same
+terms. First-time contributors are asked to sign the contributor license agreement
+at https://cla.fiveonefour.com/sign/trackdubllc before a PR can be merged.
