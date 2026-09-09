@@ -1,3 +1,7 @@
+## Repo Context
+- For current repo truth, read in this order: `docs/AI-CONTEXT.md`, `AGENTS.md`, `docs/architecture.md`, `docs/PLAN.md`.
+- Keep agent context files minimal; do not duplicate repo status or tool assumptions in them.
+
 ## Learned User Preferences
 - Prefer iterative runtime debugging loops: reproduce issue, then continue from fresh logs.
 - Prefer non-hardcoded debug log paths for instrumentation; use env var override with repo-root fallback.

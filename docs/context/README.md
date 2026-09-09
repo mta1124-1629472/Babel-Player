@@ -7,6 +7,5 @@ All AI assistants should read these files:
 
 Agent-specific stubs (contain only tool-specific instructions, point to AI-CONTEXT.md for everything else):
 
-- [CLAUDE.md](../../CLAUDE.md) — Claude Code / Cursor (MCP sandbox instructions, active skills)
 - [GEMINI.md](GEMINI.md) — Gemini-oriented assistants
 - [QWEN.md](QWEN.md) — Qwen Coder-style setups
